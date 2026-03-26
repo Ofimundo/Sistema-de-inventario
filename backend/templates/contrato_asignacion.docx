@@ -1,0 +1,14 @@
+{{fecha}}
+{{empresa_nombre}}
+{{empresa_rut}}
+{{empresa_representante}}
+{{empresa_representante_rut}}
+{{empresa_domicilio}}
+{{trabajador_nombre}}
+{{trabajador_rut}}
+{{trabajador_nacionalidad}}
+{{trabajador_estado_civil}}
+{{trabajador_fecha_nacimiento}}
+{{trabajador_domicilio}}
+{{trabajador_comuna}}
+{{equipos_asignados}}
