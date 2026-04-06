@@ -15,25 +15,24 @@ const exportController = {
             
             // Consulta optimizada con WITH (NOLOCK) para evitar bloqueos
             const result = await pool.request().query(`
-                SELECT 
-                    p.id,
-                    p.nombre,
-                    p.marca,
-                    p.modelo,
-                    p.numero_serie,
-                    p.codigo_qr,
-                    p.precio,
-                    p.moneda,
-                    p.cantidad as stock,
-                    p.estado,
-                    p.condicion,
-                    p.fecha_creacion,
-                    ISNULL(b.nombre, 'Sin bodega') as bodega
-                FROM [INV].[productos] p WITH (NOLOCK)
-                LEFT JOIN [INV].[producto_bodega] pb WITH (NOLOCK) ON p.id = pb.producto_id
-                LEFT JOIN [INV].[bodegas] b WITH (NOLOCK) ON pb.bodega_id = b.id
-                ORDER BY p.nombre
-            `);
+SELECT 
+    p.id,
+    p.nombre,
+    p.marca,
+    p.modelo,
+    p.numero_serie,
+    p.codigo_qr,
+    p.precio,
+    p.moneda,
+    p.id_estado_equipo as estado,
+    p.condicion,
+    p.fecha_creacion,
+    ISNULL(b.nombre, 'Sin bodega') as bodega
+FROM [INV].[productos] p WITH (NOLOCK)
+LEFT JOIN [INV].[producto_bodega] pb WITH (NOLOCK) ON p.id = pb.producto_id
+LEFT JOIN [INV].[bodegas] b WITH (NOLOCK) ON pb.bodega_id = b.id
+ORDER BY p.nombre
+`);
 
             const productos = result.recordset;
             console.log(`✅ ${productos.length} productos obtenidos`);

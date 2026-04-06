@@ -6,7 +6,7 @@ const dbConfig = {
     server: process.env.DB_SERVER || 'PACMAN\\OFIMUNDO_DEV',
     database: process.env.DB_DATABASE || 'THE_COOLER_SGCX',
     user: process.env.DB_USER || 'marrano',
-    password: process.env.DB_PASSWORD,
+    password: process.env.DB_PASSWORD ||'ma*576394' ,
     options: {
         encrypt: false,
         trustServerCertificate: true,
@@ -41,6 +41,7 @@ async function getConnection() {
         throw error;
     }
 }
+
 
 module.exports = {
     getConnection,

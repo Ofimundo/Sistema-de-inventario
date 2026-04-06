@@ -2514,15 +2514,10 @@ const Productos = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [filters, setFilters] = useState({
-        marca: '',
-        estado: '',
-        condicion: '',
-        precioMin: '',
-        precioMax: '',
-        bodega_id: '',
-        fechaDesde: '',
-        fechaHasta: ''
-    });
+    estado: '',
+    condicion: '',
+    bodega_id: ''
+});
     
     // Estados para datos auxiliares
     const [marcas, setMarcas] = useState([]);
@@ -2571,6 +2566,7 @@ const Productos = () => {
     const handleGoHome = () => {
         navigate('/dashboard');
     };
+    
 
     const loadExportData = async () => {
         try {
@@ -2666,18 +2662,14 @@ const Productos = () => {
         fetchData();
     }, [searchTerm, filters.marca, filters.estado, filters.condicion, filters.bodega_id]);
 
-    const handleClearFilters = () => {
+        const handleClearFilters = () => {
         setSearchTerm('');
         setFilters({
-            marca: '',
-            estado: '',
-            condicion: '',
-            precioMin: '',
-            precioMax: '',
-            bodega_id: '',
-            fechaDesde: '',
-            fechaHasta: ''
-        });
+    estado: '',
+    condicion: '',
+    bodega_id: ''
+});
+        setPage(0);
     };
 
     const handleFilterChange = (field) => (event) => {
@@ -2895,42 +2887,56 @@ const Productos = () => {
         return `http://localhost:5000/uploads/${imagenPath}`;
     };
 
-    // ============================================
-// FILTROS CORREGIDOS - ELIMINAR FILTRADO DOBLE
+// ============================================
+// FILTROS CORREGIDOS
 // ============================================
 
-const filteredProductos = productos.filter(producto => {
-    // NOTA: Los filtros de estado, condición, marca y bodega YA los aplica el backend
-    // Por eso NO debemos volver a filtrarlos aquí
-    
-    // Solo filtro de búsqueda local (si quieres mantenerlo)
-    if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch = (
-            (producto.nombre?.toLowerCase() || '').includes(term) ||
-            (producto.marca?.toLowerCase() || '').includes(term) ||
-            (producto.modelo?.toLowerCase() || '').includes(term) ||
-            (producto.numero_serie?.toLowerCase() || '').includes(term)
-        );
-        if (!matchesSearch) return false;
+const filteredProductos = productos.filter((producto) => {
+
+    // FILTRO POR ESTADO
+    if (filters.estado && producto.estado !== filters.estado) {
+        return false;
     }
-    
-    // SOLO filtros de precio y fecha (que NO se envían al backend)
-    if (filters.precioMin && (producto.precio || 0) < parseFloat(filters.precioMin)) return false;
-    if (filters.precioMax && (producto.precio || 0) > parseFloat(filters.precioMax)) return false;
-    
-    if (filters.fechaDesde && producto.fecha_creacion) {
-        const fechaProducto = new Date(producto.fecha_creacion);
-        const fechaDesde = new Date(filters.fechaDesde);
-        if (fechaProducto < fechaDesde) return false;
+
+    // FILTRO POR CONDICION
+    if (filters.condicion && producto.condicion !== filters.condicion) {
+        return false;
     }
-    
-    if (filters.fechaHasta && producto.fecha_creacion) {
-        const fechaProducto = new Date(producto.fecha_creacion);
-        const fechaHasta = new Date(filters.fechaHasta);
-        if (fechaProducto > fechaHasta) return false;
+
+    // FILTRO POR BODEGA
+    if (filters.bodega_id && producto.bodega_id !== Number(filters.bodega_id)) {
+        return false;
     }
-    
+
+    // BUSCADOR GENERAL
+    if (searchTerm && searchTerm.trim() !== '') {
+
+        const term = searchTerm.toLowerCase().trim();
+
+        const nombre = (producto.nombre || '').toLowerCase();
+        const marca = (producto.marca || '').toLowerCase();
+        const modelo = (producto.modelo || '').toLowerCase();
+
+        const numeroSerie =
+            (producto.numero_serie ||
+            producto.numeroSerie ||
+            producto.serial ||
+            producto.serie ||
+            '').toLowerCase();
+
+        const codigo = (producto.codigo || '').toLowerCase();
+
+        if (
+            !nombre.includes(term) &&
+            !marca.includes(term) &&
+            !modelo.includes(term) &&
+            !numeroSerie.includes(term) &&
+            !codigo.includes(term)
+        ) {
+            return false;
+        }
+    }
+
     return true;
 });
 
@@ -2961,8 +2967,7 @@ const filteredProductos = productos.filter(producto => {
         return iconos[estado] || <InventoryIcon fontSize="small" />;
     };
 
-    const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length;
-
+        const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length + (searchTerm ? 1 : 0);
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar 
@@ -3192,118 +3197,76 @@ const filteredProductos = productos.filter(producto => {
                         </Grid>
                     </Grid>
 
-                    <Collapse in={showAdvancedFilters}>
-                        <Box sx={{ mt: 3 }}>
-                            <Typography variant="subtitle2" className="filters-title">
-                                FILTROS AVANZADOS
-                            </Typography>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="estado-label">Estado</InputLabel>
-                                        <Select
-                                            labelId="estado-label"
-                                            id="estado-select"
-                                            value={filters.estado}
-                                            onChange={handleFilterChange('estado')}
-                                            label="Estado"
-                                        >
-                                            <MenuItem value="">Todos los estados</MenuItem>
-                                            {estados.map((estado) => (
-                                                <MenuItem key={estado.id} value={estado.nombre}>{estado.nombre}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="condicion-label">Condición</InputLabel>
-                                        <Select
-                                            labelId="condicion-label"
-                                            id="condicion-select"
-                                            value={filters.condicion}
-                                            onChange={handleFilterChange('condicion')}
-                                            label="Condición"
-                                        >
-                                            <MenuItem value="">Todas las condiciones</MenuItem>
-                                            {condiciones.map((cond) => (
-                                                <MenuItem key={cond} value={cond}>{cond}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="bodega-label">Bodega</InputLabel>
-                                        <Select
-                                            labelId="bodega-label"
-                                            id="bodega-select"
-                                            value={filters.bodega_id}
-                                            onChange={handleFilterChange('bodega_id')}
-                                            label="Bodega"
-                                        >
-                                            <MenuItem value="">Todas las bodegas</MenuItem>
-                                            {bodegas.map((bodega) => (
-                                                <MenuItem key={bodega.id} value={bodega.id}>{bodega.nombre}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+<Collapse in={showAdvancedFilters}>
+    <Box sx={{ mt: 3 }}>
+        <Typography variant="subtitle2" className="filters-title">
+            FILTROS AVANZADOS
+        </Typography>
 
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <TextField
-                                        fullWidth
-                                        type="number"
-                                        label="Precio mínimo"
-                                        value={filters.precioMin}
-                                        onChange={handleFilterChange('precioMin')}
-                                        placeholder="$ 0"
-                                        InputProps={{
-                                            startAdornment: <InputAdornment position="start">$</InputAdornment>
-                                        }}
-                                        size="small"
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <TextField
-                                        fullWidth
-                                        type="number"
-                                        label="Precio máximo"
-                                        value={filters.precioMax}
-                                        onChange={handleFilterChange('precioMax')}
-                                        placeholder="$ 999.999"
-                                        InputProps={{
-                                            startAdornment: <InputAdornment position="start">$</InputAdornment>
-                                        }}
-                                        size="small"
-                                    />
-                                </Grid>
+        <Grid container spacing={2}>
 
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <TextField
-                                        fullWidth
-                                        type="date"
-                                        label="Desde fecha"
-                                        value={filters.fechaDesde}
-                                        onChange={handleFilterChange('fechaDesde')}
-                                        InputLabelProps={{ shrink: true }}
-                                        size="small"
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={3}>
-                                    <TextField
-                                        fullWidth
-                                        type="date"
-                                        label="Hasta fecha"
-                                        value={filters.fechaHasta}
-                                        onChange={handleFilterChange('fechaHasta')}
-                                        InputLabelProps={{ shrink: true }}
-                                        size="small"
-                                    />
-                                </Grid>
-                            </Grid>
-                        </Box>
-                    </Collapse>
+            {/* FILTRO ESTADO */}
+            <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth>
+                    <InputLabel id="estado-label">Estado</InputLabel>
+                    <Select
+                        labelId="estado-label"
+                        value={filters.estado}
+                        onChange={handleFilterChange('estado')}
+                        label="Estado"
+                    >
+                        <MenuItem value="">Todos</MenuItem>
+                        {estados.map((estado) => (
+                            <MenuItem key={estado.id} value={estado.nombre}>
+                                {estado.nombre}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </Grid>
+
+            {/* FILTRO CONDICION */}
+            <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth>
+                    <InputLabel id="condicion-label">Condición</InputLabel>
+                    <Select
+                        labelId="condicion-label"
+                        value={filters.condicion}
+                        onChange={handleFilterChange('condicion')}
+                        label="Condición"
+                    >
+                        <MenuItem value="">Todas</MenuItem>
+                        <MenuItem value="Nuevo">Nuevo</MenuItem>
+                        <MenuItem value="Usado">Usado</MenuItem>
+                        <MenuItem value="Reparacion">Reparación</MenuItem>
+                        <MenuItem value="Dañado">Dañado</MenuItem>
+                    </Select>
+                </FormControl>
+            </Grid>
+
+            {/* FILTRO BODEGA */}
+            <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth>
+                    <InputLabel id="bodega-label">Bodega</InputLabel>
+                    <Select
+                        labelId="bodega-label"
+                        value={filters.bodega_id}
+                        onChange={handleFilterChange('bodega_id')}
+                        label="Bodega"
+                    >
+                        <MenuItem value="">Todas</MenuItem>
+                        {bodegas.map((bodega) => (
+                            <MenuItem key={bodega.id} value={bodega.id}>
+                                {bodega.nombre}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </Grid>
+
+        </Grid>
+    </Box>
+</Collapse>
                 </FilterPaper>
 
                 <StyledTableContainer>

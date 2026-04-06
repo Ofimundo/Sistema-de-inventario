@@ -96,6 +96,7 @@ app.use('/api/estados', authenticateToken, estadosRoutes);
 app.use('/api/documentos', authenticateToken, documentoRoutes);
 app.use('/api/usuarios', authenticateToken, usuariosRoutes);
 app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
+app.use('/api/export', exportRoutes);
 
 // ============ MANEJO DE ERRORES 404 ============
 app.use('*', (req, res) => {

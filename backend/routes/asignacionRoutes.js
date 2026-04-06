@@ -124,7 +124,7 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN
+// FUNCIÓN CORREGIDA PARA GENERAR ACTA DE ASIGNACIÓN
 // ============================================
 async function generarActaAsignacion(datos) {
     return new Promise(async (resolve, reject) => {
@@ -142,66 +142,37 @@ async function generarActaAsignacion(datos) {
 
             const doc = new PDFDocument({ margin: 50, size: 'A4' });
             const buffers = [];
-            
             doc.on('data', buffers.push.bind(buffers));
             doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-            // ========== PRIMERA HOJA ==========
-            
-            // Encabezado
-            doc.font('Helvetica-Bold')
-               .fontSize(18)
-               .text(EMPRESA.nombre, { align: 'center' })
-               .moveDown(0.3);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+            // ========== ENCABEZADO ==========
+            doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
+            doc.font('Helvetica').fontSize(10)
                .text(`RUT: ${EMPRESA.rut} | ${EMPRESA.domicilio}`, { align: 'center' })
                .text(`Email: ${EMPRESA.email} - Fono: ${EMPRESA.telefono}`, { align: 'center' })
                .moveDown(0.5);
-            
-            doc.moveTo(50, doc.y)
-               .lineTo(550, doc.y)
-               .stroke();
-            
+            doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
             doc.moveDown(0.5);
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(16)
-               .text('ACTA DE ENTREGA DE EQUIPOS', { align: 'center' })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+
+            doc.font('Helvetica-Bold').fontSize(16).text('ACTA DE ENTREGA DE EQUIPOS', { align: 'center' }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10)
                .text(`Fecha: ${formatearFecha(fecha_asignacion)}`, { align: 'left' })
-               .moveDown(0.3);
-            
-            doc.text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
+               .text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
                .moveDown(1);
-            
+
             // 1. DATOS DE LA EMPRESA
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('1. DATOS DE LA EMPRESA', { underline: true })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+            doc.font('Helvetica-Bold').fontSize(12).text('1. DATOS DE LA EMPRESA', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10)
                .text(`Razón Social: ${EMPRESA.nombre}`)
                .text(`RUT: ${EMPRESA.rut}`)
                .text(`Representante Legal: ${EMPRESA.representante_legal}`)
                .text(`Cargo: ${EMPRESA.cargo_representante}`)
                .text(`Domicilio: ${EMPRESA.domicilio}`)
                .moveDown(1);
-            
+
             // 2. DATOS DEL TRABAJADOR
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('2. DATOS DEL TRABAJADOR', { underline: true })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+            doc.font('Helvetica-Bold').fontSize(12).text('2. DATOS DEL TRABAJADOR', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10)
                .text(`Nombre: ${colaborador.nombre || ''}`)
                .text(`RUT: ${colaborador.rut || ''}`)
                .text(`Nacionalidad: ${colaborador.nacionalidad || 'chilena'}`)
@@ -211,27 +182,13 @@ async function generarActaAsignacion(datos) {
                .text(`Email: ${colaborador.email || ''}`)
                .text(`Departamento: ${colaborador.departamento || 'Tecnología e Innovación'}`)
                .moveDown(1);
-            
+
             // 3. DATOS DEL EQUIPO ENTREGADO
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('3. DATOS DEL EQUIPO ENTREGADO', { underline: true })
-               .moveDown(0.5);
-            
-            const startY = doc.y;
-            const tableTop = startY;
-            const colPositions = {
-                num: 40,
-                tipo: 80,
-                marca: 150,
-                modelo: 220,
-                serie: 300,
-                estado: 380,
-                cantidad: 460
-            };
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(9)
+            doc.font('Helvetica-Bold').fontSize(12).text('3. DATOS DEL EQUIPO ENTREGADO', { underline: true }).moveDown(0.5);
+
+            const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado: 380, cantidad: 460 };
+            const tableTop = doc.y;
+            doc.font('Helvetica-Bold').fontSize(9)
                .text('#', colPositions.num, tableTop)
                .text('TIPO', colPositions.tipo, tableTop)
                .text('MARCA', colPositions.marca, tableTop)
@@ -239,16 +196,11 @@ async function generarActaAsignacion(datos) {
                .text('N° SERIE', colPositions.serie, tableTop)
                .text('ESTADO', colPositions.estado, tableTop)
                .text('CANT.', colPositions.cantidad, tableTop);
-            
-            doc.moveTo(40, tableTop + 15)
-               .lineTo(560, tableTop + 15)
-               .stroke();
-            
+            doc.moveTo(40, tableTop + 15).lineTo(560, tableTop + 15).stroke();
+
             let currentY = tableTop + 25;
-            
             productos.forEach((producto, index) => {
-                doc.font('Helvetica')
-                   .fontSize(9)
+                doc.font('Helvetica').fontSize(9)
                    .text((index + 1).toString(), colPositions.num, currentY)
                    .text(producto.tipo || 'Equipo', colPositions.tipo, currentY)
                    .text(producto.marca || 'N/A', colPositions.marca, currentY)
@@ -256,116 +208,73 @@ async function generarActaAsignacion(datos) {
                    .text(producto.numero_serie || 'N/A', colPositions.serie, currentY)
                    .text(producto.condicion || 'NUEVO', colPositions.estado, currentY)
                    .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
-                
                 currentY += 20;
-                
-                if (currentY > 700 && index < productos.length - 1) {
-                    doc.addPage();
-                    currentY = 50;
-                }
+                if (currentY > 700 && index < productos.length - 1) { doc.addPage(); currentY = 50; }
             });
-            
             doc.moveDown(2);
+
+            // Asegurar separación antes del punto 4
             
-            // Verificar si hay suficiente espacio en la página para los puntos 4 y 5
-            const espacioRestante = doc.y;
-            const espacioNecesario = 120; // Espacio necesario para puntos 4, 5 y separador
-            
-            if (espacioRestante > 650 && espacioNecesario + espacioRestante > 750) {
-                doc.addPage();
-            }
-            
-            // 4. MOTIVO DE LA ASIGNACIÓN
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('4. MOTIVO DE LA ASIGNACIÓN', { underline: true })
-               .moveDown(0.5);
-            
-            // Texto del motivo con ajuste automático de línea
-            const motivoTexto = motivo || 'Asignación de equipo para uso laboral';
-            const motivoLines = doc.heightOfString(motivoTexto, { width: 500 });
-            doc.font('Helvetica')
-               .fontSize(10)
-               .text(motivoTexto, { width: 500 })
-               .moveDown(1);
-            
-            // 5. OBSERVACIONES
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('5. OBSERVACIONES', { underline: true })
-               .moveDown(0.5);
-            
-            // Texto de observaciones con ajuste automático de línea
-            const observacionesTexto = observaciones || 'Sin observaciones';
-            doc.font('Helvetica')
-               .fontSize(10)
-               .text(observacionesTexto, { width: 500 })
-               .moveDown(2);
-            
-            // ========== SEGUNDA HOJA ==========
+doc.moveDown(2); // deja espacio vertical
+// 4. MOTIVO DE LA ASIGNACIÓN
+doc.font('Helvetica-Bold').fontSize(12)
+   .text('4. MOTIVO DE LA ASIGNACIÓN', colPositions.num, doc.y, { underline: true })
+   .moveDown(0.5);
+
+// Texto del motivo alineado al mismo margen que la tabla
+doc.font('Helvetica').fontSize(9)
+   .text(motivo || 'Asignación de equipo para uso laboral', colPositions.num, doc.y, { width: 520 });
+doc.moveDown(2);
+
+// 5. OBSERVACIONES
+doc.font('Helvetica-Bold').fontSize(12)
+   .text('5. OBSERVACIONES', colPositions.num, doc.y, { underline: true })
+   .moveDown(0.5);
+
+// Texto de observaciones alineado al mismo margen que la tabla
+doc.font('Helvetica').fontSize(9)
+   .text(observaciones || 'Sin observaciones', colPositions.num, doc.y, { width: 520 });
+doc.moveDown(2);
+
+
+                      // ========== SEGUNDA HOJA - FIRMAS ==========
             doc.addPage();
             
-            // Título de firmas en segunda hoja
-            doc.font('Helvetica-Bold')
-               .fontSize(14)
-               .text('FIRMAS', { align: 'center', underline: true })
-               .moveDown(2);
+            // Espacio para separar del contenido anterior
+            doc.moveDown(2);
             
-            // Firma del trabajador
-            doc.font('Helvetica-Bold')
-               .fontSize(11)
-               .text('RECIBÍ CONFORME', { align: 'center' })
-               .moveDown(0.8);
+            doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true });
+            doc.moveDown(3);
+
+            // Firma Trabajador - RECIBE
+            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'center' });
+            doc.moveDown(1);
             
-            // Línea de firma
-            doc.moveTo(100, doc.y)
-               .lineTo(500, doc.y)
-               .stroke();
+            const lineaTrabajadorY = doc.y;
+            doc.moveTo(120, lineaTrabajadorY).lineTo(480, lineaTrabajadorY).stroke();
+            dibujarFirma(doc, firma_trabajador, 120, lineaTrabajadorY - 28, colaborador.nombre);
+            doc.moveDown(2);
+            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'center' });
+            doc.moveDown(3);
+
+            // Firma Gerente - ENTREGA
+            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'center' });
+            doc.moveDown(1);
             
-            // Texto de la firma
-            if (firma_trabajador && firma_trabajador !== '') {
-                dibujarFirma(doc, firma_trabajador, 100, doc.y, colaborador.nombre);
-            } else {
-                doc.font('Helvetica').fontSize(9).text(colaborador.nombre || '_________________________', 100, doc.y + 5);
-            }
-            
-            doc.moveDown(0.5);
-            doc.font('Helvetica')
-               .fontSize(9)
-               .text('FIRMA TRABAJADOR', { align: 'center' })
-               .moveDown(3);
-            
-            // Firma del gerente
-            doc.font('Helvetica-Bold')
-               .fontSize(11)
-               .text('ENTREGÓ CONFORME', { align: 'center' })
-               .moveDown(0.8);
-            
-            // Línea de firma
-            doc.moveTo(100, doc.y)
-               .lineTo(500, doc.y)
-               .stroke();
-            
-            // Texto de la firma
-            if (firma_gerente && firma_gerente !== '') {
-                dibujarFirma(doc, firma_gerente, 100, doc.y, EMPRESA.representante_legal);
-            } else {
-                doc.font('Helvetica').fontSize(9).text(EMPRESA.representante_legal, 100, doc.y + 5);
-            }
-            
-            doc.moveDown(0.5);
-            doc.font('Helvetica')
-               .fontSize(9)
-               .text(EMPRESA.cargo_representante, { align: 'center' })
-               .moveDown(3);
-            
+            const lineaGerenteY = doc.y;
+            doc.moveTo(120, lineaGerenteY).lineTo(480, lineaGerenteY).stroke();
+            dibujarFirma(doc, firma_gerente, 120, lineaGerenteY - 28, EMPRESA.representante_legal);
+            doc.moveDown(2);
+            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
+            doc.moveDown(3);
+
             // Nota al pie
             doc.font('Helvetica-Oblique').fontSize(8)
                .text('Este documento es una representación digital de la entrega de equipos.', { align: 'center' })
                .text('Los datos contenidos en este documento son de carácter informativo.', { align: 'center' });
-            
+
             doc.end();
-            
+
         } catch (error) {
             reject(error);
         }
@@ -373,7 +282,7 @@ async function generarActaAsignacion(datos) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN
+// FUNCIÓN CORREGIDA PARA GENERAR ACTA DE RECEPCIÓN
 // ============================================
 async function generarActaRecepcion(datos) {
     return new Promise(async (resolve, reject) => {
@@ -393,66 +302,35 @@ async function generarActaRecepcion(datos) {
 
             const doc = new PDFDocument({ margin: 50, size: 'A4' });
             const buffers = [];
-            
             doc.on('data', buffers.push.bind(buffers));
             doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-            // ========== PRIMERA HOJA ==========
-            
-            // Encabezado
-            doc.font('Helvetica-Bold')
-               .fontSize(18)
-               .text(EMPRESA.nombre, { align: 'center' })
-               .moveDown(0.3);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+            // Encabezado y tabla productos igual que generarActaAsignacion
+            doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
+            doc.font('Helvetica').fontSize(10)
                .text(`RUT: ${EMPRESA.rut} | ${EMPRESA.domicilio}`, { align: 'center' })
                .text(`Email: ${EMPRESA.email} - Fono: ${EMPRESA.telefono}`, { align: 'center' })
                .moveDown(0.5);
-            
-            doc.moveTo(50, doc.y)
-               .lineTo(550, doc.y)
-               .stroke();
-            
+            doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
             doc.moveDown(0.5);
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(16)
-               .text('ACTA DE RECEPCIÓN DE EQUIPOS', { align: 'center' })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
-               .text(`Fecha de Recepción: ${formatearFecha(fecha_recepcion)}`, { align: 'left' })
-               .moveDown(0.3);
-            
-            doc.text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
+            doc.font('Helvetica-Bold').fontSize(16).text('ACTA DE RECEPCIÓN DE EQUIPOS', { align: 'center' }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10).text(`Fecha de Recepción: ${formatearFecha(fecha_recepcion)}`, { align: 'left' })
+               .text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
                .moveDown(1);
-            
-            // 1. DATOS DE LA EMPRESA
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('1. DATOS DE LA EMPRESA', { underline: true })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+
+            // 1. Empresa
+            doc.font('Helvetica-Bold').fontSize(12).text('1. DATOS DE LA EMPRESA', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10)
                .text(`Razón Social: ${EMPRESA.nombre}`)
                .text(`RUT: ${EMPRESA.rut}`)
                .text(`Representante Legal: ${EMPRESA.representante_legal}`)
                .text(`Cargo: ${EMPRESA.cargo_representante}`)
                .text(`Domicilio: ${EMPRESA.domicilio}`)
                .moveDown(1);
-            
-            // 2. DATOS DEL TRABAJADOR
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('2. DATOS DEL TRABAJADOR', { underline: true })
-               .moveDown(0.5);
-            
-            doc.font('Helvetica')
-               .fontSize(10)
+
+            // 2. Trabajador
+            doc.font('Helvetica-Bold').fontSize(12).text('2. DATOS DEL TRABAJADOR', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10)
                .text(`Nombre: ${colaborador.nombre || ''}`)
                .text(`RUT: ${colaborador.rut || ''}`)
                .text(`Nacionalidad: ${colaborador.nacionalidad || 'chilena'}`)
@@ -462,28 +340,12 @@ async function generarActaRecepcion(datos) {
                .text(`Email: ${colaborador.email || ''}`)
                .text(`Departamento: ${colaborador.departamento || 'Tecnología e Innovación'}`)
                .moveDown(1);
-            
-            // 3. DATOS DEL EQUIPO RECIBIDO
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('3. DATOS DEL EQUIPO RECIBIDO', { underline: true })
-               .moveDown(0.5);
-            
-            const startY = doc.y;
-            const tableTop = startY;
-            const colPositions = {
-                num: 40,
-                tipo: 80,
-                marca: 150,
-                modelo: 220,
-                serie: 300,
-                estado_asignacion: 380,
-                estado_entrega: 460,
-                cantidad: 520
-            };
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(8)
+
+            // 3. Productos
+            doc.font('Helvetica-Bold').fontSize(12).text('3. DATOS DEL EQUIPO RECIBIDO', { underline: true }).moveDown(0.5);
+            const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado_asignacion: 380, estado_entrega: 460, cantidad: 520 };
+            const tableTop = doc.y;
+            doc.font('Helvetica-Bold').fontSize(8)
                .text('#', colPositions.num, tableTop)
                .text('TIPO', colPositions.tipo, tableTop)
                .text('MARCA', colPositions.marca, tableTop)
@@ -492,16 +354,11 @@ async function generarActaRecepcion(datos) {
                .text('ESTADO ASIGNACIÓN', colPositions.estado_asignacion, tableTop)
                .text('ESTADO ENTREGA', colPositions.estado_entrega, tableTop)
                .text('CANT.', colPositions.cantidad, tableTop);
-            
-            doc.moveTo(40, tableTop + 15)
-               .lineTo(580, tableTop + 15)
-               .stroke();
-            
+            doc.moveTo(40, tableTop + 15).lineTo(580, tableTop + 15).stroke();
+
             let currentY = tableTop + 25;
-            
             productos.forEach((producto, index) => {
-                doc.font('Helvetica')
-                   .fontSize(8)
+                doc.font('Helvetica').fontSize(8)
                    .text((index + 1).toString(), colPositions.num, currentY)
                    .text(producto.tipo || 'Equipo', colPositions.tipo, currentY)
                    .text(producto.marca || 'N/A', colPositions.marca, currentY)
@@ -510,117 +367,48 @@ async function generarActaRecepcion(datos) {
                    .text(producto.condicion_asignacion || 'Bueno', colPositions.estado_asignacion, currentY)
                    .text(producto.condicion_entrega || 'Bueno', colPositions.estado_entrega, currentY)
                    .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
-                
                 currentY += 20;
-                
-                if (currentY > 700 && index < productos.length - 1) {
-                    doc.addPage();
-                    currentY = 50;
-                }
+                if (currentY > 700 && index < productos.length - 1) { doc.addPage(); currentY = 50; }
             });
-            
             doc.moveDown(2);
-            
-            // Verificar si hay suficiente espacio en la página para los puntos 4 y 5
-            const espacioRestante = doc.y;
-            const espacioNecesario = 120;
-            
-            if (espacioRestante > 650 && espacioNecesario + espacioRestante > 750) {
-                doc.addPage();
-            }
-            
-            // 4. MOTIVO DE LA DEVOLUCIÓN
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('4. MOTIVO DE LA DEVOLUCIÓN', { underline: true })
-               .moveDown(0.5);
-            
-            const motivoTexto = motivo || 'Devolución de equipo';
-            doc.font('Helvetica')
-               .fontSize(10)
-               .text(motivoTexto, { width: 500 })
-               .moveDown(1);
-            
+
+            // 4. MOTIVO
+            doc.font('Helvetica-Bold').fontSize(12).text('4. MOTIVO DE LA DEVOLUCIÓN', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10).text(motivo || 'Devolución de equipo', { width: 500 }).moveDown(1);
+
             // 5. OBSERVACIONES
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('5. OBSERVACIONES', { underline: true })
-               .moveDown(0.5);
-            
-            const observacionesTexto = observaciones || 'Sin observaciones';
-            doc.font('Helvetica')
-               .fontSize(10)
-               .text(observacionesTexto, { width: 500 })
-               .moveDown(2);
-            
-            // ========== SEGUNDA HOJA ==========
+            doc.font('Helvetica-Bold').fontSize(12).text('5. OBSERVACIONES', { underline: true }).moveDown(0.5);
+            doc.font('Helvetica').fontSize(10).text(observaciones || 'Sin observaciones', { width: 500 }).moveDown(2);
+
+            // SEGUNDA HOJA - FIRMAS
             doc.addPage();
-            
-            // Título de firmas en segunda hoja
-            doc.font('Helvetica-Bold')
-               .fontSize(14)
-               .text('FIRMAS', { align: 'center', underline: true })
-               .moveDown(2);
-            
-            // Firma del trabajador
-            doc.font('Helvetica-Bold')
-               .fontSize(11)
-               .text('ENTREGÓ CONFORME', { align: 'center' })
-               .moveDown(0.8);
-            
-            // Línea de firma
-            doc.moveTo(100, doc.y)
-               .lineTo(500, doc.y)
-               .stroke();
-            
-            if (firma_trabajador && firma_trabajador !== '') {
-                dibujarFirma(doc, firma_trabajador, 100, doc.y, colaborador.nombre);
-            } else {
-                doc.font('Helvetica').fontSize(9).text(colaborador.nombre || '_________________________', 100, doc.y + 5);
-            }
-            
-            doc.moveDown(0.5);
-            doc.font('Helvetica')
-               .fontSize(9)
-               .text('FIRMA TRABAJADOR', { align: 'center' })
-               .moveDown(3);
-            
-            // Firma del gerente
-            doc.font('Helvetica-Bold')
-               .fontSize(11)
-               .text('RECIBÍ CONFORME', { align: 'center' })
-               .moveDown(0.8);
-            
-            // Línea de firma
-            doc.moveTo(100, doc.y)
-               .lineTo(500, doc.y)
-               .stroke();
-            
-            if (firma_gerente && firma_gerente !== '') {
-                dibujarFirma(doc, firma_gerente, 100, doc.y, EMPRESA.representante_legal);
-            } else {
-                doc.font('Helvetica').fontSize(9).text(EMPRESA.representante_legal, 100, doc.y + 5);
-            }
-            
-            doc.moveDown(0.5);
-            doc.font('Helvetica')
-               .fontSize(9)
-               .text(EMPRESA.cargo_representante, { align: 'center' })
-               .moveDown(3);
-            
-            // Nota al pie
+            doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true }).moveDown(2);
+
+            const firmaTrabajadorY = doc.y;
+            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'center' }).moveDown(0.5);
+            doc.moveTo(100, firmaTrabajadorY).lineTo(400, firmaTrabajadorY).stroke();
+            dibujarFirma(doc, firma_trabajador, 100, firmaTrabajadorY, colaborador.nombre);
+            doc.moveDown(2);
+            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'center' });
+
+            const firmaGerenteY = doc.y;
+            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'center' }).moveDown(0.5);
+            doc.moveTo(100, firmaGerenteY).lineTo(400, firmaGerenteY).stroke();
+            dibujarFirma(doc, firma_gerente, 100, firmaGerenteY, EMPRESA.representante_legal);
+            doc.moveDown(2);
+            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
+
             doc.font('Helvetica-Oblique').fontSize(8)
                .text('Este documento es una representación digital de la recepción de equipos.', { align: 'center' })
                .text('Los datos contenidos en este documento son de carácter informativo.', { align: 'center' });
-            
+
             doc.end();
-            
+
         } catch (error) {
             reject(error);
         }
     });
 }
-
 // ============================================
 // ENDPOINTS - EL ORDEN IMPORTA
 // ============================================

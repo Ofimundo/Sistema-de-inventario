@@ -1539,7 +1539,7 @@ const Dashboard = () => {
                     "&:hover": { bgcolor: "#f1f5f9" } 
                   }}
                 >
-                  Reporte Diario
+                  Reporte
                 </Button>
                 <Button 
                   variant="outlined" 
@@ -1553,7 +1553,7 @@ const Dashboard = () => {
                     "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.1)" } 
                   }}
                 >
-                  Ver Stock por Marca/Modelo
+                  Ver Stock 
                 </Button>
               </Box>
             </Paper>
