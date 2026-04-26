@@ -40,10 +40,8 @@ import {
     TableHead,
     TableRow,
     TablePagination,
-    FormHelperText,
     Badge,
-    Collapse,
-    LinearProgress
+    Collapse
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -53,23 +51,13 @@ import {
     Visibility as VisibilityIcon,
     Search as SearchIcon,
     Close as CloseIcon,
-    CheckCircle as CheckCircleIcon,
-    Cancel as CancelIcon,
     Refresh as RefreshIcon,
-    Error as ErrorIcon,
     Person as PersonIcon,
-    Email as EmailIcon,
-    Phone as PhoneIcon,
-    Work as WorkIcon,
-    Business as BusinessIcon,
-    CalendarToday as CalendarTodayIcon,
-    Assignment as AssignmentIcon,
-    Inventory as InventoryIcon,
     Home as HomeIcon,
     FilterList as FilterListIcon,
     FilterListOff as FilterListOffIcon,
-    Download as DownloadIcon,
-    AssignmentInd as AssignmentIndIcon
+    AssignmentInd as AssignmentIndIcon,
+    Inventory as InventoryIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import colaboradorService from '../services/colaboradorService';
@@ -188,6 +176,10 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                             <Typography variant="body2" color="text.secondary">
                                 {colaborador.rut} • {colaborador.email}
                             </Typography>
+                            <Typography variant="caption" color="primary" sx={{ mt: 0.5, display: 'block' }}>
+                                Total Asignaciones: {colaborador.total_asignaciones || 0} | 
+                                Activas: {colaborador.asignaciones_activas || 0}
+                            </Typography>
                         </Box>
                     </Box>
                     <IconButton onClick={onRefresh} size="small" title="Actualizar productos" disabled={loading}>
@@ -294,7 +286,6 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                             <TableCell sx={{ fontWeight: 600 }}>Marca</TableCell>
                                             <TableCell sx={{ fontWeight: 600 }}>Modelo</TableCell>
                                             <TableCell sx={{ fontWeight: 600 }}>Serie</TableCell>
-                                            <TableCell sx={{ fontWeight: 600 }} align="center">Cantidad</TableCell>
                                             <TableCell sx={{ fontWeight: 600 }}>Fecha Asignación</TableCell>
                                             <TableCell sx={{ fontWeight: 600 }}>Estado</TableCell>
                                         </TableRow>
@@ -306,7 +297,7 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                                     <Box display="flex" alignItems="center" gap={1}>
                                                         <InventoryIcon fontSize="small" sx={{ color: colors.primary }} />
                                                         <Typography variant="body2" fontWeight={500}>
-                                                            {prod.nombre}
+                                                            {prod.producto_nombre || prod.nombre}
                                                         </Typography>
                                                     </Box>
                                                 </TableCell>
@@ -316,13 +307,6 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                                     <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
                                                         {prod.numero_serie || 'N/A'}
                                                     </Typography>
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Chip
-                                                        size="small"
-                                                        label={prod.cantidad || 1}
-                                                        sx={{ minWidth: 40 }}
-                                                    />
                                                 </TableCell>
                                                 <TableCell>{formatDateTime(prod.fecha_asignacion)}</TableCell>
                                                 <TableCell>
@@ -827,7 +811,21 @@ const ColaboradoresPage = () => {
             if (searchTerm) filterParams.search = searchTerm;
 
             const data = await colaboradorService.getColaboradores(filterParams);
-            setColaboradores(data);
+            
+            // Debug: Verificar datos recibidos
+            console.log('📊 Datos de colaboradores recibidos:', data);
+            if (data && data.length > 0) {
+                const adan = data.find(c => c.nombre === 'Adan Moris');
+                if (adan) {
+                    console.log('🔴 ADAN MORIS:', {
+                        nombre: adan.nombre,
+                        total_asignaciones: adan.total_asignaciones,
+                        asignaciones_activas: adan.asignaciones_activas
+                    });
+                }
+            }
+            
+            setColaboradores(data || []);
 
             if (showRefresh) {
                 showSnackbar('Datos actualizados', 'success');
@@ -841,18 +839,14 @@ const ColaboradoresPage = () => {
         }
     };
 
-    // Función para cargar productos asignados a un colaborador usando el endpoint específico
+    // Función para cargar productos asignados a un colaborador
     const loadProductosAsignados = async (colaboradorId) => {
         setLoadingProductos(true);
         try {
             console.log(`📥 Cargando productos asignados para colaborador ID: ${colaboradorId}`);
-            
-            // Usar el método específico del servicio de colaboradores
             const productos = await colaboradorService.getProductosAsignados(colaboradorId);
-            
             console.log(`✅ Productos asignados encontrados: ${productos.length}`, productos);
             setProductosAsignados(productos || []);
-            
             return productos;
         } catch (error) {
             console.error('Error cargando productos asignados:', error);
@@ -864,7 +858,7 @@ const ColaboradoresPage = () => {
         }
     };
 
-    // Función para refrescar los productos asignados del colaborador actual
+    // Función para refrescar los productos asignados
     const refreshProductosAsignados = async () => {
         if (selectedColaboradorDetail) {
             console.log('🔄 Refrescando productos asignados...');
@@ -967,6 +961,7 @@ const ColaboradoresPage = () => {
         setPage(0);
     };
 
+    // Filtrado local
     const filteredColaboradores = colaboradores.filter(col => {
         if (filters.estado && col.estado !== filters.estado) return false;
         if (filters.departamento && col.departamento !== filters.departamento) return false;
@@ -979,6 +974,12 @@ const ColaboradoresPage = () => {
     );
 
     const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length;
+
+    // Calcular estadísticas reales
+    const totalAsignaciones = colaboradores.reduce((sum, col) => sum + (col.total_asignaciones || 0), 0);
+    const totalAsignacionesActivas = colaboradores.reduce((sum, col) => sum + (col.asignaciones_activas || 0), 0);
+
+    console.log(`📊 Total de asignaciones en la lista: ${totalAsignaciones}, Activas: ${totalAsignacionesActivas}`);
 
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
@@ -1045,7 +1046,7 @@ const ColaboradoresPage = () => {
                         <StyledCard>
                             <CardContent>
                                 <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.total_colaboradores}
+                                    {loading ? <CircularProgress size={24} /> : colaboradores.length}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Total Colaboradores
@@ -1081,7 +1082,7 @@ const ColaboradoresPage = () => {
                         <StyledCard>
                             <CardContent>
                                 <Typography variant="h4" sx={{ fontWeight: 700, color: colors.info }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.total_equipos_asignados}
+                                    {loading ? <CircularProgress size={24} /> : totalAsignacionesActivas}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Equipos Asignados
@@ -1242,19 +1243,48 @@ const ColaboradoresPage = () => {
                                                 {col.departamento || 'Sin depto.'}
                                             </Typography>
                                         </TableCell>
+                                        
+                                        {/* COLUMNA DE ASIGNACIONES CORREGIDA - Usando total_asignaciones y asignaciones_activas directamente */}
                                         <TableCell align="center">
-                                            <Badge
-                                                badgeContent={col.asignaciones_activas || 0}
-                                                color="info"
-                                                sx={{ '& .MuiBadge-badge': { fontSize: 10 } }}
-                                            >
-                                                <Chip
-                                                    label={col.total_asignaciones || 0}
-                                                    size="small"
-                                                    sx={{ minWidth: 40 }}
-                                                />
-                                            </Badge>
+                                            <Box sx={{ textAlign: 'center' }}>
+                                                {/* Número grande de asignaciones activas */}
+                                                <Typography 
+                                                    variant="h5" 
+                                                    sx={{ 
+                                                        fontWeight: 'bold', 
+                                                        color: col.asignaciones_activas > 0 ? colors.success : colors.text.secondary,
+                                                        fontSize: '1.5rem'
+                                                    }}
+                                                >
+                                                    {col.asignaciones_activas || 0}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                                    de {col.total_asignaciones || 0} totales
+                                                </Typography>
+                                                
+                                                {/* Mostrar un chip si tiene asignaciones activas */}
+                                                {col.asignaciones_activas > 0 && (
+                                                    <Chip 
+                                                        size="small" 
+                                                        label={`${col.asignaciones_activas} producto(s) asignado(s)`}
+                                                        color="success" 
+                                                        variant="outlined"
+                                                        sx={{ mt: 0.5, fontSize: '0.65rem', height: '20px' }}
+                                                    />
+                                                )}
+                                                
+                                                {/* Si no tiene asignaciones activas pero tiene históricas */}
+                                                {col.total_asignaciones > 0 && col.asignaciones_activas === 0 && (
+                                                    <Chip 
+                                                        size="small" 
+                                                        label="Histórico"
+                                                        variant="outlined"
+                                                        sx={{ mt: 0.5, fontSize: '0.65rem', height: '20px' }}
+                                                    />
+                                                )}
+                                            </Box>
                                         </TableCell>
+                                        
                                         <TableCell>
                                             <Chip
                                                 label={col.estado}

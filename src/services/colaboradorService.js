@@ -3,9 +3,6 @@ import api from './api';
 
 export const colaboradorService = {
     
-    /**
-     * Obtener todos los colaboradores con filtros
-     */
     getColaboradores: async (filters = {}) => {
         try {
             const params = {};
@@ -18,12 +15,19 @@ export const colaboradorService = {
             
             const response = await api.get('/colaboradores', { params });
             
-            if (response.data && response.data.success) {
-                return response.data.data;
-            }
+            console.log('📥 Respuesta completa:', response.data);
             
-            if (Array.isArray(response.data)) {
-                return response.data;
+            if (response.data && response.data.success) {
+                const colaboradores = response.data.data;
+                console.log(`✅ ${colaboradores.length} colaboradores encontrados`);
+                
+                // Verificar Adan Moris
+                const adan = colaboradores.find(c => c.nombre === 'Adan Moris');
+                if (adan) {
+                    console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+                }
+                
+                return colaboradores;
             }
             
             return [];
@@ -33,9 +37,6 @@ export const colaboradorService = {
         }
     },
     
-    /**
-     * Obtener colaborador por ID
-     */
     getColaboradorById: async (id) => {
         try {
             console.log(`📤 Buscando colaborador con ID: ${id}`);
@@ -49,30 +50,13 @@ export const colaboradorService = {
                 };
             }
             
-            if (response.data && (response.data.id || response.data.nombre)) {
-                return {
-                    success: true,
-                    data: response.data
-                };
-            }
-            
             return {
                 success: false,
                 data: null,
                 message: 'Colaborador no encontrado'
             };
-            
         } catch (error) {
             console.error('❌ Error en getColaboradorById:', error);
-            
-            if (error.response?.status === 404) {
-                return {
-                    success: false,
-                    data: null,
-                    message: 'Colaborador no encontrado'
-                };
-            }
-            
             return {
                 success: false,
                 data: null,
@@ -81,15 +65,10 @@ export const colaboradorService = {
         }
     },
 
-    /**
-     * Crear nuevo colaborador
-     */
     createColaborador: async (colaboradorData) => {
         try {
             console.log('📤 Creando colaborador:', colaboradorData);
-            
             const response = await api.post('/colaboradores', colaboradorData);
-            
             return response.data;
         } catch (error) {
             console.error('❌ Error en createColaborador:', error);
@@ -97,15 +76,10 @@ export const colaboradorService = {
         }
     },
 
-    /**
-     * Actualizar colaborador
-     */
     updateColaborador: async (id, colaboradorData) => {
         try {
             console.log(`📤 Actualizando colaborador ${id}:`, colaboradorData);
-            
             const response = await api.put(`/colaboradores/${id}`, colaboradorData);
-            
             return response.data;
         } catch (error) {
             console.error('❌ Error en updateColaborador:', error);
@@ -113,15 +87,10 @@ export const colaboradorService = {
         }
     },
 
-    /**
-     * Eliminar colaborador
-     */
     deleteColaborador: async (id) => {
         try {
             console.log(`📤 Eliminando colaborador ${id}`);
-            
             const response = await api.delete(`/colaboradores/${id}`);
-            
             return response.data;
         } catch (error) {
             console.error('❌ Error en deleteColaborador:', error);
@@ -129,25 +98,15 @@ export const colaboradorService = {
         }
     },
 
-    /**
-     * Obtener productos asignados a un colaborador (CORREGIDO)
-     */
     getProductosAsignados: async (colaboradorId) => {
         try {
             console.log(`📤 Buscando productos asignados al colaborador ${colaboradorId}`);
-            
-            const response = await api.get(`/colaboradores/${colaboradorId}/productos`);
-            
-            console.log('📥 Respuesta getProductosAsignados:', response.data);
+            const response = await api.get(`/colaboradores/${colaboradorId}/productos-asignados`);
+            console.log('📥 Respuesta:', response.data);
             
             if (response.data && response.data.success) {
                 return response.data.data;
             }
-            
-            if (Array.isArray(response.data)) {
-                return response.data;
-            }
-            
             return [];
         } catch (error) {
             console.error('❌ Error en getProductosAsignados:', error);
@@ -155,13 +114,9 @@ export const colaboradorService = {
         }
     },
 
-    /**
-     * Obtener estadísticas de colaboradores
-     */
     getStats: async () => {
         try {
-            console.log('📤 Obteniendo estadísticas de colaboradores');
-            
+            console.log('📤 Obteniendo estadísticas');
             const response = await api.get('/colaboradores/stats');
             
             if (response.data && response.data.success) {
@@ -173,7 +128,8 @@ export const colaboradorService = {
                 activos: 0,
                 inactivos: 0,
                 total_departamentos: 0,
-                total_equipos_asignados: 0
+                total_equipos_asignados: 0,
+                equipos_activos: 0
             };
         } catch (error) {
             console.error('❌ Error en getStats:', error);
@@ -182,24 +138,20 @@ export const colaboradorService = {
                 activos: 0,
                 inactivos: 0,
                 total_departamentos: 0,
-                total_equipos_asignados: 0
+                total_equipos_asignados: 0,
+                equipos_activos: 0
             };
         }
     },
 
-    /**
-     * Obtener departamentos únicos
-     */
     getDepartamentos: async () => {
         try {
             console.log('📤 Obteniendo departamentos');
-            
             const response = await api.get('/colaboradores/departamentos');
             
             if (response.data && response.data.success) {
                 return response.data.data;
             }
-            
             return [];
         } catch (error) {
             console.error('❌ Error en getDepartamentos:', error);
@@ -207,9 +159,6 @@ export const colaboradorService = {
         }
     },
     
-    /**
-     * Formatear RUT
-     */
     formatRut: (rut) => {
         if (!rut) return '';
         let rutLimpio = rut.replace(/[^0-9kK]/g, '');
@@ -230,9 +179,6 @@ export const colaboradorService = {
         return cuerpo + '-' + dv.toUpperCase();
     },
     
-    /**
-     * Validar RUT
-     */
     validateRut: (rut) => {
         if (!rut) return false;
         let rutLimpio = rut.replace(/[^0-9kK]/g, '');

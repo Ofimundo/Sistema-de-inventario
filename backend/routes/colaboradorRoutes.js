@@ -14,6 +14,7 @@ router.get('/', authenticateToken, async (req, res) => {
         const { estado, departamento, search } = req.query;
         const pool = await getConnection();
         
+        // CORREGIDO: Usar la tabla correcta 'asignaciones' en lugar de 'producto_uso'
         let query = `
             SELECT 
                 c.id, 
@@ -29,15 +30,14 @@ router.get('/', authenticateToken, async (req, res) => {
                 c.fecha_nacimiento,
                 ISNULL((
                     SELECT COUNT(*) 
-                    FROM INV.producto_uso pu 
-                    WHERE pu.colaborador_id = c.id 
-                      AND pu.estado = 'ACTIVO' 
-                      AND (pu.fecha_devolucion IS NULL OR pu.fecha_devolucion = '')
+                    FROM INV.asignaciones a 
+                    WHERE a.colaborador_id = c.id 
+                      AND a.fecha_devolucion IS NULL
                 ), 0) as asignaciones_activas,
                 ISNULL((
                     SELECT COUNT(*) 
-                    FROM INV.producto_uso pu 
-                    WHERE pu.colaborador_id = c.id
+                    FROM INV.asignaciones a 
+                    WHERE a.colaborador_id = c.id
                 ), 0) as total_asignaciones
             FROM INV.colaboradores c
             WHERE 1=1
@@ -67,6 +67,12 @@ router.get('/', authenticateToken, async (req, res) => {
         
         const result = await request.query(query);
         
+        // Verificar Adan Moris
+        const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
+        if (adan) {
+            console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+        }
+        
         res.json({ success: true, data: result.recordset });
         
     } catch (error) {
@@ -82,15 +88,16 @@ router.get('/stats', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
+        // CORREGIDO: Usar la tabla correcta 'asignaciones'
         const result = await pool.request()
             .query(`
                 SELECT 
                     COUNT(*) as total_colaboradores,
-                    SUM(CASE WHEN estado = 'ACTIVO' THEN 1 ELSE 0 END) as activos,
-                    SUM(CASE WHEN estado = 'INACTIVO' THEN 1 ELSE 0 END) as inactivos,
-                    COUNT(DISTINCT departamento) as total_departamentos,
-                    (SELECT COUNT(*) FROM INV.producto_uso WHERE estado = 'ACTIVO' AND (fecha_devolucion IS NULL OR fecha_devolucion = '')) as total_equipos_asignados
-                FROM INV.colaboradores
+                    SUM(CASE WHEN c.estado = 'ACTIVO' THEN 1 ELSE 0 END) as activos,
+                    SUM(CASE WHEN c.estado = 'INACTIVO' THEN 1 ELSE 0 END) as inactivos,
+                    COUNT(DISTINCT c.departamento) as total_departamentos,
+                    (SELECT COUNT(*) FROM INV.asignaciones WHERE fecha_devolucion IS NULL) as total_equipos_asignados
+                FROM INV.colaboradores c
             `);
         
         res.json({ success: true, data: result.recordset[0] });
@@ -137,6 +144,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
+        // CORREGIDO: Usar la tabla correcta 'asignaciones'
         const result = await pool.request()
             .input('id', sql.Int, idNum)
             .query(`
@@ -145,11 +153,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
                     c.telefono, c.direccion, c.estado, c.fecha_ingreso, c.fecha_nacimiento,
                     ISNULL((
                         SELECT COUNT(*) 
-                        FROM INV.producto_uso pu 
-                        WHERE pu.colaborador_id = c.id 
-                          AND pu.estado = 'ACTIVO' 
-                          AND (pu.fecha_devolucion IS NULL OR pu.fecha_devolucion = '')
-                    ), 0) as asignaciones_activas
+                        FROM INV.asignaciones a 
+                        WHERE a.colaborador_id = c.id AND a.fecha_devolucion IS NULL
+                    ), 0) as asignaciones_activas,
+                    ISNULL((
+                        SELECT COUNT(*) 
+                        FROM INV.asignaciones a 
+                        WHERE a.colaborador_id = c.id
+                    ), 0) as total_asignaciones
                 FROM INV.colaboradores c
                 WHERE c.id = @id
             `);
@@ -167,10 +178,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // GET - Obtener productos asignados a un colaborador (CORREGIDO)
-router.get('/:id/productos', authenticateToken, async (req, res) => {
+router.get('/:id/productos-asignados', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`📥 GET /api/colaboradores/${id}/productos`);
+        console.log(`📥 GET /api/colaboradores/${id}/productos-asignados`);
         
         const idNum = parseInt(id);
         if (isNaN(idNum)) {
@@ -179,25 +190,30 @@ router.get('/:id/productos', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
+        // CORREGIDO: Usar la tabla correcta 'asignaciones' y 'productos'
         const result = await pool.request()
             .input('colaborador_id', sql.Int, idNum)
             .query(`
                 SELECT 
-                    pu.id as asignacion_id,
+                    a.id as asignacion_id,
+                    a.fecha_asignacion,
+                    a.fecha_devolucion,
+                    a.motivo,
+                    a.observaciones,
                     p.id as producto_id,
-                    p.nombre,
+                    p.nombre as producto_nombre,
                     p.numero_serie,
                     p.marca,
                     p.modelo,
-                    pu.fecha_asignacion,
-                    pu.fecha_devolucion,
-                    pu.motivo,
-                    pu.comentario,
-                    pu.estado as estado_asignacion
-                FROM INV.producto_uso pu
-                INNER JOIN INV.productos p ON pu.producto_id = p.id
-                WHERE pu.colaborador_id = @colaborador_id
-                ORDER BY pu.fecha_asignacion DESC
+                    p.precio,
+                    CASE 
+                        WHEN a.fecha_devolucion IS NULL THEN 'ACTIVA'
+                        ELSE 'FINALIZADA'
+                    END as estado_asignacion
+                FROM INV.asignaciones a
+                INNER JOIN INV.productos p ON a.producto_id = p.id
+                WHERE a.colaborador_id = @colaborador_id
+                ORDER BY a.fecha_asignacion DESC
             `);
         
         console.log(`✅ Productos encontrados: ${result.recordset.length}`);
@@ -205,7 +221,49 @@ router.get('/:id/productos', authenticateToken, async (req, res) => {
         res.json({ success: true, data: result.recordset });
         
     } catch (error) {
-        console.error('❌ Error en GET /colaboradores/:id/productos:', error);
+        console.error('❌ Error en GET /colaboradores/:id/productos-asignados:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Mantener la ruta antigua por compatibilidad (redirige a la nueva)
+router.get('/:id/productos', authenticateToken, async (req, res) => {
+    req.params.id = req.params.id;
+    // Redirigir a la ruta correcta
+    const { id } = req.params;
+    const idNum = parseInt(id);
+    if (isNaN(idNum)) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+    }
+    
+    try {
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('colaborador_id', sql.Int, idNum)
+            .query(`
+                SELECT 
+                    a.id as asignacion_id,
+                    a.fecha_asignacion,
+                    a.fecha_devolucion,
+                    a.motivo,
+                    p.id as producto_id,
+                    p.nombre as producto_nombre,
+                    p.numero_serie,
+                    p.marca,
+                    p.modelo,
+                    CASE 
+                        WHEN a.fecha_devolucion IS NULL THEN 'ACTIVA'
+                        ELSE 'FINALIZADA'
+                    END as estado_asignacion
+                FROM INV.asignaciones a
+                INNER JOIN INV.productos p ON a.producto_id = p.id
+                WHERE a.colaborador_id = @colaborador_id
+                ORDER BY a.fecha_asignacion DESC
+            `);
+        
+        res.json({ success: true, data: result.recordset });
+    } catch (error) {
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -309,15 +367,13 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
-        // Verificar si tiene productos asignados activos
+        // Verificar si tiene productos asignados activos usando la tabla correcta
         const productosAsignados = await pool.request()
             .input('colaborador_id', sql.Int, idNum)
             .query(`
                 SELECT COUNT(*) as total 
-                FROM INV.producto_uso 
-                WHERE colaborador_id = @colaborador_id 
-                  AND estado = 'ACTIVO' 
-                  AND (fecha_devolucion IS NULL OR fecha_devolucion = '')
+                FROM INV.asignaciones 
+                WHERE colaborador_id = @colaborador_id AND fecha_devolucion IS NULL
             `);
         
         if (productosAsignados.recordset[0].total > 0) {

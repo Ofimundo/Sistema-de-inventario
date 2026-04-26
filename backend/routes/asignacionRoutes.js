@@ -247,7 +247,7 @@ doc.moveDown(2);
             doc.moveDown(3);
 
             // Firma Trabajador - RECIBE
-            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'center' });
+            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'rigth' });
             doc.moveDown(1);
             
             const lineaTrabajadorY = doc.y;
@@ -258,15 +258,16 @@ doc.moveDown(2);
             doc.moveDown(3);
 
             // Firma Gerente - ENTREGA
-            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'center' });
-            doc.moveDown(1);
-            
+            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'right' });
+            doc.moveDown(2);  // Espacio antes de la línea
+
             const lineaGerenteY = doc.y;
             doc.moveTo(120, lineaGerenteY).lineTo(480, lineaGerenteY).stroke();
             dibujarFirma(doc, firma_gerente, 120, lineaGerenteY - 28, EMPRESA.representante_legal);
             doc.moveDown(2);
             doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
             doc.moveDown(3);
+            
 
             // Nota al pie
             doc.font('Helvetica-Oblique').fontSize(8)
@@ -282,16 +283,15 @@ doc.moveDown(2);
 }
 
 // ============================================
-// FUNCIÓN CORREGIDA PARA GENERAR ACTA DE RECEPCIÓN
+// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN (IGUAL AL ACTA DE ASIGNACIÓN)
 // ============================================
-async function generarActaRecepcion(datos) {
-    return new Promise(async (resolve, reject) => {
+function generarActaRecepcion(datos) {
+    return new Promise((resolve, reject) => {
         try {
             const {
                 id_asignacion,
                 colaborador,
                 productos,
-                fecha_asignacion,
                 fecha_recepcion,
                 motivo,
                 observaciones,
@@ -305,7 +305,7 @@ async function generarActaRecepcion(datos) {
             doc.on('data', buffers.push.bind(buffers));
             doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-            // Encabezado y tabla productos igual que generarActaAsignacion
+            // ========== ENCABEZADO IGUAL AL ACTA DE ASIGNACIÓN ==========
             doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
             doc.font('Helvetica').fontSize(10)
                .text(`RUT: ${EMPRESA.rut} | ${EMPRESA.domicilio}`, { align: 'center' })
@@ -313,12 +313,14 @@ async function generarActaRecepcion(datos) {
                .moveDown(0.5);
             doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
             doc.moveDown(0.5);
+
             doc.font('Helvetica-Bold').fontSize(16).text('ACTA DE RECEPCIÓN DE EQUIPOS', { align: 'center' }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10).text(`Fecha de Recepción: ${formatearFecha(fecha_recepcion)}`, { align: 'left' })
+            doc.font('Helvetica').fontSize(10)
+               .text(`Fecha de Recepción: ${formatearFecha(fecha_recepcion)}`, { align: 'left' })
                .text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
                .moveDown(1);
 
-            // 1. Empresa
+            // 1. DATOS DE LA EMPRESA
             doc.font('Helvetica-Bold').fontSize(12).text('1. DATOS DE LA EMPRESA', { underline: true }).moveDown(0.5);
             doc.font('Helvetica').fontSize(10)
                .text(`Razón Social: ${EMPRESA.nombre}`)
@@ -328,7 +330,7 @@ async function generarActaRecepcion(datos) {
                .text(`Domicilio: ${EMPRESA.domicilio}`)
                .moveDown(1);
 
-            // 2. Trabajador
+            // 2. DATOS DEL TRABAJADOR
             doc.font('Helvetica-Bold').fontSize(12).text('2. DATOS DEL TRABAJADOR', { underline: true }).moveDown(0.5);
             doc.font('Helvetica').fontSize(10)
                .text(`Nombre: ${colaborador.nombre || ''}`)
@@ -341,63 +343,83 @@ async function generarActaRecepcion(datos) {
                .text(`Departamento: ${colaborador.departamento || 'Tecnología e Innovación'}`)
                .moveDown(1);
 
-            // 3. Productos
+            // 3. DATOS DEL EQUIPO RECIBIDO
             doc.font('Helvetica-Bold').fontSize(12).text('3. DATOS DEL EQUIPO RECIBIDO', { underline: true }).moveDown(0.5);
-            const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado_asignacion: 380, estado_entrega: 460, cantidad: 520 };
+
+            // MISMA TABLA QUE EL ACTA DE ASIGNACIÓN
+            const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado: 380, cantidad: 460 };
             const tableTop = doc.y;
-            doc.font('Helvetica-Bold').fontSize(8)
+            doc.font('Helvetica-Bold').fontSize(9)
                .text('#', colPositions.num, tableTop)
                .text('TIPO', colPositions.tipo, tableTop)
                .text('MARCA', colPositions.marca, tableTop)
                .text('MODELO', colPositions.modelo, tableTop)
                .text('N° SERIE', colPositions.serie, tableTop)
-               .text('ESTADO ASIGNACIÓN', colPositions.estado_asignacion, tableTop)
-               .text('ESTADO ENTREGA', colPositions.estado_entrega, tableTop)
+               .text('ESTADO', colPositions.estado, tableTop)
                .text('CANT.', colPositions.cantidad, tableTop);
-            doc.moveTo(40, tableTop + 15).lineTo(580, tableTop + 15).stroke();
+            doc.moveTo(40, tableTop + 15).lineTo(560, tableTop + 15).stroke();
 
             let currentY = tableTop + 25;
             productos.forEach((producto, index) => {
-                doc.font('Helvetica').fontSize(8)
+                doc.font('Helvetica').fontSize(9)
                    .text((index + 1).toString(), colPositions.num, currentY)
                    .text(producto.tipo || 'Equipo', colPositions.tipo, currentY)
                    .text(producto.marca || 'N/A', colPositions.marca, currentY)
                    .text(producto.modelo || 'N/A', colPositions.modelo, currentY)
                    .text(producto.numero_serie || 'N/A', colPositions.serie, currentY)
-                   .text(producto.condicion_asignacion || 'Bueno', colPositions.estado_asignacion, currentY)
-                   .text(producto.condicion_entrega || 'Bueno', colPositions.estado_entrega, currentY)
+                   .text(condicion_entrega || 'BUENO', colPositions.estado, currentY)
                    .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
                 currentY += 20;
                 if (currentY > 700 && index < productos.length - 1) { doc.addPage(); currentY = 50; }
             });
             doc.moveDown(2);
 
-            // 4. MOTIVO
-            doc.font('Helvetica-Bold').fontSize(12).text('4. MOTIVO DE LA DEVOLUCIÓN', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10).text(motivo || 'Devolución de equipo', { width: 500 }).moveDown(1);
+            // 4. MOTIVO DE LA DEVOLUCIÓN (igual que en asignación)
+            doc.font('Helvetica-Bold').fontSize(12)
+               .text('4. MOTIVO DE LA DEVOLUCIÓN', colPositions.num, doc.y, { underline: true })
+               .moveDown(0.5);
+            doc.font('Helvetica').fontSize(9)
+               .text(motivo || 'No especificado', colPositions.num, doc.y, { width: 520 });
+            doc.moveDown(2);
 
-            // 5. OBSERVACIONES
-            doc.font('Helvetica-Bold').fontSize(12).text('5. OBSERVACIONES', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10).text(observaciones || 'Sin observaciones', { width: 500 }).moveDown(2);
+            // 5. OBSERVACIONES (igual que en asignación)
+            doc.font('Helvetica-Bold').fontSize(12)
+               .text('5. OBSERVACIONES', colPositions.num, doc.y, { underline: true })
+               .moveDown(0.5);
+            doc.font('Helvetica').fontSize(9)
+               .text(observaciones || 'Sin observaciones', colPositions.num, doc.y, { width: 520 });
+            doc.moveDown(2);
 
-            // SEGUNDA HOJA - FIRMAS
+            // ========== SEGUNDA HOJA - FIRMAS ALINEADAS A LA DERECHA ==========
             doc.addPage();
-            doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true }).moveDown(2);
-
-            const firmaTrabajadorY = doc.y;
-            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'center' }).moveDown(0.5);
-            doc.moveTo(100, firmaTrabajadorY).lineTo(400, firmaTrabajadorY).stroke();
-            dibujarFirma(doc, firma_trabajador, 100, firmaTrabajadorY, colaborador.nombre);
             doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'center' });
+            
+            doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true });
+            doc.moveDown(3);
 
-            const firmaGerenteY = doc.y;
-            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'center' }).moveDown(0.5);
-            doc.moveTo(100, firmaGerenteY).lineTo(400, firmaGerenteY).stroke();
-            dibujarFirma(doc, firma_gerente, 100, firmaGerenteY, EMPRESA.representante_legal);
+            // Firma Trabajador - ENTREGÓ CONFORME (alineado a la derecha)
+            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'right' });
+            doc.moveDown(1);
+            
+            const lineaTrabajadorY = doc.y;
+            doc.moveTo(300, lineaTrabajadorY).lineTo(550, lineaTrabajadorY).stroke();
+            dibujarFirma(doc, firma_trabajador, 350, lineaTrabajadorY - 28, colaborador.nombre);
             doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
+            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'right' });
+            doc.moveDown(4);
 
+            // Firma Gerente - RECIBÍ CONFORME (alineado a la derecha)
+            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'right' });
+            doc.moveDown(1);
+
+            const lineaGerenteY = doc.y;
+            doc.moveTo(300, lineaGerenteY).lineTo(550, lineaGerenteY).stroke();
+            dibujarFirma(doc, firma_gerente, 350, lineaGerenteY - 28, EMPRESA.representante_legal);
+            doc.moveDown(2);
+            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'right' });
+            doc.moveDown(3);
+
+            // Nota al pie
             doc.font('Helvetica-Oblique').fontSize(8)
                .text('Este documento es una representación digital de la recepción de equipos.', { align: 'center' })
                .text('Los datos contenidos en este documento son de carácter informativo.', { align: 'center' });
@@ -409,6 +431,8 @@ async function generarActaRecepcion(datos) {
         }
     });
 }
+
+
 // ============================================
 // ENDPOINTS - EL ORDEN IMPORTA
 // ============================================
@@ -752,16 +776,25 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT - Finalizar asignación y generar acta de recepción
+// PUT - Finalizar asignación y generar acta de recepción (SIN COLUMNAS NUEVAS)
 router.put('/:asignacionId/finalizar', async (req, res) => {
     let pool;
     let transaction;
     
     try {
         const { asignacionId } = req.params;
-        const { fecha_devolucion, observaciones, condicion_entrega, firma_trabajador, firma_gerente } = req.body;
+        const { 
+            fecha_devolucion, 
+            motivo_devolucion,
+            observaciones_devolucion, 
+            condicion_entrega, 
+            firma_trabajador_devolucion, 
+            firma_gerente_devolucion 
+        } = req.body;
         
         console.log(`📥 PUT /api/asignaciones/${asignacionId}/finalizar`);
+        console.log('📥 Motivo:', motivo_devolucion);
+        console.log('📥 Observaciones:', observaciones_devolucion);
         
         let asignacionIdNum;
         try {
@@ -797,17 +830,27 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             const asignacion = asignacionResult.recordset[0];
             const fechaRecepcionValue = fecha_devolucion ? new Date(fecha_devolucion) : new Date();
             
-            // Actualizar asignación con fecha de devolución
+            // Combinar motivo y observaciones en el campo observaciones existente
+            const observacionesCombinadas = `[MOTIVO DEVOLUCIÓN]: ${motivo_devolucion || 'No especificado'}
+[OBSERVACIONES]: ${observaciones_devolucion || 'Sin observaciones'}
+[CONDICIÓN]: ${condicion_entrega || 'BUENO'}
+[FECHA RECEPCIÓN]: ${new Date().toLocaleString()}`;
+            
+            // Actualizar asignación - SOLO COLUMNAS EXISTENTES
             await transaction.request()
                 .input('id', sql.Int, asignacionIdNum)
                 .input('fecha_devolucion', sql.DateTime, fechaRecepcionValue)
                 .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
-                .input('observaciones_devolucion', sql.NVarChar(1000), observaciones || '')
+                .input('observaciones', sql.NVarChar(2000), observacionesCombinadas)
+                .input('firma_trabajador_devolucion', sql.NVarChar, firma_trabajador_devolucion || null)
+                .input('firma_gerente_devolucion', sql.NVarChar, firma_gerente_devolucion || null)
                 .query(`
                     UPDATE INV.asignaciones 
                     SET fecha_devolucion = @fecha_devolucion, 
                         condicion_entrega = @condicion_entrega,
-                        observaciones_devolucion = @observaciones_devolucion
+                        observaciones = @observaciones,
+                        firma_trabajador_devolucion = @firma_trabajador_devolucion,
+                        firma_gerente_devolucion = @firma_gerente_devolucion
                     WHERE id = @id
                 `);
             
@@ -839,13 +882,12 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
                     condicion_entrega: condicion_entrega || 'BUENO',
                     cantidad: 1
                 }],
-                fecha_asignacion: asignacion.fecha_asignacion,
                 fecha_recepcion: fechaRecepcionValue,
-                motivo: asignacion.motivo || 'Devolución de equipo',
-                observaciones: observaciones || asignacion.observaciones || 'Sin observaciones',
+                motivo: motivo_devolucion || asignacion.motivo || 'Devolución de equipo',
+                observaciones: observaciones_devolucion || 'Sin observaciones',
                 condicion_entrega: condicion_entrega || 'BUENO',
-                firma_trabajador: firma_trabajador || asignacion.colaborador_nombre,
-                firma_gerente: firma_gerente || EMPRESA.representante_legal
+                firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
+                firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal
             };
             
             const pdfBuffer = await generarActaRecepcion(recepcionData);
@@ -860,7 +902,13 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             res.json({
                 success: true,
                 message: 'Asignación finalizada correctamente',
-                data: { documento: { filename: filename, ruta: `/uploads/documentos/${filename}`, tipo: 'RECEPCION' } }
+                data: { 
+                    documento: { 
+                        filename: filename, 
+                        ruta: `/uploads/documentos/${filename}`, 
+                        tipo: 'RECEPCION' 
+                    } 
+                }
             });
             
         } catch (error) {
@@ -873,6 +921,7 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
 
 // GET - Obtener historial de asignaciones
 router.get('/historial', async (req, res) => {

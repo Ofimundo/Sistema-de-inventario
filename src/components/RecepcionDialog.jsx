@@ -4,6 +4,7 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
+    DialogActions,
     Button,
     Box,
     Typography,
@@ -15,7 +16,11 @@ import {
     FormLabel,
     RadioGroup,
     FormControlLabel,
-    Radio
+    Radio,
+    Divider,
+    Paper,
+    Grid,
+    Chip
 } from '@mui/material';
 import {
     Receipt as ReceiptIcon,
@@ -26,7 +31,10 @@ import {
     RestartAlt as RestartIcon,
     Person as PersonIcon,
     Download as DownloadIcon,
-    PictureAsPdf as PdfIcon
+    PictureAsPdf as PdfIcon,
+    Inventory as InventoryIcon,
+    Description as DescriptionIcon,
+    Warning as WarningIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 
@@ -34,7 +42,7 @@ import api from '../services/api';
 const API_BASE_URL = 'http://localhost:5000';
 
 // Componente de Firma Dibujada (Canvas)
-const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 180 }) => {
+const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 180, label = 'Firma' }) => {
     const canvasRef = React.useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasSignature, setHasSignature] = useState(false);
@@ -128,17 +136,21 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height
 
     return (
         <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" color="text.secondary" gutterBottom>
+                {label}
+            </Typography>
             <canvas
                 ref={canvasRef}
                 width={width}
                 height={height}
                 style={{
-                    border: `2px solid #000`,
+                    border: `2px solid #333`,
                     backgroundColor: 'white',
                     cursor: 'crosshair',
                     width: '100%',
                     height: 'auto',
-                    touchAction: 'none'
+                    touchAction: 'none',
+                    borderRadius: 4
                 }}
                 onMouseDown={startDrawing}
                 onMouseMove={draw}
@@ -156,15 +168,12 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height
                     Reiniciar
                 </Button>
             </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                Dibuje su firma en el recuadro (soporta mouse y pantalla táctil)
-            </Typography>
         </Box>
     );
 };
 
 // Componente de Firma por Texto
-const FirmaTexto = ({ onFirmaCapturada, valorInicial = '', required = true }) => {
+const FirmaTexto = ({ onFirmaCapturada, valorInicial = '', required = true, label = 'Firma' }) => {
     const [firma, setFirma] = useState(valorInicial);
     const [editando, setEditando] = useState(!valorInicial);
     const [temp, setTemp] = useState(valorInicial || '');
@@ -187,10 +196,10 @@ const FirmaTexto = ({ onFirmaCapturada, valorInicial = '', required = true }) =>
     };
 
     return (
-        <Box sx={{ border: `1px solid #000`, p: 2, mb: 2, bgcolor: '#fafafa' }}>
+        <Box sx={{ border: `1px solid #ddd`, p: 2, borderRadius: 1, bgcolor: '#fafafa' }}>
             <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <PersonIcon sx={{ color: '#0A66C2', fontSize: 20 }} />
-                Firma Digital {required && <span style={{ color: '#EF4444' }}>*</span>}
+                {label} {required && <span style={{ color: '#EF4444' }}>*</span>}
             </Typography>
             
             {editando ? (
@@ -222,9 +231,10 @@ const FirmaTexto = ({ onFirmaCapturada, valorInicial = '', required = true }) =>
     );
 };
 
+// Componente principal
 const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => {
-    const [motivo, setMotivo] = useState('');
-    const [observaciones, setObservaciones] = useState('');
+    const [motivoDevolucion, setMotivoDevolucion] = useState('');
+    const [observacionesDevolucion, setObservacionesDevolucion] = useState('');
     const [condicionEntrega, setCondicionEntrega] = useState('BUENO');
     const [firmaTrabajadorText, setFirmaTrabajadorText] = useState('');
     const [firmaGerenteText, setFirmaGerenteText] = useState('');
@@ -253,37 +263,31 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         return firmaGerenteText;
     };
 
-    // src/components/RecepcionDialog.jsx - Función de descarga corregida
-
-const handleDescargarDocumento = () => {
-    if (documentoGenerado && documentoGenerado.filename && !downloading) {
-        setDownloading(true);
-        try {
-            // URL directa - la ruta ahora es pública (sin token)
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-            
-            console.log('📥 Descargando documento:', documentoGenerado.filename);
-            
-            // Crear un enlace temporal y hacer clic
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = documentoGenerado.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-        } catch (error) {
-            console.error('❌ Error descargando documento:', error);
-            alert('Error al descargar el documento. Por favor, intente nuevamente.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
+    const handleDescargarDocumento = () => {
+        if (documentoGenerado && documentoGenerado.filename && !downloading) {
+            setDownloading(true);
+            try {
+                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
+                console.log('📥 Descargando documento:', documentoGenerado.filename);
+                
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = documentoGenerado.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('❌ Error descargando documento:', error);
+                alert('Error al descargar el documento. Por favor, intente nuevamente.');
+            } finally {
+                setTimeout(() => setDownloading(false), 1000);
+            }
         }
-    }
-};
+    };
 
     const handleSubmit = async () => {
-        if (!motivo.trim()) {
-            setError('Debe ingresar un motivo de devolución');
+        if (!motivoDevolucion.trim()) {
+            setError('Debe ingresar el MOTIVO DE LA DEVOLUCIÓN (campo obligatorio)');
             return;
         }
         
@@ -303,13 +307,23 @@ const handleDescargarDocumento = () => {
         setError('');
 
         try {
-            const response = await api.put(`/asignaciones/${asignacion.id}/finalizar`, {
-                fecha_devolucion: new Date().toISOString().split('T')[0],
-                observaciones: observaciones,
+            // IMPORTANTE: Los nombres de los campos deben coincidir con el backend
+            const payload = {
+                fecha_devolucion: new Date().toISOString(),
+                motivo_devolucion: motivoDevolucion,
+                observaciones_devolucion: observacionesDevolucion,
                 condicion_entrega: condicionEntrega,
-                firma_trabajador: firmaTrabajadorFinal,
-                firma_gerente: firmaGerenteFinal
-            });
+                firma_trabajador_devolucion: firmaTrabajadorFinal,
+                firma_gerente_devolucion: firmaGerenteFinal
+            };
+
+            console.log('📤 Enviando devolución:', payload);
+            console.log('🔍 Firma trabajador recibida:', firmaTrabajadorFinal ? '✅ Si' : '❌ No');
+            console.log('🔍 Firma gerente recibida:', firmaGerenteFinal ? '✅ Si' : '❌ No');
+
+            const response = await api.put(`/asignaciones/${asignacion.id}/finalizar`, payload);
+
+            console.log('📥 Respuesta del servidor:', response.data);
 
             if (response.data.success) {
                 if (response.data.data?.documento) {
@@ -329,16 +343,16 @@ const handleDescargarDocumento = () => {
                 throw new Error(response.data?.message || 'Error al procesar la recepción');
             }
         } catch (error) {
-            console.error('❌ Error:', error);
-            setError(error.message || 'Error al procesar la transacción');
+            console.error('❌ Error en recepción:', error);
+            setError(error.response?.data?.message || error.message || 'Error al procesar la transacción');
         } finally {
             setLoading(false);
         }
     };
 
     const handleClose = () => {
-        setMotivo('');
-        setObservaciones('');
+        setMotivoDevolucion('');
+        setObservacionesDevolucion('');
         setCondicionEntrega('BUENO');
         setFirmaTrabajadorText('');
         setFirmaGerenteText('');
@@ -362,13 +376,32 @@ const handleDescargarDocumento = () => {
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    El acta de <strong>Recepción</strong> se ha generado correctamente.
+                    El <strong>Acta de Recepción</strong> se ha generado correctamente.
                 </Typography>
+                
+                <Paper variant="outlined" sx={{ p: 2, mt: 2, textAlign: 'left', bgcolor: '#f9f9f9' }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                        <DescriptionIcon fontSize="small" sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                        Resumen de la Devolución:
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                        <strong>Motivo:</strong> {motivoDevolucion}
+                    </Typography>
+                    {observacionesDevolucion && (
+                        <Typography variant="body2">
+                            <strong>Observaciones:</strong> {observacionesDevolucion}
+                        </Typography>
+                    )}
+                    <Typography variant="body2">
+                        <strong>Condición:</strong> {condicionEntrega}
+                    </Typography>
+                </Paper>
+                
                 <Box sx={{ 
                     mt: 2, 
                     p: 2, 
                     bgcolor: '#f5f5f5', 
-                    borderRadius: 0,
+                    borderRadius: 1,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -379,9 +412,12 @@ const handleDescargarDocumento = () => {
                         {documentoGenerado?.filename || 'acta_recepcion.pdf'}
                     </Typography>
                 </Box>
+                
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                    Se ha recibido el producto <strong>{producto?.nombre}</strong> de <strong>{asignacion?.colaborador_nombre}</strong>
+                    Producto: <strong>{producto?.nombre}</strong><br />
+                    Colaborador: <strong>{asignacion?.colaborador_nombre}</strong>
                 </Typography>
+                
                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
                     <Button 
                         variant="contained" 
@@ -436,47 +472,125 @@ const handleDescargarDocumento = () => {
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <ReceiptIcon sx={{ color: '#F59E0B' }} />
-                        <Typography variant="h6">Recepción de Producto</Typography>
+                        <Typography variant="h6" fontWeight={600}>
+                            Acta de Recepción / Devolución de Equipo
+                        </Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Producto: <strong>{producto?.nombre}</strong> | N° Serie: <strong>{producto?.numero_serie || 'N/A'}</strong>
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Asignado a: <strong>{asignacion?.colaborador_nombre}</strong>
+                        ID Asignación: <strong>{asignacion?.id}</strong> | Fecha: <strong>{new Date().toLocaleDateString('es-CL')}</strong>
                     </Typography>
                 </DialogTitle>
 
-                <DialogContent dividers>
+                <DialogContent dividers sx={{ p: 3 }}>
                     <Stack spacing={3}>
-                        <TextField
-                            fullWidth
-                            label="Motivo de devolución *"
-                            value={motivo}
-                            onChange={(e) => setMotivo(e.target.value)}
-                            multiline
-                            rows={2}
-                            placeholder="Ej: Devolución por mantención, Cambio de equipo, Fin de proyecto, etc."
-                            required
-                        />
-                        
-                        <TextField
-                            fullWidth
-                            label="Observaciones adicionales"
-                            value={observaciones}
-                            onChange={(e) => setObservaciones(e.target.value)}
-                            multiline
-                            rows={2}
-                            placeholder="Observaciones sobre el estado del equipo..."
-                        />
+                        {/* Información del Producto */}
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <InventoryIcon fontSize="small" color="primary" />
+                                Información del Equipo
+                            </Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Producto:</Typography>
+                                    <Typography variant="body2">{producto?.nombre}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">N° Serie:</Typography>
+                                    <Typography variant="body2" fontFamily="monospace">{producto?.numero_serie || 'N/A'}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Marca:</Typography>
+                                    <Typography variant="body2">{producto?.marca || '-'}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Modelo:</Typography>
+                                    <Typography variant="body2">{producto?.modelo || '-'}</Typography>
+                                </Grid>
+                            </Grid>
+                        </Paper>
 
-                        <FormControl component="fieldset">
-                            <FormLabel component="legend">Condición de entrega *</FormLabel>
+                        {/* Información del Colaborador */}
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <PersonIcon fontSize="small" color="success" />
+                                Información del Colaborador
+                            </Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Nombre:</Typography>
+                                    <Typography variant="body2">{asignacion?.colaborador_nombre}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">RUT:</Typography>
+                                    <Typography variant="body2">{asignacion?.colaborador_rut || '-'}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Cargo:</Typography>
+                                    <Typography variant="body2">{asignacion?.colaborador_cargo || '-'}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="caption" color="text.secondary">Departamento:</Typography>
+                                    <Typography variant="body2">{asignacion?.colaborador_departamento || '-'}</Typography>
+                                </Grid>
+                            </Grid>
+                        </Paper>
+
+                        <Divider sx={{ my: 1 }} />
+
+                        {/* PUNTO 4 - MOTIVO DE LA DEVOLUCIÓN */}
+                        <Box>
+                            <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <WarningIcon fontSize="small" sx={{ color: '#F59E0B' }} />
+                                4. MOTIVO DE LA DEVOLUCIÓN *
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                value={motivoDevolucion}
+                                onChange={(e) => setMotivoDevolucion(e.target.value)}
+                                multiline
+                                rows={3}
+                                placeholder="Ej: Término de contrato, Cambio de equipo, Equipo defectuoso, Mantención preventiva, Actualización tecnológica, etc."
+                                helperText="Campo obligatorio. Explique detalladamente la razón de la devolución."
+                                error={!!error && !motivoDevolucion}
+                                sx={{ mt: 1 }}
+                            />
+                        </Box>
+
+                        {/* PUNTO 5 - OBSERVACIONES */}
+                        <Box>
+                            <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <DescriptionIcon fontSize="small" sx={{ color: '#3B82F6' }} />
+                                5. OBSERVACIONES
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                value={observacionesDevolucion}
+                                onChange={(e) => setObservacionesDevolucion(e.target.value)}
+                                multiline
+                                rows={3}
+                                placeholder="Describa cualquier detalle adicional sobre la condición del equipo, accesorios entregados, daños existentes, piezas faltantes, etc."
+                                helperText="Campo opcional. Incluya información relevante sobre el estado del equipo."
+                            />
+                        </Box>
+
+                        {/* Condición de Entrega */}
+                        <Box>
+                            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                Condición de Entrega *
+                            </Typography>
                             <RadioGroup row value={condicionEntrega} onChange={(e) => setCondicionEntrega(e.target.value)}>
-                                <FormControlLabel value="BUENO" control={<Radio />} label="Bueno" />
-                                <FormControlLabel value="REGULAR" control={<Radio />} label="Regular" />
-                                <FormControlLabel value="MALO" control={<Radio />} label="Malo" />
+                                <FormControlLabel value="BUENO" control={<Radio />} label="✅ Bueno - Funciona correctamente" />
+                                <FormControlLabel value="REGULAR" control={<Radio />} label="⚠️ Regular - Con detalles menores" />
+                                <FormControlLabel value="MALO" control={<Radio />} label="❌ Malo - No funciona/Requiere reparación" />
                             </RadioGroup>
-                        </FormControl>
+                        </Box>
+
+                        <Divider />
+
+                        {/* Firmas */}
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                            Firmas de Conformidad
+                        </Typography>
 
                         {/* Firma del Trabajador */}
                         <Box>
@@ -499,6 +613,7 @@ const handleDescargarDocumento = () => {
                                     onFirmaCapturada={setFirmaTrabajadorText}
                                     valorInicial={firmaTrabajadorText}
                                     required={true}
+                                    label="Firma del Trabajador"
                                 />
                             ) : (
                                 <FirmaDibujada
@@ -506,6 +621,7 @@ const handleDescargarDocumento = () => {
                                     valorInicial={firmaTrabajadorDibujo}
                                     width={450}
                                     height={150}
+                                    label="Dibuje su firma aquí"
                                 />
                             )}
                         </Box>
@@ -531,6 +647,7 @@ const handleDescargarDocumento = () => {
                                     onFirmaCapturada={setFirmaGerenteText}
                                     valorInicial={firmaGerenteText}
                                     required={true}
+                                    label="Firma del Gerente"
                                 />
                             ) : (
                                 <FirmaDibujada
@@ -538,20 +655,27 @@ const handleDescargarDocumento = () => {
                                     valorInicial={firmaGerenteDibujo}
                                     width={450}
                                     height={150}
+                                    label="Dibuje su firma aquí"
                                 />
                             )}
                         </Box>
 
-                        {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
+                        {error && (
+                            <Alert severity="error" sx={{ borderRadius: 1 }}>
+                                {error}
+                            </Alert>
+                        )}
                         
                         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                            <Button onClick={handleClose} sx={{ borderRadius: 0 }}>Cancelar</Button>
+                            <Button onClick={handleClose} variant="outlined" sx={{ borderRadius: 0 }}>
+                                Cancelar
+                            </Button>
                             <Button
                                 variant="contained"
                                 onClick={handleSubmit}
-                                disabled={loading || !motivo || !getFirmaTrabajadorFinal() || !getFirmaGerenteFinal()}
+                                disabled={loading || !motivoDevolucion.trim() || !getFirmaTrabajadorFinal() || !getFirmaGerenteFinal()}
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
-                                sx={{ borderRadius: 0 }}
+                                sx={{ borderRadius: 0, bgcolor: '#F59E0B', '&:hover': { bgcolor: '#d97706' } }}
                             >
                                 {loading ? 'Procesando...' : 'Confirmar Recepción'}
                             </Button>

@@ -2,52 +2,78 @@
 const { getConnection, sql } = require('../config/database');
 
 const colaboradorController = {
-    /**
-     * Obtener todos los colaboradores
-     */
     getColaboradores: async (req, res) => {
         try {
-            console.log('📥 GET /api/colaboradores - Solicitando colaboradores');
+            console.log('📥 GET /api/colaboradores');
             
             const { estado, departamento, search } = req.query;
-            
             const pool = await getConnection();
+            
+            // Consulta SIMPLE usando JOIN - IGUAL a la que funciona en SQL
             let query = `
                 SELECT 
-                    c.*,
-                    (SELECT COUNT(*) FROM [INV].[producto_uso] pu 
-                     WHERE pu.colaborador_id = c.id AND pu.fecha_devolucion IS NULL) as asignaciones_activas,
-                    (SELECT COUNT(*) FROM [INV].[producto_uso] pu 
-                     WHERE pu.colaborador_id = c.id) as total_asignaciones
+                    c.id,
+                    c.nombre,
+                    c.rut,
+                    c.email,
+                    c.telefono,
+                    c.cargo,
+                    c.departamento,
+                    c.estado,
+                    c.fecha_ingreso,
+                    c.direccion,
+                    c.fecha_nacimiento,
+                    COUNT(a.id) as total_asignaciones,
+                    SUM(CASE WHEN a.fecha_devolucion IS NULL THEN 1 ELSE 0 END) as asignaciones_activas
                 FROM [INV].[colaboradores] c
-                WHERE 1=1
+                LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
             `;
             
+            // Construir condiciones WHERE
+            const conditions = [];
             const request = pool.request();
-
+            
             if (estado) {
-                query += ' AND c.estado = @estado';
+                conditions.push('c.estado = @estado');
                 request.input('estado', sql.NVarChar, estado);
             }
-
+            
             if (departamento) {
-                query += ' AND c.departamento = @departamento';
+                conditions.push('c.departamento = @departamento');
                 request.input('departamento', sql.NVarChar, departamento);
             }
-
+            
             if (search) {
-                query += ` AND (
-                    c.nombre LIKE @search OR 
-                    c.rut LIKE @search OR 
-                    c.email LIKE @search OR 
-                    c.cargo LIKE @search
-                )`;
+                conditions.push('(c.nombre LIKE @search OR c.rut LIKE @search OR c.email LIKE @search)');
                 request.input('search', sql.NVarChar, `%${search}%`);
             }
-
-            query += ' ORDER BY c.nombre ASC';
             
+            if (conditions.length > 0) {
+                query += ' WHERE ' + conditions.join(' AND ');
+            }
+            
+            query += ' GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento';
+            query += ' ORDER BY c.nombre';
+            
+            console.log('📝 Ejecutando consulta SQL...');
             const result = await request.query(query);
+            
+            console.log(`✅ ${result.recordset.length} colaboradores encontrados`);
+            
+            // Verificar Adan Moris específicamente
+            const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
+            if (adan) {
+                console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+            } else {
+                console.log('🔴 No se encontró a Adan Moris en los resultados');
+            }
+            
+            // Mostrar estadísticas
+            const conAsignaciones = result.recordset.filter(c => c.total_asignaciones > 0);
+            console.log(`📊 ${conAsignaciones.length} colaboradores tienen asignaciones`);
+            conAsignaciones.slice(0, 10).forEach(col => {
+                console.log(`   ${col.nombre}: Total=${col.total_asignaciones}, Activas=${col.asignaciones_activas}`);
+            });
             
             res.json({
                 success: true,
@@ -57,30 +83,40 @@ const colaboradorController = {
             console.error('❌ Error en getColaboradores:', error);
             res.status(500).json({
                 success: false,
-                message: error.message
+                message: error.message,
+                error: error.toString()
             });
         }
     },
 
-    /**
-     * Obtener colaborador por ID
-     */
     getColaboradorById: async (req, res) => {
         try {
             const { id } = req.params;
+            console.log(`📥 GET /api/colaboradores/${id}`);
 
             const pool = await getConnection();
+            
             const result = await pool.request()
                 .input('id', sql.Int, id)
                 .query(`
                     SELECT 
-                        c.*,
-                        (SELECT COUNT(*) FROM [INV].[producto_uso] pu 
-                         WHERE pu.colaborador_id = c.id AND pu.fecha_devolucion IS NULL) as asignaciones_activas,
-                        (SELECT COUNT(*) FROM [INV].[producto_uso] pu 
-                         WHERE pu.colaborador_id = c.id) as total_asignaciones
+                        c.id,
+                        c.nombre,
+                        c.rut,
+                        c.email,
+                        c.telefono,
+                        c.cargo,
+                        c.departamento,
+                        c.estado,
+                        c.fecha_ingreso,
+                        c.direccion,
+                        c.fecha_nacimiento,
+                        COUNT(a.id) as total_asignaciones,
+                        SUM(CASE WHEN a.fecha_devolucion IS NULL THEN 1 ELSE 0 END) as asignaciones_activas
                     FROM [INV].[colaboradores] c
+                    LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
                     WHERE c.id = @id
+                    GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento
                 `);
 
             if (result.recordset.length === 0) {
@@ -90,9 +126,42 @@ const colaboradorController = {
                 });
             }
 
+            const colaborador = result.recordset[0];
+            
+            // Obtener productos asignados
+            const productos = await pool.request()
+                .input('colaborador_id', sql.Int, id)
+                .query(`
+                    SELECT 
+                        a.id as asignacion_id,
+                        a.fecha_asignacion,
+                        a.fecha_devolucion,
+                        a.motivo,
+                        a.observaciones,
+                        p.id as producto_id,
+                        p.nombre as producto_nombre,
+                        p.numero_serie,
+                        p.marca,
+                        p.modelo,
+                        p.precio,
+                        CASE 
+                            WHEN a.fecha_devolucion IS NULL THEN 'ACTIVA'
+                            ELSE 'FINALIZADA'
+                        END as estado_asignacion
+                    FROM [INV].[asignaciones] a
+                    INNER JOIN [INV].[productos] p ON a.producto_id = p.id
+                    WHERE a.colaborador_id = @colaborador_id
+                    ORDER BY a.fecha_asignacion DESC
+                `);
+            
+            colaborador.productos_asignados = productos.recordset;
+
+            console.log(`✅ Colaborador: ${colaborador.nombre}`);
+            console.log(`   Total asignaciones: ${colaborador.total_asignaciones}, Activas: ${colaborador.asignaciones_activas}`);
+
             res.json({
                 success: true,
-                data: result.recordset[0]
+                data: colaborador
             });
         } catch (error) {
             console.error('❌ Error en getColaboradorById:', error);
@@ -103,14 +172,54 @@ const colaboradorController = {
         }
     },
 
-    /**
-     * Crear nuevo colaborador
-     */
+    getProductosAsignados: async (req, res) => {
+        try {
+            const { id } = req.params;
+            console.log(`📥 GET /api/colaboradores/${id}/productos-asignados`);
+
+            const pool = await getConnection();
+            
+            const result = await pool.request()
+                .input('colaborador_id', sql.Int, id)
+                .query(`
+                    SELECT 
+                        a.id as asignacion_id,
+                        a.fecha_asignacion,
+                        a.fecha_devolucion,
+                        a.motivo,
+                        p.id as producto_id,
+                        p.nombre as producto_nombre,
+                        p.numero_serie,
+                        p.marca,
+                        p.modelo,
+                        CASE 
+                            WHEN a.fecha_devolucion IS NULL THEN 'ACTIVA'
+                            ELSE 'FINALIZADA'
+                        END as estado_asignacion
+                    FROM [INV].[asignaciones] a
+                    INNER JOIN [INV].[productos] p ON a.producto_id = p.id
+                    WHERE a.colaborador_id = @colaborador_id
+                    ORDER BY a.fecha_asignacion DESC
+                `);
+
+            console.log(`✅ ${result.recordset.length} asignaciones encontradas`);
+
+            res.json({
+                success: true,
+                data: result.recordset
+            });
+        } catch (error) {
+            console.error('❌ Error en getProductosAsignados:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    },
+
     createColaborador: async (req, res) => {
         try {
-            console.log('📥 POST /api/colaboradores - Creando colaborador');
-            console.log('📥 Body:', req.body);
-
+            console.log('📥 POST /api/colaboradores');
             const { rut, nombre, email, telefono, cargo, departamento, fecha_ingreso, estado, direccion, fecha_nacimiento } = req.body;
 
             if (!rut || !nombre || !email) {
@@ -155,7 +264,7 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
-                .input('creado_por', sql.Int, req.user?.id || null)
+                .input('creado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     INSERT INTO [INV].[colaboradores] (
                         rut, nombre, email, telefono, cargo, departamento,
@@ -184,9 +293,6 @@ const colaboradorController = {
         }
     },
 
-    /**
-     * Actualizar colaborador
-     */
     updateColaborador: async (req, res) => {
         try {
             const { id } = req.params;
@@ -245,7 +351,7 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
-                .input('actualizado_por', sql.Int, req.user?.id || null)
+                .input('actualizado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     UPDATE [INV].[colaboradores]
                     SET 
@@ -279,27 +385,23 @@ const colaboradorController = {
         }
     },
 
-    /**
-     * Eliminar colaborador
-     */
     deleteColaborador: async (req, res) => {
         try {
             const { id } = req.params;
-
             const pool = await getConnection();
 
             const checkResult = await pool.request()
                 .input('id', sql.Int, id)
                 .query(`
                     SELECT COUNT(*) as total 
-                    FROM [INV].[producto_uso] 
-                    WHERE colaborador_id = @id
+                    FROM [INV].[asignaciones] 
+                    WHERE colaborador_id = @id AND fecha_devolucion IS NULL
                 `);
 
             if (checkResult.recordset[0].total > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'No se puede eliminar un colaborador con asignaciones'
+                    message: `No se puede eliminar. Tiene ${checkResult.recordset[0].total} productos asignados.`
                 });
             }
 
@@ -328,75 +430,36 @@ const colaboradorController = {
         }
     },
 
-    /**
-     * Obtener productos asignados a un colaborador
-     */
-    getProductosAsignados: async (req, res) => {
-        try {
-            const { id } = req.params;
-
-            const pool = await getConnection();
-            const result = await pool.request()
-                .input('colaborador_id', sql.Int, id)
-                .query(`
-                    SELECT 
-                        pu.id as asignacion_id,
-                        pu.fecha_asignacion,
-                        pu.fecha_devolucion,
-                        pu.motivo,
-                        pu.comentario,
-                        pu.estado as estado_asignacion,
-                        p.*,
-                        b.id as bodega_id,
-                        b.nombre as bodega_nombre
-                    FROM [INV].[producto_uso] pu
-                    INNER JOIN [INV].[productos] p ON pu.producto_id = p.id
-                    LEFT JOIN [INV].[producto_bodega] pb ON p.id = pb.producto_id
-                    LEFT JOIN [INV].[bodegas] b ON pb.bodega_id = b.id
-                    WHERE pu.colaborador_id = @colaborador_id
-                    ORDER BY pu.fecha_asignacion DESC
-                `);
-
-            res.json({
-                success: true,
-                data: result.recordset
-            });
-        } catch (error) {
-            console.error('❌ Error en getProductosAsignados:', error);
-            res.status(500).json({
-                success: false,
-                message: error.message
-            });
-        }
-    },
-
-    /**
-     * Obtener estadísticas de colaboradores
-     */
     getStats: async (req, res) => {
         try {
             const pool = await getConnection();
+            
             const result = await pool.request()
                 .query(`
                     SELECT 
-                        COUNT(*) as total_colaboradores,
-                        SUM(CASE WHEN estado = 'ACTIVO' THEN 1 ELSE 0 END) as activos,
-                        SUM(CASE WHEN estado = 'INACTIVO' THEN 1 ELSE 0 END) as inactivos,
-                        COUNT(DISTINCT departamento) as total_departamentos,
-                        (
-                            SELECT COUNT(*) 
-                            FROM [INV].[producto_uso] 
-                            WHERE fecha_devolucion IS NULL
-                        ) as total_equipos_asignados
-                    FROM [INV].[colaboradores]
+                        COUNT(DISTINCT c.id) as total_colaboradores,
+                        SUM(CASE WHEN c.estado = 'ACTIVO' THEN 1 ELSE 0 END) as activos,
+                        SUM(CASE WHEN c.estado = 'INACTIVO' THEN 1 ELSE 0 END) as inactivos,
+                        COUNT(DISTINCT c.departamento) as total_departamentos,
+                        COUNT(a.id) as total_equipos_asignados,
+                        SUM(CASE WHEN a.fecha_devolucion IS NULL THEN 1 ELSE 0 END) as equipos_activos
+                    FROM [INV].[colaboradores] c
+                    LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
                 `);
-
+            
             res.json({
                 success: true,
-                data: result.recordset[0]
+                data: {
+                    total_colaboradores: result.recordset[0].total_colaboradores || 0,
+                    activos: result.recordset[0].activos || 0,
+                    inactivos: result.recordset[0].inactivos || 0,
+                    total_departamentos: result.recordset[0].total_departamentos || 0,
+                    total_equipos_asignados: result.recordset[0].total_equipos_asignados || 0,
+                    equipos_activos: result.recordset[0].equipos_activos || 0
+                }
             });
         } catch (error) {
-            console.error('❌ Error en getStats colaboradores:', error);
+            console.error('❌ Error en getStats:', error);
             res.status(500).json({
                 success: false,
                 message: error.message
@@ -404,9 +467,6 @@ const colaboradorController = {
         }
     },
 
-    /**
-     * Obtener departamentos únicos
-     */
     getDepartamentos: async (req, res) => {
         try {
             const pool = await getConnection();
@@ -414,7 +474,7 @@ const colaboradorController = {
                 .query(`
                     SELECT DISTINCT departamento 
                     FROM [INV].[colaboradores] 
-                    WHERE departamento IS NOT NULL 
+                    WHERE departamento IS NOT NULL AND departamento != ''
                     ORDER BY departamento
                 `);
 
