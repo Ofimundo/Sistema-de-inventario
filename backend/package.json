@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "build": "babel ./ --out-dir dist --copy-files --ignore node_modules",
+    "build": "npx babel ./ --out-dir dist --copy-files --ignore node_modules",
     "start": "node dist/server.js"
   },
   "dependencies": {
