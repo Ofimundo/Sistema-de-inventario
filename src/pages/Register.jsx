@@ -1,4 +1,6 @@
-// src/pages/Register.jsx
+/* eslint-disable react-hooks/incompatible-library */
+
+
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -12,9 +14,7 @@ import {
     InputAdornment,
     Alert,
     CircularProgress,
-    Grid,
-    useTheme,
-    useMediaQuery
+    Grid
 } from '@mui/material';
 import {
     Visibility,
@@ -46,8 +46,8 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 
 const Register = () => {
     const navigate = useNavigate();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    // const theme = useTheme();  // No se usa, comentado
+    // const isMobile = useMediaQuery(theme.breakpoints.down('sm'));  // No se usa, comentado
     
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);

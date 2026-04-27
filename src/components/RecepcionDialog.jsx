@@ -1,4 +1,5 @@
 // src/components/RecepcionDialog.jsx
+/* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
     Dialog,

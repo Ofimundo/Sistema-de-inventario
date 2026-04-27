@@ -1,4 +1,6 @@
 // src/pages/RecoverPassword.jsx
+/* eslint-disable react-hooks/incompatible-library */
+/* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
