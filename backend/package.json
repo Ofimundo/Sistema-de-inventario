@@ -2,7 +2,7 @@
   "name": "bodega-backend",
   "version": "1.0.0",
   "description": "Backend para sistema de gestión de bodega",
-  "main": "dist/server.js",
+  "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js"
