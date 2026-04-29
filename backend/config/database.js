@@ -4,7 +4,7 @@ require("dotenv").config();
 
 const dbConfig = {
   server: process.env.DB_SERVER || "PACMAN\\OFIMUNDO_DEV",
-  port: process.env.DB_PORT || 5000,
+  port: Number(process.env.DB_PORT) || 5000,
   database: process.env.DB_DATABASE || "THE_COOLER_SGCX",
   user: process.env.DB_USER || "marrano",
   password: process.env.DB_PASSWORD || "ma*576394",
