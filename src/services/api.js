@@ -2,40 +2,30 @@
 import axios from 'axios';
 
 /**
- * Obtiene la URL base correcta según el entorno
+ * Obtiene la URL base según las variables de entorno
  */
 const getBaseURL = () => {
-    const hostname = window.location.hostname;
-    
-    console.log('📍 Información de conexión:');
-    console.log('   - Hostname:', hostname);
-    console.log('   - Puerto frontend:', window.location.port);
-    
-    // Desarrollo local
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        const url = 'http://localhost:98/api';
-        console.log('✅ Modo: Desarrollo local PC');
-        console.log('📡 Conectando a backend:', url);
-        return url;
+    // 🔥 IMPORTANTE: Vite usa import.meta.env, Create React App usa process.env
+    // Primero intentar con Vite
+    if (import.meta.env && import.meta.env.VITE_API_URL) {
+        console.log('✅ Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
+        return import.meta.env.VITE_API_URL;
     }
     
-    // Desarrollo desde móvil en misma red
-    if (hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1]))/)) {
-        const PC_IP = '192.168.1.162';
-        const url = `http://${PC_IP}:5000/api`;
-        console.log('✅ Modo: Desarrollo móvil');
-        console.log('📡 Conectando a backend:', url);
-        return url;
+    // Luego intentar con Create React App
+    if (process.env && process.env.REACT_APP_API_URL) {
+        console.log('✅ Usando REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+        return process.env.REACT_APP_API_URL;
     }
     
-    // Producción
-    console.log('✅ Modo: Producción');
-    const url = `${window.location.origin}/api`;
-    console.log('📡 Conectando a backend:', url);
-    return url;
+    // Fallback para desarrollo local
+    console.log('⚠️ No se encontraron variables de entorno, usando fallback: http://localhost:98/api');
+    return 'http://localhost:98/api';
 };
 
 const API_URL = getBaseURL();
+
+console.log('🚀 API URL configurada:', API_URL);
 
 // Crear instancia de axios
 const api = axios.create({
@@ -94,7 +84,7 @@ api.interceptors.response.use(
             console.error('   💡 Verifica que el backend esté corriendo en:', API_URL);
             return Promise.reject({
                 success: false,
-                message: 'No se pudo conectar al servidor. Verifica que el backend esté corriendo.',
+                message: `No se pudo conectar al servidor en ${API_URL}. Verifica que el backend esté corriendo.`,
                 originalError: error
             });
         }
@@ -111,11 +101,9 @@ api.interceptors.response.use(
             
             console.log('   🔐 Token expirado, limpiando sesión...');
             
-            // Limpiar localStorage
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             
-            // Redirigir al login si no está ya en esa página
             if (!window.location.pathname.includes('/login')) {
                 window.location.href = '/login?expired=true';
             }
@@ -127,7 +115,6 @@ api.interceptors.response.use(
             });
         }
         
-        // Otros errores
         const errorResponse = {
             success: false,
             message: data.message || data.error || `Error ${status}`,
@@ -149,11 +136,15 @@ export const authService = {
     login: async (usuario, password) => {
         try {
             console.log('🔐 Intentando login...');
+            console.log('   📡 URL base:', API_URL);
+            console.log('   📡 Endpoint completo:', `${API_URL}/auth/login`);
             
             const response = await api.post('/auth/login', {
                 usuario: usuario.trim(),
                 password
             });
+            
+            console.log('📦 Respuesta del servidor:', response.data);
             
             const data = response.data;
             
@@ -174,10 +165,13 @@ export const authService = {
                 };
                 
                 localStorage.setItem('user', JSON.stringify(userToStore));
-                console.log('✅ Usuario guardado:', userToStore);
+                console.log('✅ Usuario guardado en localStorage:', userToStore);
                 
                 return {
                     success: true,
+                    message: data.message || 'Login exitoso',
+                    usuario: userToStore,
+                    token: data.token,
                     data: {
                         ...data,
                         usuario: userToStore
@@ -204,11 +198,7 @@ export const authService = {
      */
     register: async (userData) => {
         try {
-            console.log('📝 Registrando usuario:', {
-                usuario: userData.usuario,
-                nombre: userData.nombre,
-                email: userData.email
-            });
+            console.log('📝 Registrando usuario...');
             
             // Validaciones
             if (!userData.nombre?.trim()) {
@@ -224,12 +214,6 @@ export const authService = {
                 throw new Error('La contraseña debe tener al menos 6 caracteres');
             }
             
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(userData.email)) {
-                throw new Error('El email no es válido');
-            }
-            
-            // Datos para enviar al backend
             const datosRegistro = {
                 usuario: userData.usuario.trim(),
                 password: userData.contraseña,
@@ -240,22 +224,13 @@ export const authService = {
                 rol: 'usuario'
             };
             
-            console.log('📤 Enviando al backend:', {
-                ...datosRegistro,
-                password: '***'
-            });
-            
             const response = await api.post('/auth/register', datosRegistro);
             
-            console.log('✅ Respuesta registro:', response.data);
-            
             if (response.data && response.data.success) {
-                // Guardar token si viene en la respuesta
                 if (response.data.token) {
                     localStorage.setItem('token', response.data.token);
                 }
                 
-                // Guardar datos del usuario
                 const userToStore = {
                     id: response.data.user?.id,
                     usuario: userData.usuario.trim(),
@@ -268,22 +243,18 @@ export const authService = {
                 };
                 
                 localStorage.setItem('user', JSON.stringify(userToStore));
-                console.log('✅ Usuario guardado en localStorage:', userToStore);
                 
                 return {
                     success: true,
                     message: response.data.message || 'Usuario registrado exitosamente',
-                    data: {
-                        ...response.data,
-                        usuario: userToStore
-                    }
-                };
-            } else {
-                return {
-                    success: false,
-                    message: response.data?.message || 'Error al registrar usuario'
+                    data: response.data
                 };
             }
+            
+            return {
+                success: false,
+                message: response.data?.message || 'Error al registrar usuario'
+            };
             
         } catch (error) {
             console.error('❌ Error en registro:', error);
@@ -301,18 +272,8 @@ export const authService = {
         try {
             console.log('🚪 Cerrando sesión...');
             
-            const token = localStorage.getItem('token');
-            if (token) {
-                await api.post('/auth/logout').catch(err => {
-                    console.log('⚠️ Error en logout (no crítico):', err.message);
-                });
-            }
-            
-            // Limpiar localStorage
             localStorage.removeItem('token');
             localStorage.removeItem('user');
-            
-            console.log('🧹 Sesión cerrada');
             
             return {
                 success: true,
@@ -321,11 +282,6 @@ export const authService = {
             
         } catch (error) {
             console.error('❌ Error en logout:', error);
-            
-            // Asegurar limpieza
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            
             return {
                 success: false,
                 message: error.message || 'Error al cerrar sesión'
@@ -346,7 +302,6 @@ export const authService = {
             const now = Date.now();
             
             if (now > exp) {
-                console.log('⏰ Token expirado');
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
                 return false;
@@ -365,13 +320,10 @@ export const authService = {
         const userStr = localStorage.getItem('user');
         try {
             if (userStr) {
-                const user = JSON.parse(userStr);
-                console.log('📦 Usuario cargado:', user);
-                return user;
+                return JSON.parse(userStr);
             }
             return null;
         } catch {
-            console.error('❌ Error al parsear usuario');
             return null;
         }
     },
