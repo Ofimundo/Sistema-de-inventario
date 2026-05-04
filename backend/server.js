@@ -1,40 +1,23 @@
 // backend/server.js - VERSIÓN CORREGIDA
 const express = require('express');
 const cors = require('cors');
-const app = express();
 const path = require('path');
 const fileUpload = require('express-fileupload');
 require('dotenv').config();
 
-// Importar rutas
-const authRoutes = require('./routes/authRoutes');
-const productoRoutes = require('./routes/productoRoutes');
-const bodegaRoutes = require('./routes/bodegaRoutes');
-const historialRoutes = require('./routes/historialRoutes');
-const asignacionRoutes = require('./routes/asignacionRoutes');
-const exportRoutes = require('./routes/exportRoutes');
-const estadosRoutes = require('./routes/estadosRoutes');
-const documentoRoutes = require('./routes/documentoRoutes');
-const usuariosRoutes = require('./routes/usuarios');
-const colaboradorRoutes = require('./routes/colaboradorRoutes');
-
-
+// Crear app UNA SOLA VEZ
 const app = express();
 
-// USAR CORS (agregar esto ANTES de las rutas)
-app.use(cors(corsOptions));
-
-// Permitir preflight para todas las rutas
-app.options('*', cors(corsOptions));
-
-// ✅ LÍNEA 2: Configuración CORS (agrega esto después de crear 'app')
+// ============================================
+// CONFIGURACIÓN CORS (DEFINIR PRIMERO)
+// ============================================
 const corsOptions = {
     origin: [
         'http://localhost:3000',
         'http://localhost:5173',
         'http://localhost:5174',
         'http://127.0.0.1:5500',
-        'https://main.d23w4mszg17gc.amplifyapp.com',
+        'https://main.d23vw4mszg17gc.amplifyapp.com',
         'https://*.amplifyapp.com',
         'https://sistema-inventario-backend-p3xg.onrender.com'
     ],
@@ -43,7 +26,14 @@ const corsOptions = {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 };
-// ============ CONFIGURACIÓN DE FILEUPLOAD ============
+
+// APLICAR CORS (UNA SOLA VEZ)
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// ============================================
+// CONFIGURACIÓN DE FILEUPLOAD
+// ============================================
 app.use(fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 },
     abortOnLimit: true,
@@ -52,24 +42,17 @@ app.use(fileUpload({
     debug: true
 }));
 
-// ============ CONFIGURACIÓN CORS ============
-app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://localhost:5174'],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// Middleware para parsear JSON y formularios
+// ============================================
+// MIDDLEWARES
+// ============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logger middleware
+// Logger middleware (para depuración)
 app.use((req, res, next) => {
     console.log(`\n📌 ${new Date().toISOString()} - ${req.method} ${req.url}`);
     if (req.method === 'POST' || req.method === 'PUT') {
         if (req.headers['content-type']?.includes('multipart/form-data')) {
-            console.log('📦 Content-Type: multipart/form-data');
             if (req.files) console.log('📎 Archivos recibidos:', Object.keys(req.files));
         } else {
             if (req.body && Object.keys(req.body).length > 0) {
@@ -83,10 +66,14 @@ app.use((req, res, next) => {
     next();
 });
 
-// ============ SERVIDOR DE ARCHIVOS ESTÁTICOS ============
+// ============================================
+// SERVIDOR DE ARCHIVOS ESTÁTICOS
+// ============================================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ============ RUTAS PÚBLICAS (SIN AUTENTICACIÓN) ============
+// ============================================
+// RUTAS PÚBLICAS (SIN AUTENTICACIÓN)
+// ============================================
 app.get('/', (req, res) => {
     res.json({ success: true, message: '🚀 Servidor de Bodega-App funcionando', timestamp: new Date().toISOString() });
 });
@@ -99,19 +86,36 @@ app.get('/api/health', (req, res) => {
     res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString(), database: 'connected' });
 });
 
-// ============ RUTAS DE AUTENTICACIÓN (públicas) ============
+// ============================================
+// IMPORTAR RUTAS
+// ============================================
+const authRoutes = require('./routes/authRoutes');
+const productoRoutes = require('./routes/productoRoutes');
+const bodegaRoutes = require('./routes/bodegaRoutes');
+const historialRoutes = require('./routes/historialRoutes');
+const asignacionRoutes = require('./routes/asignacionRoutes');
+const exportRoutes = require('./routes/exportRoutes');
+const estadosRoutes = require('./routes/estadosRoutes');
+const documentoRoutes = require('./routes/documentoRoutes');
+const usuariosRoutes = require('./routes/usuarios');
+const colaboradorRoutes = require('./routes/colaboradorRoutes');
+
+// ============================================
+// RUTAS DE AUTENTICACIÓN (públicas - SIN authenticateToken)
+// ============================================
 app.use('/api/auth', authRoutes);
 
-// ============ IMPORTAR MIDDLEWARE DE AUTENTICACIÓN ============
+// ============================================
+// MIDDLEWARE DE AUTENTICACIÓN (para rutas protegidas)
+// ============================================
 const { authenticateToken } = require('./middleware/auth');
 
-// ============ RUTAS PROTEGIDAS (requieren autenticación) ============
+// ============================================
+// RUTAS PROTEGIDAS (requieren autenticación)
+// ============================================
 console.log('📌 Configurando rutas protegidas...');
 
-// Rutas de asignaciones (la ruta /descargar será pública por el middleware)
 app.use('/api/asignaciones', authenticateToken, asignacionRoutes);
-
-// Las demás rutas protegidas
 app.use('/api/productos', authenticateToken, productoRoutes);
 app.use('/api/bodegas', authenticateToken, bodegaRoutes);
 app.use('/api/historial', authenticateToken, historialRoutes);
@@ -120,20 +124,30 @@ app.use('/api/estados', authenticateToken, estadosRoutes);
 app.use('/api/documentos', authenticateToken, documentoRoutes);
 app.use('/api/usuarios', authenticateToken, usuariosRoutes);
 app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
-app.use('/api/export', exportRoutes);
 
-// ============ MANEJO DE ERRORES 404 ============
+// ============================================
+// MANEJO DE ERRORES 404
+// ============================================
 app.use('*', (req, res) => {
-    res.status(404).json({ success: false, message: 'Ruta no encontrada', path: req.originalUrl, method: req.method });
+    res.status(404).json({ 
+        success: false, 
+        message: 'Ruta no encontrada', 
+        path: req.originalUrl, 
+        method: req.method 
+    });
 });
 
-// ============ MANEJO DE ERRORES GENERAL ============
+// ============================================
+// MANEJO DE ERRORES GENERAL
+// ============================================
 app.use((err, req, res, next) => {
     console.error('❌ Error del servidor:', err.stack);
     res.status(500).json({ success: false, message: err.message || 'Error interno del servidor' });
 });
 
-// ============ INICIO DEL SERVIDOR ============
+// ============================================
+// INICIO DEL SERVIDOR
+// ============================================
 const { getConnection } = require('./config/database');
 const PORT = process.env.PORT || 5000;
 
@@ -142,6 +156,7 @@ getConnection().then(() => {
         console.log('\n=================================');
         console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
         console.log(`📡 Local: http://localhost:${PORT}`);
+        console.log(`📍 CORS habilitado para múltiples orígenes`);
         console.log('=================================\n');
     });
 }).catch(err => {
