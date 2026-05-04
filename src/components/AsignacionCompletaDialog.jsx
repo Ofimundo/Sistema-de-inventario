@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN COMPLETAMENTE CORREGIDA
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -35,13 +35,13 @@ import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA
+// 🔥 URL BASE DINÁMICA CORREGIDA
 // ============================================
 const getApiBaseUrl = () => {
     // Para Vite
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         let url = import.meta.env.VITE_API_URL;
-        // Eliminar /api del final si existe
+        // Eliminar /api del final si existe para no duplicar
         if (url.endsWith('/api')) {
             url = url.slice(0, -4);
         }
@@ -326,8 +326,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         setDownloading(true);
         try {
             const token = localStorage.getItem('token');
-            // Usar la URL base de api (ya tiene /api incluido)
-            const downloadUrl = `${api.defaults.baseURL}/asignaciones/descargar/${documentoGenerado.filename}`;
+            // ✅ Usar API_BASE_URL (sin /api al final) y agregar /api en la URL
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
             console.log('📥 Descargando documento desde:', downloadUrl);
             
             const response = await fetch(downloadUrl, {
