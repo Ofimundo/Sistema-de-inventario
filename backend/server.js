@@ -16,7 +16,7 @@ const estadosRoutes = require('./routes/estadosRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
 const usuariosRoutes = require('./routes/usuarios');
 const colaboradorRoutes = require('./routes/colaboradorRoutes');
-const cors = require('cors'); 
+
 
 const app = express();
 
