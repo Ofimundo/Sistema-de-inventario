@@ -57,9 +57,6 @@ const getApiBaseUrl = () => {
         console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
-    // Fallback para desarrollo local
-    console.log('📍 API Base URL (fallback local):', 'http://localhost:98');
-    return 'http://localhost:98';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -323,54 +320,46 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     };
 
     // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO - USANDO API_BASE_URL
-    const handleDescargarDocumento = async () => {
-        console.log('🔍 Iniciando descarga...');
-        console.log('🔍 documentoGenerado:', documentoGenerado);
-        console.log('🔍 API_BASE_URL:', API_BASE_URL);
+    // src/components/AsignacionCompletaDialog.jsx
+const handleDescargarDocumento = async () => {
+    if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+    
+    setDownloading(true);
+    try {
+        const token = localStorage.getItem('token');
+        // ✅ URL FORZADA A RENDER
+        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
+        console.log('📥 Descargando documento desde:', downloadUrl);
         
-        if (!documentoGenerado || !documentoGenerado.filename || downloading) {
-            console.log('❌ Condiciones no cumplidas para descarga');
-            return;
-        }
-        
-        setDownloading(true);
-        try {
-            const token = localStorage.getItem('token');
-            // ✅ Usar API_BASE_URL (que viene de la variable de entorno)
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-            console.log('📥 Descargando documento desde:', downloadUrl);
-            
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            console.log('📥 Respuesta fetch:', response.status, response.ok);
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
+        const response = await fetch(downloadUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
             }
+        });
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = documentoGenerado.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            console.log('✅ Documento descargado:', documentoGenerado.filename);
-        } catch (error) {
-            console.error('❌ Error descargando documento:', error);
-            alert('Error al descargar el documento. Por favor, intente nuevamente.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
         }
-    };
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = documentoGenerado.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ Documento descargado:', documentoGenerado.filename);
+    } catch (error) {
+        console.error('❌ Error descargando documento:', error);
+        alert('Error al descargar el documento. Por favor, intente nuevamente.');
+    } finally {
+        setTimeout(() => setDownloading(false), 1000);
+    }
+};
 
     const handleSubmit = async () => {
         if (!colaboradorSeleccionado) {
