@@ -325,14 +325,24 @@ const bodegasService = {
   },
 };
 
-// Servicio de historial
+// Servicio de historial - VERSIÓN CORREGIDA
 const historialService = {
   getUltimosMovimientos: async (limit = 5) => {
     try {
-      const response = await api.get("/historial");
-      const historial = response.data.data || response.data || [];
-      const historialArray = Array.isArray(historial) ? historial : [];
-      return historialArray.slice(0, limit);
+      // Intentar obtener asignaciones recientes como historial
+      const response = await api.get("/asignaciones?limit=" + limit);
+      const asignaciones = response.data.data || response.data || [];
+      const asignacionesArray = Array.isArray(asignaciones) ? asignaciones : [];
+      
+      // Transformar asignaciones a formato de historial
+      return asignacionesArray.slice(0, limit).map(a => ({
+        id: a.id,
+        descripcion: `Asignación de producto a ${a.colaborador_nombre || 'colaborador'}`,
+        tipo_movimiento: "ASIGNACION",
+        usuario: a.usuario_responsable || "Sistema",
+        fecha: a.fecha_asignacion,
+        producto_nombre: a.producto_nombre
+      }));
     } catch (error) {
       console.error("Error fetching historial:", error);
       return [];
@@ -341,13 +351,15 @@ const historialService = {
   
   search: async (term) => {
     try {
-      const response = await api.get("/historial");
-      const historial = response.data.data || response.data || [];
-      const historialArray = Array.isArray(historial) ? historial : [];
-      return historialArray.filter(h => 
+      // Búsqueda local en asignaciones
+      const response = await api.get("/asignaciones");
+      const asignaciones = response.data.data || response.data || [];
+      const asignacionesArray = Array.isArray(asignaciones) ? asignaciones : [];
+      
+      return asignacionesArray.filter(h => 
         (h.descripcion?.toLowerCase() || '').includes(term.toLowerCase()) ||
-        (h.usuario?.toLowerCase() || '').includes(term.toLowerCase())
-      );
+        (h.colaborador_nombre?.toLowerCase() || '').includes(term.toLowerCase())
+      ).slice(0, 20);
     } catch (error) {
       console.error("Error searching historial:", error);
       return [];
