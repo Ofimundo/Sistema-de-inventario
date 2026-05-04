@@ -24,9 +24,6 @@ const getApiBaseUrl = () => {
         console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
-    // Fallback para desarrollo local
-    console.log('📍 API Base URL (fallback local):', 'http://localhost:98');
-    return 'http://localhost:98';
 };
 
 const API_BASE_URL = getApiBaseUrl();
