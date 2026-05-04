@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA (solo cambio de puerto 5000 → 98)
+// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA CON VARIABLES DE ENTORNO
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -92,12 +92,31 @@ import {
 } from "@mui/icons-material";
 import axios from "axios";
 
-const drawerWidth = 260;
+// ============================================
+// 🔥 CONFIGURACIÓN DE API CON VARIABLES DE ENTORNO
+// ============================================
+const getApiBaseUrl = () => {
+  // Para Vite
+  if (import.meta.env && import.meta.env.VITE_API_URL) {
+    console.log('📍 API Base URL (VITE):', import.meta.env.VITE_API_URL);
+    return import.meta.env.VITE_API_URL;
+  }
+  // Para Create React App
+  if (process.env && process.env.REACT_APP_API_URL) {
+    console.log('📍 API Base URL (CRA):', process.env.REACT_APP_API_URL);
+    return process.env.REACT_APP_API_URL;
+  }
+  // Fallback para desarrollo local
+  console.log('📍 API Base URL (fallback):', 'http://localhost:98/api');
+  return 'http://localhost:98/api';
+};
 
-// Configuración de axios
+const API_BASE_URL = getApiBaseUrl();
+
+// Configuración de axios con URL dinámica
 const api = axios.create({
-  baseURL: "http://localhost:98/api",
-  timeout: 10000,
+  baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -110,9 +129,22 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// Interceptor para manejar errores de respuesta
+api.interceptors.response.use(
+  (response) => {
+    console.log(`📥 ${response.status} ${response.config.url}`);
+    return response;
+  },
+  (error) => {
+    console.error('❌ Error en API:', error.response?.status, error.message);
+    return Promise.reject(error);
+  }
 );
 
 // Servicio de autenticación
@@ -168,7 +200,7 @@ const authService = {
   },
 };
 
-// Servicio de productos - CORREGIDO el puerto de exportación
+// Servicio de productos - CORREGIDO
 const productosService = {
   getProductos: async () => {
     try {
@@ -185,10 +217,7 @@ const productosService = {
       const productos = await productosService.getProductos();
       const productosArray = Array.isArray(productos) ? productos : [];
       
-      // Definir estados que indican producto dado de baja
       const estadosBaja = ['NO DISPONIBLE', 'BAJA', 'DONADO'];
-      
-      // Filtrar productos activos (excluir dados de baja)
       const productosActivos = productosArray.filter(p => !estadosBaja.includes(p.estado));
       const productosDadosDeBaja = productosArray.filter(p => estadosBaja.includes(p.estado));
       
@@ -201,19 +230,16 @@ const productosService = {
       });
       
       return {
-        // Totales (incluye todos los productos)
         totalProductos: productosArray.length,
         dadosDeBaja: productosDadosDeBaja.length,
-        
-        // Estadísticas de productos activos (excluye dados de baja)
         totalActivos: productosActivos.length,
-        totalUnidades: productosActivos.reduce((sum, p) => sum + (p.stock || p.cantidad || 0), 0),
+        totalUnidades: productosActivos.reduce((sum, p) => sum + (p.cantidad || 0), 0),
         disponibles: productosActivos.filter(p => p.estado === 'DISPONIBLE').length,
         asignados: productosActivos.filter(p => p.estado === 'ASIGNADO').length,
         enMantencion: productosActivos.filter(p => p.estado === 'EN MANTENCIÓN').length,
         enReparacion: productosActivos.filter(p => p.estado === 'EN REPARACIÓN').length,
-        bajoStock: productosActivos.filter(p => (p.stock || p.cantidad || 0) < 5).length,
-        valorTotal: productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.stock || p.cantidad || 0)), 0),
+        bajoStock: productosActivos.filter(p => (p.cantidad || 0) < 5).length,
+        valorTotal: productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 0)), 0),
       };
     } catch (error) {
       console.error("Error calculating stats:", error);
@@ -226,9 +252,8 @@ const productosService = {
       const productos = await productosService.getProductos();
       const productosArray = Array.isArray(productos) ? productos : [];
       const estadosBaja = ['NO DISPONIBLE', 'BAJA', 'DONADO'];
-      // Solo productos activos con stock bajo
       return productosArray.filter(p => 
-        (p.stock || p.cantidad || 0) < 5 && 
+        (p.cantidad || 0) < 5 && 
         !estadosBaja.includes(p.estado)
       );
     } catch (error) {
@@ -252,11 +277,14 @@ const productosService = {
     }
   },
   
-  // ✅ ÚNICO CAMBIO: puerto 5000 → 98
+  // ✅ Exportación usando la URL dinámica
   exportExcel: async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:98/api/export/productos', {
+      const exportUrl = `${API_BASE_URL}/export/productos`;
+      console.log('📥 Exportando desde:', exportUrl);
+      
+      const response = await fetch(exportUrl, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -326,7 +354,7 @@ const historialService = {
   },
 };
 
-/* ================= ESTILOS ================= */
+/* ================= ESTILOS (Mismo código) ================= */
 const StyledCard = styled(Card)(({ theme }) => ({
   height: "100%",
   borderRadius: 16,
@@ -884,7 +912,7 @@ const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode, notificacio
   );
 };
 
-/* ================= DASHBOARD ================= */
+/* ================= DASHBOARD PRINCIPAL ================= */
 const Dashboard = () => {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width:600px)");
@@ -925,7 +953,7 @@ const Dashboard = () => {
   
   const [apiError, setApiError] = useState(false);
 
-  // Menú items - AGREGADO STOCK
+  // Menú items
   const menuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
     { text: "Productos", icon: <InventoryIcon />, path: "/productos" },
@@ -993,7 +1021,7 @@ const Dashboard = () => {
       id: `stock-${item.id}-${Date.now()}`,
       tipo: "stock_critico",
       titulo: "⚠️ Stock Crítico",
-      mensaje: `${item.nombre} tiene solo ${item.stock || item.cantidad || 0} unidades disponibles`,
+      mensaje: `${item.nombre} tiene solo ${item.cantidad || 0} unidades disponibles`,
       fecha: new Date().toISOString(),
       leida: false,
       producto_id: item.id,
@@ -1094,8 +1122,11 @@ const Dashboard = () => {
 
     try {
       const [statsData, movimientos] = await Promise.all([
-        productosService.getStats().catch(() => null),
-        historialService.getUltimosMovimientos(5),
+        productosService.getStats().catch((err) => {
+          console.error("Error en stats:", err);
+          return null;
+        }),
+        historialService.getUltimosMovimientos(5).catch(() => []),
       ]);
 
       if (statsData) {
@@ -1159,6 +1190,7 @@ const Dashboard = () => {
       
       showSnackbar("Reporte generado exitosamente", "success");
     } catch (error) {
+      console.error("Error generando reporte:", error);
       showSnackbar("Error al generar reporte", "error");
     }
   }, [showSnackbar]);
@@ -1205,6 +1237,7 @@ const Dashboard = () => {
 
     setUser(currentUser);
     console.log("👤 Usuario cargado:", currentUser);
+    console.log("🔧 API URL configurada:", API_BASE_URL);
 
     // Cargar configuración de notificaciones
     loadConfigNotificaciones();
@@ -1502,7 +1535,7 @@ const Dashboard = () => {
                   Reintentar
                 </Button>
               }>
-                Error de conexión con el servidor
+                Error de conexión con el servidor en {API_BASE_URL}
               </Alert>
             )}
 
@@ -1560,7 +1593,7 @@ const Dashboard = () => {
             </Paper>
 
             <Grid container spacing={{ xs: 2, sm: 3 }}>
-              {/* Stats Cards - 8 cards */}
+              {/* Stats Cards */}
               <Grid item xs={6} sm={6} md={3}>
                 {!loading ? (
                   <StatCard 

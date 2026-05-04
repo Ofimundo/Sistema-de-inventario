@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA CON DOCUMENTO ORDENADO
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA CON URL DINÁMICA
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -37,8 +37,35 @@ import {
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
-// URL base fija para el backend
-const API_BASE_URL = 'http://localhost:98';
+// ============================================
+// 🔥 URL BASE DINÁMICA (CORREGIDO)
+// ============================================
+const getApiBaseUrl = () => {
+    // Para Vite
+    if (import.meta.env && import.meta.env.VITE_API_URL) {
+        let url = import.meta.env.VITE_API_URL;
+        // Eliminar /api del final si existe
+        if (url.endsWith('/api')) {
+            url = url.slice(0, -4);
+        }
+        console.log('📍 API Base URL (desde VITE):', url);
+        return url;
+    }
+    // Para Create React App
+    if (process.env && process.env.REACT_APP_API_URL) {
+        let url = process.env.REACT_APP_API_URL;
+        if (url.endsWith('/api')) {
+            url = url.slice(0, -4);
+        }
+        console.log('📍 API Base URL (desde CRA):', url);
+        return url;
+    }
+    // Fallback para desarrollo local
+    console.log('📍 API Base URL (fallback local):', 'http://localhost:98');
+    return 'http://localhost:98';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Componente de Firma Dibujada (Canvas) - MEJORADO
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 150, label = 'Firma' }) => {
@@ -299,8 +326,9 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         if (documentoGenerado && documentoGenerado.filename && !downloading) {
             setDownloading(true);
             try {
+                // 🔥 URL CORREGIDA - Usa la URL dinámica
                 const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-                console.log('📥 Descargando documento:', documentoGenerado.filename);
+                console.log('📥 Descargando documento desde:', downloadUrl);
                 
                 const link = document.createElement('a');
                 link.href = downloadUrl;

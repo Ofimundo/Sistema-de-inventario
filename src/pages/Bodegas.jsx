@@ -1,4 +1,4 @@
-// src/pages/bodegas.jsx - VERSIÓN CORREGIDA CON STOCK EN MENÚ
+// src/pages/BodegasPage.jsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -79,13 +79,12 @@ import {
     DeleteForever as DeleteForeverIcon,
     FilterList as FilterListIcon,
     FilterListOff as FilterListOffIcon,
-    Home as HomeIcon,
     People as PeopleIcon,
     Store as StoreIcon,
     Warning as WarningIcon,
     Cancel as CancelIcon,
     Inventory2 as Inventory2Icon,
-    BarChart as BarChartIcon
+    Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 
@@ -274,45 +273,59 @@ function StatCard({ icon: Icon, title, value, color, loading }) {
     );
 }
 
-// Tarjeta de producto
+// Tarjeta de producto mejorada
 function ProductoCard({ producto, onVerDetalle }) {
+    const getEstadoColor = (estado) => {
+        switch(estado?.toUpperCase()) {
+            case 'DISPONIBLE': return colors.success;
+            case 'ASIGNADO': return colors.warning;
+            case 'EN MANTENCIÓN': return colors.info;
+            case 'EN REPARACIÓN': return colors.secondary;
+            default: return colors.text.secondary;
+        }
+    };
+
     return (
-        <Card variant="outlined" sx={{ mb: 2, borderRadius: 2 }}>
+        <Card variant="outlined" sx={{ mb: 2, borderRadius: 2, '&:hover': { boxShadow: 2 } }}>
             <CardActionArea onClick={() => onVerDetalle(producto)}>
                 <CardContent sx={{ p: 2 }}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={7}>
+                        <Grid item xs={12} sm={5}>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1) }}>
+                                <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), width: 40, height: 40 }}>
                                     <InventoryIcon fontSize="small" />
                                 </Avatar>
                                 <Box>
-                                    <Typography variant="subtitle2">{producto.nombre}</Typography>
-                                    <Typography variant="caption">Serie: {producto.numero_serie || 'N/A'}</Typography>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{producto.nombre || 'Sin nombre'}</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Serie: {producto.numero_serie || 'N/A'}
+                                    </Typography>
                                 </Box>
                             </Box>
                         </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="caption">Cantidad</Typography>
-                            <Chip 
-                                label={producto.cantidad_bodega || producto.stock || 0} 
-                                size="small" 
-                                color="primary" 
-                                sx={{ fontWeight: 600 }}
-                            />
+                        <Grid item xs={6} sm={2}>
+                            <Typography variant="caption" color="text.secondary">Marca/Modelo</Typography>
+                            <Typography variant="body2">{producto.marca || '-'} / {producto.modelo || '-'}</Typography>
                         </Grid>
                         <Grid item xs={6} sm={2}>
-                            <Typography variant="caption">Estado</Typography>
+                            <Typography variant="caption" color="text.secondary">Stock</Typography>
                             <Chip 
-                                label={producto.estado || 'DISPONIBLE'} 
+                                label={producto.cantidad || producto.stock || 0} 
+                                size="small" 
+                                color="primary" 
+                                sx={{ fontWeight: 600, mt: 0.5 }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <Typography variant="caption" color="text.secondary">Estado</Typography>
+                            <Chip 
+                                label={producto.estado || producto.estado_texto || 'DISPONIBLE'} 
                                 size="small" 
                                 sx={{
-                                    backgroundColor: (producto.estado === 'DISPONIBLE') 
-                                        ? alpha(colors.success, 0.1) 
-                                        : alpha(colors.warning, 0.1),
-                                    color: (producto.estado === 'DISPONIBLE') 
-                                        ? colors.success 
-                                        : colors.warning,
+                                    mt: 0.5,
+                                    backgroundColor: alpha(getEstadoColor(producto.estado || producto.estado_texto), 0.1),
+                                    color: getEstadoColor(producto.estado || producto.estado_texto),
+                                    fontWeight: 500
                                 }}
                             />
                         </Grid>
@@ -327,47 +340,82 @@ function ProductoCard({ producto, onVerDetalle }) {
 function ProductoDetailDialog({ open, onClose, producto }) {
     if (!producto) return null;
 
+    const getEstadoColor = (estado) => {
+        switch(estado?.toUpperCase()) {
+            case 'DISPONIBLE': return colors.success;
+            case 'ASIGNADO': return colors.warning;
+            case 'EN MANTENCIÓN': return colors.info;
+            case 'EN REPARACIÓN': return colors.secondary;
+            default: return colors.text.secondary;
+        }
+    };
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-            <DialogTitle>Detalle del Producto</DialogTitle>
+            <DialogTitle sx={{ bgcolor: alpha(colors.primary, 0.05) }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <InventoryIcon sx={{ color: colors.primary }} />
+                    <Typography variant="h6">Detalle del Producto</Typography>
+                </Box>
+            </DialogTitle>
             <DialogContent dividers>
                 <Grid container spacing={2}>
                     <Grid item xs={12}>
-                        <Typography variant="h6">{producto.nombre}</Typography>
-                        <Typography variant="body2">Serie: {producto.numero_serie || 'N/A'}</Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{producto.nombre}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            N° Serie: {producto.numero_serie || 'N/A'}
+                        </Typography>
+                        {producto.codigo_qr && (
+                            <Typography variant="body2" color="text.secondary">
+                            Código QR: {producto.codigo_qr}
+                            </Typography>
+                        )}
                     </Grid>
-                    <Divider />
+                    <Divider sx={{ width: '100%', my: 1 }} />
                     <Grid item xs={6}>
-                        <Typography variant="caption">Marca</Typography>
-                        <Typography>{producto.marca || '-'}</Typography>
+                        <Typography variant="caption" color="text.secondary">Marca</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{producto.marca || '-'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                        <Typography variant="caption">Modelo</Typography>
-                        <Typography>{producto.modelo || '-'}</Typography>
+                        <Typography variant="caption" color="text.secondary">Modelo</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{producto.modelo || '-'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                        <Typography variant="caption">Cantidad</Typography>
-                        <Typography>{producto.cantidad_bodega || producto.stock || 0}</Typography>
+                        <Typography variant="caption" color="text.secondary">Precio</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            ${(producto.precio || 0).toLocaleString('es-CL')}
+                        </Typography>
                     </Grid>
                     <Grid item xs={6}>
-                        <Typography variant="caption">Estado</Typography>
+                        <Typography variant="caption" color="text.secondary">Condición</Typography>
                         <Chip 
-                            label={producto.estado || 'DISPONIBLE'} 
+                            label={producto.condicion || 'NUEVO'} 
+                            size="small" 
+                            sx={{ mt: 0.5 }}
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Typography variant="caption" color="text.secondary">Estado</Typography>
+                        <Chip 
+                            label={producto.estado || producto.estado_texto || 'DISPONIBLE'} 
                             size="small" 
                             sx={{
-                                backgroundColor: (producto.estado === 'DISPONIBLE') 
-                                    ? alpha(colors.success, 0.1) 
-                                    : alpha(colors.warning, 0.1),
-                                color: (producto.estado === 'DISPONIBLE') 
-                                    ? colors.success 
-                                    : colors.warning,
+                                mt: 0.5,
+                                backgroundColor: alpha(getEstadoColor(producto.estado || producto.estado_texto), 0.1),
+                                color: getEstadoColor(producto.estado || producto.estado_texto)
                             }}
                         />
                     </Grid>
+                    {producto.descripcion && (
+                        <Grid item xs={12}>
+                            <Typography variant="caption" color="text.secondary">Descripción</Typography>
+                            <Typography variant="body2">{producto.descripcion}</Typography>
+                        </Grid>
+                    )}
                 </Grid>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
+                <Button onClick={onClose} variant="contained">Cerrar</Button>
             </DialogActions>
         </Dialog>
     );
@@ -451,7 +499,7 @@ const BodegasPage = () => {
 
     const activeFiltersCount = Object.values(filters).filter(v => v).length;
 
-    // MENÚ ACTUALIZADO CON STOCK POR MARCA Y MODELO
+    // MENÚ ACTUALIZADO
     const menuItems = [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
         { text: 'Productos', icon: <InventoryIcon />, path: '/productos' },
@@ -479,6 +527,7 @@ const BodegasPage = () => {
                 bodegasData = response.data;
             }
             
+            console.log('📦 Bodegas cargadas:', bodegasData.length);
             setBodegas(bodegasData);
             setStats({
                 totalBodegas: bodegasData.length,
@@ -495,25 +544,42 @@ const BodegasPage = () => {
         }
     }, [showSnackbar]);
 
-    // Cargar productos de una bodega específica
-    const fetchProductosPorBodega = useCallback(async (bodegaId) => {
-        setLoadingProductos(true);
+    // ✅ FUNCIÓN CORREGIDA para cargar productos de una bodega específica
+    const handleVerProductos = useCallback(async (bodega) => {
         try {
-            const response = await api.get(`/bodegas/${bodegaId}`);
+            setSelectedBodega(bodega);
+            setOpenDetail(true);
+            setLoadingProductos(true);
+            
+            console.log('🔍 Cargando productos de bodega:', bodega.id, bodega.nombre);
+            
+            // Usar el endpoint correcto que devuelve los productos
+            const response = await api.get(`/bodegas/${bodega.id}`);
             
             let productosData = [];
             if (response.data && response.data.success) {
-                productosData = response.data.data?.productos || [];
+                // La respuesta viene en response.data.data.productos
+                if (response.data.data && response.data.data.productos) {
+                    productosData = response.data.data.productos;
+                } else if (response.data.data && Array.isArray(response.data.data)) {
+                    productosData = response.data.data;
+                } else if (Array.isArray(response.data.data)) {
+                    productosData = response.data.data;
+                }
             } else if (Array.isArray(response.data)) {
                 productosData = response.data;
             }
             
+            console.log(`📦 Productos encontrados en ${bodega.nombre}:`, productosData.length);
             setProductosEnBodega(productosData);
-            return productosData;
+            
+            if (productosData.length === 0) {
+                showSnackbar(`No hay productos en ${bodega.nombre}`, 'info');
+            }
         } catch (error) {
             console.error('Error cargando productos:', error);
             showSnackbar('Error al cargar productos de la bodega', 'error');
-            return [];
+            setProductosEnBodega([]);
         } finally {
             setLoadingProductos(false);
         }
@@ -611,17 +677,6 @@ const BodegasPage = () => {
         }
     };
 
-    const handleVerProductos = async (bodega) => {
-        try {
-            setSelectedBodega(bodega);
-            setOpenDetail(true);
-            await fetchProductosPorBodega(bodega.id);
-        } catch (error) {
-            console.error('Error:', error);
-            showSnackbar('Error al cargar productos', 'error');
-        }
-    };
-
     const handleCloseForm = () => {
         setOpenForm(false);
         setSelectedBodega(null);
@@ -692,7 +747,7 @@ const BodegasPage = () => {
                     }}
                 >
                     <Toolbar>
-                        <Typography variant="h6">StockMaster</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>StockMaster</Typography>
                     </Toolbar>
                     <Divider />
                     <List>
@@ -716,23 +771,26 @@ const BodegasPage = () => {
                                 <MenuIcon />
                             </IconButton>
                             <StoreIcon sx={{ mr: 1 }} />
-                            <Typography variant="h6" sx={{ flexGrow: 1 }}>Gestión de Bodegas</Typography>
+                            <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Bodegas</Typography>
                             
                             <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
                                 {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
                             </IconButton>
                             <IconButton color="inherit" onClick={(e) => setAnchorEl(e.currentTarget)}>
-                                <Avatar sx={{ width: 32, height: 32 }}>
+                                <Avatar sx={{ width: 32, height: 32, bgcolor: colors.primary }}>
                                     {user?.usuario?.charAt(0) || user?.nombre?.charAt(0) || 'U'}
                                 </Avatar>
                             </IconButton>
 
                             <MuiMenu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
                                 <MuiMenuItem onClick={() => setDarkMode(!darkMode)}>
+                                    {darkMode ? <LightModeIcon sx={{ mr: 1 }} /> : <DarkModeIcon sx={{ mr: 1 }} />}
                                     {darkMode ? 'Modo Claro' : 'Modo Oscuro'}
                                 </MuiMenuItem>
                                 <Divider />
-                                <MuiMenuItem onClick={handleLogout}>Salir</MuiMenuItem>
+                                <MuiMenuItem onClick={handleLogout}>
+                                    <LogoutIcon sx={{ mr: 1 }} /> Salir
+                                </MuiMenuItem>
                             </MuiMenu>
                         </Toolbar>
                     </AppBar>
@@ -743,7 +801,7 @@ const BodegasPage = () => {
                         {/* Header */}
                         <Paper sx={{ p: 4, mb: 4, borderRadius: 4, background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`, color: 'white' }}>
                             <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Gestión de Bodegas</Typography>
-                            <Typography sx={{ mb: 3 }}>Administra las bodegas y visualiza los productos almacenados</Typography>
+                            <Typography sx={{ mb: 3, opacity: 0.9 }}>Administra las bodegas y visualiza los productos almacenados</Typography>
                             
                             <GradientButton startIcon={<AddIcon />} onClick={() => handleOpenForm()}>
                                 Nueva Bodega
@@ -814,7 +872,7 @@ const BodegasPage = () => {
 
                             <Collapse in={showAdvancedFilters}>
                                 <Box sx={{ mt: 3 }}>
-                                    <Typography variant="subtitle2" gutterBottom>Filtros avanzados</Typography>
+                                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>Filtros avanzados</Typography>
                                     <Grid container spacing={2}>
                                         <Grid item xs={12} sm={6}>
                                             <TextField 
@@ -878,9 +936,9 @@ const BodegasPage = () => {
                                         <TableRow><TableCell colSpan={columns.length + 1} align="center"><CircularProgress /></TableCell></TableRow>
                                     ) : paginatedBodegas.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={columns.length + 1} align="center">
-                                                <WarehouseIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
-                                                <Typography>No hay bodegas</Typography>
+                                            <TableCell colSpan={columns.length + 1} align="center" sx={{ py: 5 }}>
+                                                <WarehouseIcon sx={{ fontSize: 64, color: '#ccc', mb: 2 }} />
+                                                <Typography variant="h6" color="text.secondary">No hay bodegas registradas</Typography>
                                                 <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenForm()} sx={{ mt: 2 }}>
                                                     Crear Bodega
                                                 </Button>
@@ -891,7 +949,7 @@ const BodegasPage = () => {
                                             <StyledTableRow key={bodega.id} hover>
                                                 {columns.includes('nombre') && (
                                                     <TableCell>
-                                                        <Typography variant="body2" fontWeight={500}>{bodega.nombre}</Typography>
+                                                        <Typography variant="body2" fontWeight={600}>{bodega.nombre}</Typography>
                                                     </TableCell>
                                                 )}
                                                 {columns.includes('ubicacion') && (
@@ -917,12 +975,13 @@ const BodegasPage = () => {
                                                             label={bodega.total_productos || 0}
                                                             size="small"
                                                             color={bodega.total_productos > 0 ? 'success' : 'default'}
+                                                            sx={{ fontWeight: 500 }}
                                                         />
                                                     </TableCell>
                                                 )}
                                                 {columns.includes('descripcion') && (
                                                     <TableCell>
-                                                        <Typography variant="body2" color="text.secondary">
+                                                        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                             {bodega.descripcion || '—'}
                                                         </Typography>
                                                     </TableCell>
@@ -930,8 +989,12 @@ const BodegasPage = () => {
                                                 <TableCell align="center">
                                                     <Stack direction="row" spacing={0.5} justifyContent="center">
                                                         <Tooltip title="Ver productos">
-                                                            <IconButton size="small" onClick={() => handleVerProductos(bodega)} sx={{ color: colors.info }}>
-                                                                <InventoryIcon fontSize="small" />
+                                                            <IconButton 
+                                                                size="small" 
+                                                                onClick={() => handleVerProductos(bodega)} 
+                                                                sx={{ color: colors.info }}
+                                                            >
+                                                                <VisibilityIcon fontSize="small" />
                                                             </IconButton>
                                                         </Tooltip>
                                                         <Tooltip title="Editar">
@@ -962,29 +1025,48 @@ const BodegasPage = () => {
                                     setRowsPerPage(parseInt(e.target.value, 10));
                                     setPage(0);
                                 }}
-                                labelRowsPerPage="Filas"
+                                labelRowsPerPage="Filas por página"
+                                labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
                             />
                         </StyledTableContainer>
 
-                        {/* Diálogo de productos en bodega */}
-                        <Dialog open={openDetail} onClose={() => setOpenDetail(false)} maxWidth="md" fullWidth>
-                            <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                                <Box display="flex" alignItems="center" gap={1}>
-                                    <StoreIcon sx={{ color: colors.primary }} />
-                                    <Typography variant="h6">
-                                        Productos en {selectedBodega?.nombre}
-                                    </Typography>
-                                    <Chip 
-                                        label={`${productosEnBodega.length} productos`} 
-                                        size="small" 
-                                        sx={{ ml: 1 }}
-                                    />
+                        {/* Diálogo de productos en bodega - CORREGIDO */}
+                        <Dialog 
+                            open={openDetail} 
+                            onClose={() => {
+                                setOpenDetail(false);
+                                setProductosEnBodega([]);
+                            }} 
+                            maxWidth="md" 
+                            fullWidth
+                        >
+                            <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: alpha(colors.primary, 0.02) }}>
+                                <Box display="flex" alignItems="center" justifyContent="space-between">
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <StoreIcon sx={{ color: colors.primary }} />
+                                        <Typography variant="h6">
+                                            Productos en {selectedBodega?.nombre}
+                                        </Typography>
+                                        <Chip 
+                                            label={`${productosEnBodega.length} producto${productosEnBodega.length !== 1 ? 's' : ''}`} 
+                                            size="small" 
+                                            color={productosEnBodega.length > 0 ? 'primary' : 'default'}
+                                            sx={{ ml: 1 }}
+                                        />
+                                    </Box>
+                                    <IconButton onClick={() => {
+                                        setOpenDetail(false);
+                                        setProductosEnBodega([]);
+                                    }}>
+                                        <CloseIcon />
+                                    </IconButton>
                                 </Box>
                             </DialogTitle>
-                            <DialogContent dividers>
+                            <DialogContent dividers sx={{ p: 2 }}>
                                 {loadingProductos ? (
-                                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 5 }}>
                                         <CircularProgress />
+                                        <Typography sx={{ mt: 2 }}>Cargando productos...</Typography>
                                     </Box>
                                 ) : productosEnBodega.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 5 }}>
@@ -998,17 +1080,27 @@ const BodegasPage = () => {
                                     </Box>
                                 ) : (
                                     <Stack spacing={2}>
-                                        {productosEnBodega.map(p => (
-                                            <ProductoCard key={p.id} producto={p} onVerDetalle={(prod) => {
-                                                setSelectedProducto(prod);
-                                                setOpenProductoDetail(true);
-                                            }} />
+                                        {productosEnBodega.map((producto, index) => (
+                                            <ProductoCard 
+                                                key={producto.id || index} 
+                                                producto={producto} 
+                                                onVerDetalle={(prod) => {
+                                                    setSelectedProducto(prod);
+                                                    setOpenProductoDetail(true);
+                                                }} 
+                                            />
                                         ))}
                                     </Stack>
                                 )}
                             </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenDetail(false)} variant="contained" color="primary">
+                            <DialogActions sx={{ p: 2 }}>
+                                <Button 
+                                    onClick={() => {
+                                        setOpenDetail(false);
+                                        setProductosEnBodega([]);
+                                    }} 
+                                    variant="contained"
+                                >
                                     Cerrar
                                 </Button>
                             </DialogActions>
@@ -1022,7 +1114,9 @@ const BodegasPage = () => {
 
                         {/* Formulario */}
                         <Dialog open={openForm} onClose={handleCloseForm} maxWidth="sm" fullWidth>
-                            <DialogTitle>{selectedBodega ? 'Editar Bodega' : 'Nueva Bodega'}</DialogTitle>
+                            <DialogTitle sx={{ bgcolor: alpha(colors.primary, 0.05) }}>
+                                {selectedBodega ? 'Editar Bodega' : 'Nueva Bodega'}
+                            </DialogTitle>
                             <DialogContent dividers>
                                 <Grid container spacing={2}>
                                     <Grid item xs={12}>
@@ -1034,6 +1128,7 @@ const BodegasPage = () => {
                                             value={formData.nombre}
                                             onChange={handleInputChange}
                                             size="small"
+                                            placeholder="Ej: Bodega Central"
                                         />
                                     </Grid>
                                     <Grid item xs={12}>
@@ -1044,6 +1139,7 @@ const BodegasPage = () => {
                                             value={formData.ubicacion}
                                             onChange={handleInputChange}
                                             size="small"
+                                            placeholder="Ej: Av. Principal 123, Santiago"
                                         />
                                     </Grid>
                                     <Grid item xs={12}>
@@ -1054,6 +1150,7 @@ const BodegasPage = () => {
                                             value={formData.responsable}
                                             onChange={handleInputChange}
                                             size="small"
+                                            placeholder="Nombre del encargado"
                                         />
                                     </Grid>
                                     <Grid item xs={12}>
@@ -1066,12 +1163,13 @@ const BodegasPage = () => {
                                             value={formData.descripcion}
                                             onChange={handleInputChange}
                                             size="small"
+                                            placeholder="Información adicional sobre la bodega..."
                                         />
                                     </Grid>
                                 </Grid>
                             </DialogContent>
-                            <DialogActions>
-                                <Button onClick={handleCloseForm}>Cancelar</Button>
+                            <DialogActions sx={{ p: 2 }}>
+                                <Button onClick={handleCloseForm} variant="outlined">Cancelar</Button>
                                 <Button onClick={handleSaveBodega} variant="contained" color="primary">
                                     {selectedBodega ? 'Actualizar' : 'Guardar'}
                                 </Button>
@@ -1087,8 +1185,17 @@ const BodegasPage = () => {
                             loading={deleting}
                         />
 
-                        <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({...snackbar, open: false})}>
-                            <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
+                        <Snackbar 
+                            open={snackbar.open} 
+                            autoHideDuration={6000} 
+                            onClose={() => setSnackbar({...snackbar, open: false})}
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                        >
+                            <Alert 
+                                severity={snackbar.severity} 
+                                onClose={() => setSnackbar({...snackbar, open: false})}
+                                variant="filled"
+                            >
                                 {snackbar.message}
                             </Alert>
                         </Snackbar>
