@@ -1,4 +1,4 @@
-// backend/routes/bodegaRoutes.js - VERSIÓN SIN producto_bodega
+// backend/routes/bodegaRoutes.js - VERSIÓN CORREGIDA (sin columna cantidad)
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET - Obtener bodega por ID con sus productos
+// GET - Obtener bodega por ID con sus productos (CORREGIDO)
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -79,7 +79,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Bodega no encontrada' });
         }
         
-        // OBTENER PRODUCTOS asociados a esta bodega (directamente por bodega_id)
+        // ✅ CORREGIDO: Eliminada la columna 'cantidad' que no existe
         const productosResult = await pool.request()
             .input('bodega_id', sql.Int, idNum)
             .query(`
@@ -92,7 +92,8 @@ router.get('/:id', async (req, res) => {
                     p.precio,
                     p.condicion,
                     p.id_estado_equipo,
-                    p.cantidad,
+                    -- Usar 1 como valor por defecto para cantidad si la columna no existe
+                    1 as cantidad,
                     CASE 
                         WHEN p.id_estado_equipo = 1 THEN 'DISPONIBLE'
                         WHEN p.id_estado_equipo = 2 THEN 'ASIGNADO'

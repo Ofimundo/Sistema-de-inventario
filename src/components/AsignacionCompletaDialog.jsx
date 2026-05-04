@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA CON URL DINÁMICA
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -16,7 +16,6 @@ import {
     InputAdornment,
     IconButton,
     FormControl,
-    FormLabel,
     RadioGroup,
     FormControlLabel,
     Radio
@@ -28,17 +27,15 @@ import {
     Close as CloseIcon,
     CheckCircle as CheckCircleIcon,
     Check as CheckIcon,
-    Draw as DrawIcon,
     Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
     Clear as ClearIcon,
-    RestartAlt as RestartIcon
 } from '@mui/icons-material';
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA (CORREGIDO)
+// 🔥 URL BASE DINÁMICA
 // ============================================
 const getApiBaseUrl = () => {
     // Para Vite
@@ -67,7 +64,7 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
-// Componente de Firma Dibujada (Canvas) - MEJORADO
+// Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 150, label = 'Firma' }) => {
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -322,27 +319,44 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    const handleDescargarDocumento = () => {
-        if (documentoGenerado && documentoGenerado.filename && !downloading) {
-            setDownloading(true);
-            try {
-                // 🔥 URL CORREGIDA - Usa la URL dinámica
-                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-                console.log('📥 Descargando documento desde:', downloadUrl);
-                
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = documentoGenerado.filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-            } catch (error) {
-                console.error('❌ Error descargando documento:', error);
-                alert('Error al descargar el documento. Por favor, intente nuevamente.');
-            } finally {
-                setTimeout(() => setDownloading(false), 1000);
+    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO
+    const handleDescargarDocumento = async () => {
+        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+        
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            // Usar la URL base de api (ya tiene /api incluido)
+            const downloadUrl = `${api.defaults.baseURL}/asignaciones/descargar/${documentoGenerado.filename}`;
+            console.log('📥 Descargando documento desde:', downloadUrl);
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
             }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = documentoGenerado.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ Documento descargado:', documentoGenerado.filename);
+        } catch (error) {
+            console.error('❌ Error descargando documento:', error);
+            alert('Error al descargar el documento. Por favor, intente nuevamente.');
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
         }
     };
 
@@ -406,9 +420,9 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                         departamento: colaboradorSeleccionado.departamento,
                         nacionalidad: 'chilena',
                         fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
-                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || 'lota 2305',
-                        comuna: colaboradorSeleccionado.comuna || 'Providencia',
-                        ciudad: colaboradorSeleccionado.ciudad || 'Santiago'
+                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
+                        comuna: colaboradorSeleccionado.comuna || '',
+                        ciudad: colaboradorSeleccionado.ciudad || ''
                     },
                     productos: [{
                         tipo: 'Equipo',
