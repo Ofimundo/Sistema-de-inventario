@@ -91,6 +91,7 @@ import {
   BarChart as BarChartIcon,
 } from "@mui/icons-material";
 import axios from "axios";
+const drawerWidth = 260; 
 
 // ============================================
 // 🔥 CONFIGURACIÓN DE API CON VARIABLES DE ENTORNO
