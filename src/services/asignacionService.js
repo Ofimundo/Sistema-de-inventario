@@ -1,5 +1,36 @@
-// src/services/asignacionService.js
+// src/services/asignacionService.js - VERSIÓN COMPLETAMENTE CORREGIDA
 import api from './api';
+
+// ============================================
+// 🔥 URL BASE DINÁMICA PARA DESCARGAS
+// ============================================
+const getApiBaseUrl = () => {
+    // Para Vite
+    if (import.meta.env && import.meta.env.VITE_API_URL) {
+        let url = import.meta.env.VITE_API_URL;
+        // Eliminar /api del final si existe para no duplicar
+        if (url.endsWith('/api')) {
+            url = url.slice(0, -4);
+        }
+        console.log('📍 API Base URL (desde VITE):', url);
+        return url;
+    }
+    // Para Create React App
+    if (process.env && process.env.REACT_APP_API_URL) {
+        let url = process.env.REACT_APP_API_URL;
+        if (url.endsWith('/api')) {
+            url = url.slice(0, -4);
+        }
+        console.log('📍 API Base URL (desde CRA):', url);
+        return url;
+    }
+    // Fallback para desarrollo local
+    console.log('📍 API Base URL (fallback local):', 'http://localhost:98');
+    return 'http://localhost:98';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+console.log('🔧 API_BASE_URL en asignacionService:', API_BASE_URL);
 
 export const asignacionService = {
     
@@ -181,16 +212,32 @@ export const asignacionService = {
     },
 
     /**
-     * Descargar documento
+     * ✅ FUNCIÓN CORREGIDA - Descargar documento usando URL absoluta
      */
     descargarDocumento: async (filename) => {
         try {
             console.log(`📤 Descargando: ${filename}`);
-            const response = await api.get(`/asignaciones/descargar/${filename}`, {
-                responseType: 'blob'
-            });
+            console.log(`🔧 API_BASE_URL: ${API_BASE_URL}`);
             
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            // Construir URL absoluta
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${filename}`;
+            console.log('📥 URL de descarga:', downloadUrl);
+            
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', filename);
@@ -199,6 +246,7 @@ export const asignacionService = {
             link.remove();
             window.URL.revokeObjectURL(url);
             
+            console.log('✅ Documento descargado:', filename);
             return { success: true };
         } catch (error) {
             console.error('❌ Error en descargarDocumento:', error);
@@ -207,16 +255,32 @@ export const asignacionService = {
     },
 
     /**
-     * Descargar documento por ID
+     * ✅ FUNCIÓN CORREGIDA - Descargar documento por ID usando URL absoluta
      */
     descargarDocumentoById: async (documentoId) => {
         try {
             console.log(`📤 Descargando documento ${documentoId}...`);
-            const response = await api.get(`/asignaciones/descargar-documento/${documentoId}`, {
-                responseType: 'blob'
-            });
+            console.log(`🔧 API_BASE_URL: ${API_BASE_URL}`);
             
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            // Construir URL absoluta
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar-documento/${documentoId}`;
+            console.log('📥 URL de descarga:', downloadUrl);
+            
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `documento_${documentoId}.pdf`);
@@ -225,6 +289,7 @@ export const asignacionService = {
             link.remove();
             window.URL.revokeObjectURL(url);
             
+            console.log(`✅ Documento ${documentoId} descargado`);
             return { success: true };
         } catch (error) {
             console.error('❌ Error en descargarDocumentoById:', error);
@@ -258,6 +323,8 @@ export const asignacionService = {
                 fecha_devolucion: data.fecha_devolucion || new Date().toISOString().split('T')[0],
                 observaciones: data.observaciones || '',
                 condicion_entrega: data.condicion_entrega || 'BUENO',
+                firma_trabajador: data.firma_trabajador || null,
+                firma_gerente: data.firma_gerente || null,
                 usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema'
             });
             console.log('✅ Asignación finalizada:', response.data);
