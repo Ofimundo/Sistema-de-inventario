@@ -215,44 +215,45 @@ export const asignacionService = {
      * ✅ FUNCIÓN CORREGIDA - Descargar documento usando URL absoluta
      */
     descargarDocumento: async (filename) => {
-        try {
-            console.log(`📤 Descargando: ${filename}`);
-            console.log(`🔧 API_BASE_URL: ${API_BASE_URL}`);
-            
-            // Construir URL absoluta
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${filename}`;
-            console.log('📥 URL de descarga:', downloadUrl);
-            
-            const token = localStorage.getItem('token');
-            
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
+    try {
+        console.log(`📤 Descargando: ${filename}`);
+        
+        // La URL está correcta
+        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${filename}`;
+        console.log('📥 URL de descarga:', downloadUrl);
+        
+        const token = localStorage.getItem('token');
+        
+        const response = await fetch(downloadUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
             }
+        });
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', filename);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            
-            console.log('✅ Documento descargado:', filename);
-            return { success: true };
-        } catch (error) {
-            console.error('❌ Error en descargarDocumento:', error);
-            throw error;
+        if (!response.ok) {
+            console.error(`❌ Error HTTP: ${response.status}`);
+            console.error('Respuesta del servidor:', await response.text());
+            throw new Error(`Error HTTP: ${response.status}`);
         }
-    },
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ Documento descargado:', filename);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Error en descargarDocumento:', error);
+        throw error;
+    }
+},
 
     /**
      * ✅ FUNCIÓN CORREGIDA - Descargar documento por ID usando URL absoluta
