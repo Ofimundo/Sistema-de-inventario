@@ -1,4 +1,4 @@
-// src/pages/Login.jsx
+// src/pages/Login.jsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -25,7 +25,7 @@ import {
     Inventory as InventoryIcon
 } from '@mui/icons-material';
 import { styled, alpha } from '@mui/material/styles';
-import { authService } from '../services/api'; // ✅ Importación correcta
+import { authService } from '../services/api';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
     padding: theme.spacing(4),
@@ -72,14 +72,27 @@ const Login = () => {
         try {
             console.log('📤 Intentando login con usuario:', data.usuario);
             
-            // ✅ Llamar al servicio con usuario y password
+            // Llamar al servicio de login
             const result = await authService.login(data.usuario, data.password);
             
             console.log('📦 Resultado del login:', result);
             
             if (result && result.success) {
-                console.log('✅ Login exitoso, redirigiendo...');
-                navigate('/dashboard');
+                // ✅ CORREGIDO: Los datos del usuario están en result.data
+                const userData = result.data?.usuario || result.usuario;
+                
+                if (userData) {
+                    console.log('✅ Login exitoso, usuario:', userData.usuario);
+                    console.log('✅ Token guardado:', localStorage.getItem('token') ? 'Sí' : 'No');
+                    console.log('✅ User guardado:', localStorage.getItem('user') ? 'Sí' : 'No');
+                    
+                    // Forzar un pequeño delay para asegurar que localStorage se escribió
+                    setTimeout(() => {
+                        navigate('/dashboard', { replace: true });
+                    }, 100);
+                } else {
+                    setError('No se recibieron datos del usuario');
+                }
             } else {
                 setError(result?.message || 'Error al iniciar sesión');
             }

@@ -4,7 +4,66 @@ const bcrypt = require('bcryptjs');
 
 class UsuarioModel {
     /**
-     * Buscar usuario por nombre de usuario
+     * Crear nuevo usuario (VERSIÓN CORREGIDA)
+     */
+    async create(userData) {
+        try {
+            console.log('📝 UsuarioModel.create - Datos recibidos:', {
+                ...userData,
+                password: userData.password ? '***' : 'UNDEFINED'
+            });
+
+            // VALIDACIÓN ESTRICTA
+            if (!userData.password) {
+                throw new Error('La contraseña es requerida para crear el usuario');
+            }
+
+            const pool = await getConnection();
+            
+            // Hashear la contraseña
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(userData.password, salt);
+            console.log('✅ Contraseña hasheada correctamente');
+
+            // Insertar en la base de datos
+            const result = await pool.request()
+                .input('usuario', sql.NVarChar, userData.usuario)
+                .input('contraseña', sql.NVarChar, hashedPassword)  // ⚠️ Nota: usa 'contraseña' con ñ
+                .input('nombre', sql.NVarChar, userData.nombre || '')
+                .input('email', sql.NVarChar, userData.email || '')
+                .input('cargo', sql.NVarChar, userData.cargo || '')
+                .input('departamento', sql.NVarChar, userData.departamento || '')
+                .input('rol', sql.NVarChar, userData.rol || 'usuario')
+                .input('rut', sql.NVarChar, userData.rut || '')
+                .input('activo', sql.Bit, userData.activo !== false)
+                .query(`
+                    INSERT INTO INV.usuarios (usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo, fecha_creacion)
+                    VALUES (@usuario, @contraseña, @nombre, @email, @cargo, @departamento, @rol, @rut, @activo, GETDATE());
+                    SELECT SCOPE_IDENTITY() as id;
+                `);
+
+            const nuevoId = result.recordset[0].id;
+            
+            // Retornar el usuario sin la contraseña
+            return {
+                id: nuevoId,
+                usuario: userData.usuario,
+                nombre: userData.nombre,
+                email: userData.email,
+                cargo: userData.cargo,
+                departamento: userData.departamento,
+                rol: userData.rol || 'usuario',
+                rut: userData.rut || ''
+            };
+
+        } catch (error) {
+            console.error('❌ Error en UsuarioModel.create:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Buscar usuario por username
      */
     async findByUsername(usuario) {
         try {
@@ -12,49 +71,30 @@ class UsuarioModel {
             const result = await pool.request()
                 .input('usuario', sql.NVarChar, usuario)
                 .query(`
-                    SELECT 
-                        id, 
-                        usuario, 
-                        nombre, 
-                        email, 
-                        contraseña, 
-                        rol, 
-                        cargo, 
-                        departamento,
-                        activo
-                    FROM [INV].[usuarios] 
-                    WHERE usuario = @usuario AND activo = 1
+                    SELECT id, usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo
+                    FROM INV.usuarios
+                    WHERE usuario = @usuario AND (activo = 1 OR activo IS NULL)
                 `);
             
-            return result.recordset[0] || null;
-        } catch (error) {
-            console.error('❌ Error en UsuarioModel.findByUsername:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Buscar usuario por email
-     */
-    async findByEmail(email) {
-        try {
-            const pool = await getConnection();
-            const result = await pool.request()
-                .input('email', sql.NVarChar, email)
-                .query(`
-                    SELECT 
-                        id, 
-                        usuario, 
-                        nombre, 
-                        email, 
-                        rol
-                    FROM [INV].[usuarios] 
-                    WHERE email = @email AND activo = 1
-                `);
+            if (result.recordset.length === 0) {
+                return null;
+            }
             
-            return result.recordset[0] || null;
+            const user = result.recordset[0];
+            return {
+                id: user.id,
+                usuario: user.usuario,
+                contraseña: user.contraseña,  // ⚠️ Nota: campo con ñ
+                nombre: user.nombre,
+                email: user.email,
+                cargo: user.cargo,
+                departamento: user.departamento,
+                rol: user.rol,
+                rut: user.rut,
+                activo: user.activo
+            };
         } catch (error) {
-            console.error('❌ Error en UsuarioModel.findByEmail:', error);
+            console.error('❌ Error en findByUsername:', error);
             throw error;
         }
     }
@@ -68,64 +108,55 @@ class UsuarioModel {
             const result = await pool.request()
                 .input('id', sql.Int, id)
                 .query(`
-                    SELECT 
-                        id, 
-                        usuario, 
-                        nombre, 
-                        email, 
-                        contraseña, 
-                        rol, 
-                        cargo, 
-                        departamento,
-                        activo
-                    FROM [INV].[usuarios] 
-                    WHERE id = @id AND activo = 1
+                    SELECT id, usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo
+                    FROM INV.usuarios
+                    WHERE id = @id AND (activo = 1 OR activo IS NULL)
                 `);
             
-            return result.recordset[0] || null;
+            if (result.recordset.length === 0) {
+                return null;
+            }
+            
+            const user = result.recordset[0];
+            return {
+                id: user.id,
+                usuario: user.usuario,
+                contraseña: user.contraseña,
+                nombre: user.nombre,
+                email: user.email,
+                cargo: user.cargo,
+                departamento: user.departamento,
+                rol: user.rol,
+                rut: user.rut,
+                activo: user.activo
+            };
         } catch (error) {
-            console.error('❌ Error en UsuarioModel.findById:', error);
+            console.error('❌ Error en findById:', error);
             throw error;
         }
     }
 
     /**
-     * Crear nuevo usuario
+     * Buscar usuario por email
      */
-    async create(userData) {
+    async findByEmail(email) {
         try {
-            const { usuario, contraseña, nombre, email, cargo, departamento, rol } = userData;
-            
-            // Encriptar contraseña
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(contraseña, salt);
-
             const pool = await getConnection();
             const result = await pool.request()
-                .input('usuario', sql.NVarChar, usuario)
-                .input('contraseña', sql.NVarChar, hashedPassword)
-                .input('nombre', sql.NVarChar, nombre)
                 .input('email', sql.NVarChar, email)
-                .input('cargo', sql.NVarChar, cargo || null)
-                .input('departamento', sql.NVarChar, departamento || null)
-                .input('rol', sql.NVarChar, rol || 'usuario')
-                .input('activo', sql.Int, 1)
-                .input('fecha_creacion', sql.DateTime, new Date())
                 .query(`
-                    INSERT INTO [INV].[usuarios] (
-                        usuario, contraseña, nombre, email, cargo, departamento, rol, activo, fecha_creacion
-                    )
-                    OUTPUT INSERTED.id, INSERTED.usuario, INSERTED.nombre, INSERTED.email, 
-                           INSERTED.cargo, INSERTED.departamento, INSERTED.rol
-                    VALUES (
-                        @usuario, @contraseña, @nombre, @email, @cargo, @departamento, @rol, @activo, @fecha_creacion
-                    )
+                    SELECT id, usuario, nombre, email, cargo, departamento, rol, rut, activo
+                    FROM INV.usuarios
+                    WHERE email = @email AND (activo = 1 OR activo IS NULL)
                 `);
             
-            console.log(`✅ Usuario creado: ${usuario} (ID: ${result.recordset[0].id})`);
+            if (result.recordset.length === 0) {
+                return null;
+            }
+            
             return result.recordset[0];
         } catch (error) {
-            console.error('❌ Error en UsuarioModel.create:', error);
+            console.error('❌ Error en findByEmail:', error);
             throw error;
         }
     }
@@ -133,11 +164,15 @@ class UsuarioModel {
     /**
      * Comparar contraseña
      */
-    async comparePassword(password, hashedPassword) {
+    async comparePassword(plainPassword, hashedPassword) {
         try {
-            return await bcrypt.compare(password, hashedPassword);
+            if (!plainPassword || !hashedPassword) {
+                console.log('⚠️ Datos faltantes para comparar contraseña');
+                return false;
+            }
+            return await bcrypt.compare(plainPassword, hashedPassword);
         } catch (error) {
-            console.error('❌ Error comparando contraseñas:', error);
+            console.error('❌ Error en comparePassword:', error);
             return false;
         }
     }
@@ -145,53 +180,20 @@ class UsuarioModel {
     /**
      * Actualizar contraseña
      */
-    async updatePassword(id, hashedPassword) {
+    async updatePassword(userId, hashedPassword) {
         try {
             const pool = await getConnection();
             await pool.request()
-                .input('id', sql.Int, id)
+                .input('id', sql.Int, userId)
                 .input('contraseña', sql.NVarChar, hashedPassword)
-                .input('fecha_actualizacion', sql.DateTime, new Date())
                 .query(`
-                    UPDATE [INV].[usuarios] 
-                    SET contraseña = @contraseña,
-                        fecha_actualizacion = @fecha_actualizacion
+                    UPDATE INV.usuarios 
+                    SET contraseña = @contraseña, updated_at = GETDATE()
                     WHERE id = @id
                 `);
-            
-            console.log(`✅ Contraseña actualizada para usuario ID: ${id}`);
             return true;
         } catch (error) {
-            console.error('❌ Error en UsuarioModel.updatePassword:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Obtener todos los usuarios (opcional)
-     */
-    async getAll() {
-        try {
-            const pool = await getConnection();
-            const result = await pool.request()
-                .query(`
-                    SELECT 
-                        id, 
-                        usuario, 
-                        nombre, 
-                        email, 
-                        rol, 
-                        cargo, 
-                        departamento,
-                        activo,
-                        fecha_creacion
-                    FROM [INV].[usuarios] 
-                    ORDER BY id DESC
-                `);
-            
-            return result.recordset;
-        } catch (error) {
-            console.error('❌ Error en UsuarioModel.getAll:', error);
+            console.error('❌ Error en updatePassword:', error);
             throw error;
         }
     }
@@ -199,31 +201,62 @@ class UsuarioModel {
     /**
      * Actualizar perfil de usuario
      */
-    async updateProfile(id, data) {
+    async update(userId, userData) {
         try {
-            const { nombre, email, cargo, departamento } = data;
-            
             const pool = await getConnection();
-            const result = await pool.request()
-                .input('id', sql.Int, id)
-                .input('nombre', sql.NVarChar, nombre)
-                .input('email', sql.NVarChar, email)
-                .input('cargo', sql.NVarChar, cargo)
-                .input('departamento', sql.NVarChar, departamento)
-                .input('fecha_actualizacion', sql.DateTime, new Date())
+            
+            // Primero obtener el usuario actual
+            const currentUser = await this.findById(userId);
+            if (!currentUser) {
+                throw new Error('Usuario no encontrado');
+            }
+            
+            await pool.request()
+                .input('id', sql.Int, userId)
+                .input('nombre', sql.NVarChar, userData.nombre || currentUser.nombre)
+                .input('email', sql.NVarChar, userData.email || currentUser.email)
+                .input('cargo', sql.NVarChar, userData.cargo || null)
+                .input('departamento', sql.NVarChar, userData.departamento || null)
                 .query(`
-                    UPDATE [INV].[usuarios] 
+                    UPDATE INV.usuarios 
                     SET nombre = @nombre,
                         email = @email,
                         cargo = @cargo,
                         departamento = @departamento,
-                        fecha_actualizacion = @fecha_actualizacion
+                        updated_at = GETDATE()
                     WHERE id = @id
                 `);
             
+            // Retornar usuario actualizado
+            return {
+                ...currentUser,
+                nombre: userData.nombre || currentUser.nombre,
+                email: userData.email || currentUser.email,
+                cargo: userData.cargo || currentUser.cargo,
+                departamento: userData.departamento || currentUser.departamento
+            };
+        } catch (error) {
+            console.error('❌ Error en update:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Desactivar usuario (soft delete)
+     */
+    async deactivate(userId) {
+        try {
+            const pool = await getConnection();
+            await pool.request()
+                .input('id', sql.Int, userId)
+                .query(`
+                    UPDATE INV.usuarios 
+                    SET activo = 0, updated_at = GETDATE()
+                    WHERE id = @id
+                `);
             return true;
         } catch (error) {
-            console.error('❌ Error en UsuarioModel.updateProfile:', error);
+            console.error('❌ Error en deactivate:', error);
             throw error;
         }
     }
