@@ -16,9 +16,27 @@ const estadosRoutes = require('./routes/estadosRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
 const usuariosRoutes = require('./routes/usuarios');
 const colaboradorRoutes = require('./routes/colaboradorRoutes');
+const cors = require('cors'); 
 
 const app = express();
 
+
+// ✅ LÍNEA 2: Configuración CORS (agrega esto después de crear 'app')
+const corsOptions = {
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5500',
+        'https://main.d23w4mszg17gc.amplifyapp.com',
+        'https://*.amplifyapp.com',
+        'https://sistema-inventario-backend-p3xg.onrender.com'
+    ],
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+};
 // ============ CONFIGURACIÓN DE FILEUPLOAD ============
 app.use(fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 },
