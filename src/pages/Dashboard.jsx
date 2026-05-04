@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN MODIFICADA CON STOCK
+// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA (solo cambio de puerto 5000 → 98)
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -96,7 +96,7 @@ const drawerWidth = 260;
 
 // Configuración de axios
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "http://localhost:98/api",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
@@ -168,7 +168,7 @@ const authService = {
   },
 };
 
-// Servicio de productos - CORREGIDO para excluir productos dados de baja
+// Servicio de productos - CORREGIDO el puerto de exportación
 const productosService = {
   getProductos: async () => {
     try {
@@ -252,10 +252,11 @@ const productosService = {
     }
   },
   
+  // ✅ ÚNICO CAMBIO: puerto 5000 → 98
   exportExcel: async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/export/productos', {
+      const response = await fetch('http://localhost:98/api/export/productos', {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -931,7 +932,7 @@ const Dashboard = () => {
     { text: "Bodegas", icon: <WarehouseIcon />, path: "/bodegas" },
     { text: 'Colaboradores', icon: <PersonIcon />, path: '/colaboradores' },
     { text: "Asignaciones", icon: <AssignmentIcon />, path: "/asignacion" },
-    { text: "Stock por Marca/Modelo", icon: <Inventory2Icon />, path: "/stock" }, // NUEVO
+    { text: "Stock por Marca/Modelo", icon: <Inventory2Icon />, path: "/stock" },
     { text: "Historial", icon: <HistoryIcon />, path: "/historial" },
   ];
 

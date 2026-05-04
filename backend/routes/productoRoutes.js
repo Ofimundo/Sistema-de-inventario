@@ -1,4 +1,5 @@
-// backend/routes/productoRoutes.js - VERSIÓN CORREGIDA PARA BAJAS Y DONACIONES
+// backend/routes/productoRoutes.js - VERSIÓN COMPLETA Y CORREGIDA
+
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -34,7 +35,7 @@ function getEstadoTexto(idEstado) {
 }
 
 // ============================================
-// RUTAS ESPECÍFICAS
+// RUTAS ESPECÍFICAS (DEBEN IR PRIMERO)
 // ============================================
 
 // GET - Obtener marcas
@@ -97,6 +98,61 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// GET - Obtener historial de disposiciones (bajas y donaciones)
+router.get('/disposiciones', async (req, res) => {
+    try {
+        console.log('📊 GET /api/productos/disposiciones');
+        
+        const pool = await getConnection();
+        
+        // Obtener bajas
+        const bajasResult = await pool.request()
+            .query(`
+                SELECT 
+                    db.id, db.producto_id, 
+                    p.nombre as producto_nombre,
+                    p.numero_serie,
+                    db.motivo_baja,
+                    db.fecha_baja,
+                    db.autorizado_por,
+                    db.observaciones,
+                    'BAJA' as tipo
+                FROM INV.disposicion_baja db
+                INNER JOIN INV.productos p ON db.producto_id = p.id
+                ORDER BY db.fecha_baja DESC
+            `);
+        
+        // Obtener donaciones
+        const donacionesResult = await pool.request()
+            .query(`
+                SELECT 
+                    dd.id, dd.producto_id,
+                    p.nombre as producto_nombre,
+                    p.numero_serie,
+                    dd.beneficiario,
+                    dd.direccion,
+                    dd.fecha_entrega as fecha_donacion,
+                    dd.observaciones,
+                    'DONACION' as tipo
+                FROM INV.disposicion_donacion dd
+                INNER JOIN INV.productos p ON dd.producto_id = p.id
+                ORDER BY dd.fecha_entrega DESC
+            `);
+        
+        res.json({ 
+            success: true, 
+            data: {
+                bajas: bajasResult.recordset,
+                donaciones: donacionesResult.recordset
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error en disposiciones:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // GET - Obtener productos por bodega
 router.get('/bodega/:bodegaId', async (req, res) => {
     try {
@@ -109,11 +165,11 @@ router.get('/bodega/:bodegaId', async (req, res) => {
                 SELECT 
                     p.id, p.nombre, p.numero_serie, p.marca, p.modelo,
                     p.precio, p.id_estado_equipo, p.condicion,
+                    p.bodega_id,
                     b.id as bodega_id, b.nombre as bodega_nombre
                 FROM INV.productos p
-                INNER JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                INNER JOIN INV.bodegas b ON pb.bodega_id = b.id
-                WHERE pb.bodega_id = @bodega_id AND p.id_estado_equipo != 5
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
+                WHERE p.bodega_id = @bodega_id AND p.id_estado_equipo != 5
                 ORDER BY p.nombre
             `);
         
@@ -123,42 +179,7 @@ router.get('/bodega/:bodegaId', async (req, res) => {
     }
 });
 
-// GET - Obtener historial de disposiciones
-router.get('/disposiciones', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        
-        const bajasResult = await pool.request()
-            .query(`
-                SELECT 
-                    db.id, db.producto_id, p.nombre as producto_nombre,
-                    p.numero_serie, db.motivo_baja, db.fecha_baja,
-                    db.autorizado_por, db.observaciones, 'BAJA' as tipo
-                FROM INV.disposicion_baja db
-                INNER JOIN INV.productos p ON db.producto_id = p.id
-                ORDER BY db.fecha_baja DESC
-            `);
-        
-        const donacionesResult = await pool.request()
-            .query(`
-                SELECT 
-                    dd.id, dd.producto_id, p.nombre as producto_nombre,
-                    p.numero_serie, dd.beneficiario, dd.direccion,
-                    dd.fecha_entrega as fecha_donacion, dd.observaciones, 'DONACION' as tipo
-                FROM INV.disposicion_donacion dd
-                INNER JOIN INV.productos p ON dd.producto_id = p.id
-                ORDER BY dd.fecha_entrega DESC
-            `);
-        
-        res.json({ success: true, data: { bajas: bajasResult.recordset, donaciones: donacionesResult.recordset } });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ============================================
-// POST - REGISTRAR BAJA (CORREGIDO - usa estado 5)
-// ============================================
+// POST - REGISTRAR BAJA
 router.post('/baja', async (req, res) => {
     try {
         console.log('📥 POST /api/productos/baja');
@@ -179,7 +200,7 @@ router.post('/baja', async (req, res) => {
         const productoInfo = await pool.request()
             .input('id', sql.Int, producto_id)
             .query(`
-                SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo
+                SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo, bodega_id
                 FROM INV.productos WHERE id = @id
             `);
         
@@ -209,7 +230,7 @@ router.post('/baja', async (req, res) => {
                 )
             `);
         
-        // Actualizar estado del producto a NO_DISPONIBLE (5)
+        // Actualizar estado del producto a NO_DISPONIBLE (5) - SIN tocar bodega_id
         await pool.request()
             .input('id', sql.Int, producto_id)
             .input('id_estado_equipo', sql.Int, ESTADOS.NO_DISPONIBLE)
@@ -218,11 +239,6 @@ router.post('/baja', async (req, res) => {
                 SET id_estado_equipo = @id_estado_equipo
                 WHERE id = @id
             `);
-        
-        // Eliminar relación con bodega
-        await pool.request()
-            .input('producto_id', sql.Int, producto_id)
-            .query(`DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id`);
         
         // Registrar en historial
         await pool.request()
@@ -249,9 +265,7 @@ router.post('/baja', async (req, res) => {
     }
 });
 
-// ============================================
-// POST - REGISTRAR DONACIÓN (CORREGIDO)
-// ============================================
+// POST - REGISTRAR DONACIÓN
 router.post('/donar', async (req, res) => {
     try {
         console.log('📥 POST /api/productos/donar');
@@ -272,7 +286,7 @@ router.post('/donar', async (req, res) => {
         const productoInfo = await pool.request()
             .input('id', sql.Int, producto_id)
             .query(`
-                SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo
+                SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo, bodega_id
                 FROM INV.productos WHERE id = @id
             `);
         
@@ -302,7 +316,7 @@ router.post('/donar', async (req, res) => {
                 )
             `);
         
-        // Actualizar estado del producto a NO_DISPONIBLE (5)
+        // Actualizar estado del producto a NO_DISPONIBLE (5) - SIN tocar bodega_id
         await pool.request()
             .input('id', sql.Int, producto_id)
             .input('id_estado_equipo', sql.Int, ESTADOS.NO_DISPONIBLE)
@@ -311,11 +325,6 @@ router.post('/donar', async (req, res) => {
                 SET id_estado_equipo = @id_estado_equipo
                 WHERE id = @id
             `);
-        
-        // Eliminar relación con bodega
-        await pool.request()
-            .input('producto_id', sql.Int, producto_id)
-            .query(`DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id`);
         
         // Registrar en historial
         await pool.request()
@@ -464,7 +473,7 @@ router.post('/mantencion/finalizar', async (req, res) => {
     }
 });
 
-// GET - Obtener historial de mantenciones
+// GET - Obtener historial de mantenciones de un producto
 router.get('/:productoId/mantenciones', async (req, res) => {
     try {
         const { productoId } = req.params;
@@ -486,10 +495,10 @@ router.get('/:productoId/mantenciones', async (req, res) => {
 });
 
 // ============================================
-// RUTAS PRINCIPALES
+// RUTAS PRINCIPALES (DEBEN IR DESPUÉS DE LAS ESPECÍFICAS)
 // ============================================
 
-// GET - Listar todos los productos (CON FILTROS)
+// GET - Listar todos los productos
 router.get('/', async (req, res) => {
     try {
         console.log('📥 GET /api/productos');
@@ -505,30 +514,26 @@ router.get('/', async (req, res) => {
                 p.precio, p.oc_numero, p.factura_numero, p.descripcion,
                 p.id_estado_equipo, p.imagen_path, p.fecha_creacion,
                 ISNULL(p.condicion, 'NUEVO') as condicion,
-                pb.bodega_id,
+                p.bodega_id,
                 b.nombre as bodega_nombre
             FROM INV.productos p
-            LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-            LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+            LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
             WHERE 1=1
                 AND p.id_estado_equipo != 5
         `;
         
         const request = pool.request();
         
-        // Búsqueda por texto
         if (search && search.trim() !== '') {
             query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search)`;
             request.input('search', sql.NVarChar, `%${search.trim()}%`);
         }
         
-        // Filtro por marca
         if (marca && marca !== 'todos' && marca !== '') {
             query += ` AND p.marca = @marca`;
             request.input('marca', sql.NVarChar, marca);
         }
         
-        // Filtro por estado - convertir texto a ID
         if (estado && estado !== 'todos' && estado !== '') {
             const estadoId = ESTADO_TEXTO_A_ID[estado];
             if (estadoId) {
@@ -540,15 +545,13 @@ router.get('/', async (req, res) => {
             }
         }
         
-        // Filtro por condición
         if (condicion && condicion !== 'todos' && condicion !== '') {
             query += ` AND p.condicion = @condicion`;
             request.input('condicion', sql.NVarChar, condicion);
         }
         
-        // Filtro por bodega
         if (bodega_id && bodega_id !== 'todos' && bodega_id !== '' && !isNaN(parseInt(bodega_id))) {
-            query += ` AND pb.bodega_id = @bodegaId`;
+            query += ` AND p.bodega_id = @bodegaId`;
             request.input('bodegaId', sql.Int, parseInt(bodega_id));
         }
         
@@ -561,7 +564,6 @@ router.get('/', async (req, res) => {
         for (const producto of result.recordset) {
             producto.estado = getEstadoTexto(producto.id_estado_equipo);
             
-            // Obtener asignación activa si existe
             const asignacionResult = await pool.request()
                 .input('producto_id', sql.Int, producto.id)
                 .query(`
@@ -591,7 +593,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET - Obtener producto por ID
+// GET - Obtener producto por ID (DEBE IR AL FINAL)
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -610,8 +612,11 @@ router.get('/:id', async (req, res) => {
                     p.id, p.nombre, p.numero_serie, p.marca, p.modelo,
                     p.precio, p.oc_numero, p.factura_numero,
                     p.descripcion, p.id_estado_equipo, p.imagen_path, 
-                    p.fecha_creacion, p.condicion
+                    p.fecha_creacion, p.condicion,
+                    p.bodega_id,
+                    b.nombre as bodega_nombre
                 FROM INV.productos p
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                 WHERE p.id = @id
             `);
         
@@ -621,18 +626,6 @@ router.get('/:id', async (req, res) => {
         
         const producto = result.recordset[0];
         producto.estado = getEstadoTexto(producto.id_estado_equipo);
-        
-        const bodegaResult = await pool.request()
-            .input('producto_id', sql.Int, idNum)
-            .query(`
-                SELECT TOP 1 b.id as bodega_id, b.nombre as bodega_nombre
-                FROM INV.producto_bodega pb
-                INNER JOIN INV.bodegas b ON pb.bodega_id = b.id
-                WHERE pb.producto_id = @producto_id
-            `);
-        
-        producto.bodega_id = bodegaResult.recordset[0]?.bodega_id || null;
-        producto.bodega_nombre = bodegaResult.recordset[0]?.bodega_nombre || 'Sin bodega';
         
         const asignacionResult = await pool.request()
             .input('producto_id', sql.Int, idNum)
@@ -701,40 +694,33 @@ router.post('/', async (req, res) => {
             .input('modelo', sql.NVarChar, modelo || '')
             .input('numero_serie', sql.NVarChar, numero_serie)
             .input('condicion', sql.NVarChar, condicion || 'NUEVO')
+            .input('bodega_id', sql.Int, bodega_id ? parseInt(bodega_id) : null)
             .query(`
                 INSERT INTO INV.productos (
                     nombre, precio, oc_numero, factura_numero, 
                     descripcion, marca, id_estado_equipo, modelo, 
-                    numero_serie, condicion, fecha_creacion
+                    numero_serie, condicion, bodega_id, fecha_creacion
                 )
                 VALUES (
                     @nombre, @precio, @oc_numero, @factura_numero,
                     @descripcion, @marca, @id_estado_equipo, @modelo, 
-                    @numero_serie, @condicion, GETDATE()
+                    @numero_serie, @condicion, @bodega_id, GETDATE()
                 );
                 SELECT SCOPE_IDENTITY() as id;
             `);
         
         const nuevoId = result.recordset[0].id;
         
-        if (bodega_id) {
-            const bodegaIdNum = parseInt(bodega_id);
-            await pool.request()
-                .input('producto_id', sql.Int, nuevoId)
-                .input('bodega_id', sql.Int, bodegaIdNum)
-                .query(`
-                    INSERT INTO INV.producto_bodega (producto_id, bodega_id)
-                    VALUES (@producto_id, @bodega_id)
-                `);
-        }
-        
         const productoResult = await pool.request()
             .input('id', sql.Int, nuevoId)
             .query(`
-                SELECT id, nombre, precio, oc_numero, factura_numero,
-                       descripcion, marca, id_estado_equipo, modelo, 
-                       numero_serie, condicion
-                FROM INV.productos WHERE id = @id
+                SELECT p.id, p.nombre, p.precio, p.oc_numero, p.factura_numero,
+                       p.descripcion, p.marca, p.id_estado_equipo, p.modelo, 
+                       p.numero_serie, p.condicion, p.bodega_id,
+                       b.nombre as bodega_nombre
+                FROM INV.productos p
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
+                WHERE p.id = @id
             `);
         
         const nuevoProducto = productoResult.recordset[0];
@@ -788,6 +774,7 @@ router.put('/:id', async (req, res) => {
             .input('modelo', sql.NVarChar, modelo || '')
             .input('numero_serie', sql.NVarChar, numero_serie || '')
             .input('condicion', sql.NVarChar, condicion || 'NUEVO')
+            .input('bodega_id', sql.Int, bodega_id ? parseInt(bodega_id) : null)
             .query(`
                 UPDATE INV.productos SET
                     nombre = @nombre,
@@ -799,35 +786,21 @@ router.put('/:id', async (req, res) => {
                     id_estado_equipo = @id_estado_equipo,
                     modelo = @modelo,
                     numero_serie = @numero_serie,
-                    condicion = @condicion
+                    condicion = @condicion,
+                    bodega_id = @bodega_id
                 WHERE id = @id
             `);
-        
-        if (bodega_id !== undefined) {
-            const bodegaIdNum = bodega_id ? parseInt(bodega_id) : null;
-            
-            await pool.request()
-                .input('producto_id', sql.Int, idNum)
-                .query(`DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id`);
-            
-            if (bodegaIdNum) {
-                await pool.request()
-                    .input('producto_id', sql.Int, idNum)
-                    .input('bodega_id', sql.Int, bodegaIdNum)
-                    .query(`
-                        INSERT INTO INV.producto_bodega (producto_id, bodega_id)
-                        VALUES (@producto_id, @bodega_id)
-                    `);
-            }
-        }
         
         const productoResult = await pool.request()
             .input('id', sql.Int, idNum)
             .query(`
-                SELECT id, nombre, precio, oc_numero, factura_numero,
-                       descripcion, marca, id_estado_equipo, modelo, 
-                       numero_serie, condicion
-                FROM INV.productos WHERE id = @id
+                SELECT p.id, p.nombre, p.precio, p.oc_numero, p.factura_numero,
+                       p.descripcion, p.marca, p.id_estado_equipo, p.modelo, 
+                       p.numero_serie, p.condicion, p.bodega_id,
+                       b.nombre as bodega_nombre
+                FROM INV.productos p
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
+                WHERE p.id = @id
             `);
         
         const productoActualizado = productoResult.recordset[0];
@@ -863,10 +836,6 @@ router.delete('/:id', async (req, res) => {
                 message: 'No se puede eliminar el producto porque tiene asignaciones registradas' 
             });
         }
-        
-        await pool.request()
-            .input('producto_id', sql.Int, idNum)
-            .query(`DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id`);
         
         await pool.request()
             .input('id', sql.Int, idNum)

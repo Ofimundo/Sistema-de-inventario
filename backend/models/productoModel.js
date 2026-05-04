@@ -1,4 +1,4 @@
-// backend/models/productoModel.js - VERSIÓN SIN CANTIDAD
+// backend/models/productoModel.js - VERSIÓN SIN producto_bodega
 const { getConnection, sql } = require('../config/database');
 const path = require('path');
 const fs = require('fs').promises;
@@ -26,7 +26,7 @@ function mapFrontendToDB(data) {
         delete mapped.estado_id;
     }
     
-    // Mapear bodega_id (se maneja aparte en producto_bodega)
+    // Mapear bodega_id (ahora directamente en productos)
     if (data.bodega_id !== undefined) {
         mapped.bodega_id = data.bodega_id;
     }
@@ -92,7 +92,7 @@ class ProductoModel {
     // ============================================
 
     /**
-     * Obtiene todos los productos con filtros (SIN CANTIDAD)
+     * Obtiene todos los productos con filtros (SIN CANTIDAD - SIN producto_bodega)
      */
     async findAll(filters = {}) {
         try {
@@ -100,6 +100,7 @@ class ProductoModel {
             let query = `
                 SELECT 
                     p.*,
+                    p.bodega_id,
                     b.id as bodega_id,
                     b.nombre as bodega_nombre,
                     b.ubicacion as bodega_ubicacion,
@@ -108,8 +109,7 @@ class ProductoModel {
                     (SELECT COUNT(*) FROM INV.producto_uso pu WHERE pu.producto_id = p.id AND pu.fecha_devolucion IS NULL) as total_asignaciones_activas,
                     (SELECT COUNT(*) FROM INV.producto_uso pu WHERE pu.producto_id = p.id) as total_asignaciones
                 FROM INV.productos p
-                LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                 LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
                 WHERE 1=1
             `;
@@ -132,7 +132,7 @@ class ProductoModel {
                 request.input('numero_serie', sql.NVarChar, `%${filters.numero_serie}%`);
             }
             if (filters.bodega_id) {
-                query += ' AND pb.bodega_id = @bodega_id';
+                query += ' AND p.bodega_id = @bodega_id';
                 request.input('bodega_id', sql.Int, filters.bodega_id);
             }
             if (filters.search) {
@@ -231,7 +231,7 @@ class ProductoModel {
     }
 
     /**
-     * Busca un producto por ID (SIN CANTIDAD)
+     * Busca un producto por ID (SIN CANTIDAD - SIN producto_bodega)
      */
     async findById(id) {
         try {
@@ -248,6 +248,7 @@ class ProductoModel {
                 .query(`
                     SELECT 
                         p.*,
+                        p.bodega_id,
                         b.id as bodega_id,
                         b.nombre as bodega_nombre,
                         b.ubicacion as bodega_ubicacion,
@@ -255,8 +256,7 @@ class ProductoModel {
                         e.color as estado_color,
                         (SELECT COUNT(*) FROM INV.producto_uso pu WHERE pu.producto_id = p.id AND pu.fecha_devolucion IS NULL) as asignaciones_activas
                     FROM INV.productos p
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
                     WHERE p.id = @id
                 `);
@@ -341,7 +341,7 @@ class ProductoModel {
     }
 
     /**
-     * Crea un nuevo producto (SIN CANTIDAD)
+     * Crea un nuevo producto (SIN CANTIDAD - SIN producto_bodega)
      */
     async create(productoData) {
         try {
@@ -373,7 +373,7 @@ class ProductoModel {
                 }
             }
 
-            // INSERT sin columna cantidad
+            // INSERT con bodega_id directamente
             const result = await pool.request()
                 .input('codigo_qr', sql.NVarChar, codigo_qr)
                 .input('nombre', sql.NVarChar, dbData.nombre)
@@ -388,18 +388,19 @@ class ProductoModel {
                 .input('estado', sql.NVarChar, dbData.estado || 'DISPONIBLE')
                 .input('condicion', sql.NVarChar, dbData.condicion || 'NUEVO')
                 .input('imagen_path', sql.NVarChar, dbData.imagen_path || '')
+                .input('bodega_id', sql.Int, dbData.bodega_id || null)
                 .input('fecha_creacion', sql.DateTime, new Date())
                 .query(`
                     INSERT INTO INV.productos (
                         codigo_qr, nombre, numero_serie, marca, modelo,
                         precio, moneda, oc_numero, factura_numero, descripcion,
-                        estado, condicion, imagen_path, fecha_creacion
+                        estado, condicion, imagen_path, bodega_id, fecha_creacion
                     )
                     OUTPUT INSERTED.id, INSERTED.codigo_qr
                     VALUES (
                         @codigo_qr, @nombre, @numero_serie, @marca, @modelo,
                         @precio, @moneda, @oc_numero, @factura_numero, @descripcion,
-                        @estado, @condicion, @imagen_path, @fecha_creacion
+                        @estado, @condicion, @imagen_path, @bodega_id, @fecha_creacion
                     )
                 `);
             
@@ -434,18 +435,6 @@ class ProductoModel {
                 console.log(`✅ Historial de uso guardado: ${productoData.historial_uso.length} registros`);
             }
 
-            // Si hay bodega asignada, crear relación en producto_bodega (sin cantidad)
-            if (dbData.bodega_id) {
-                await pool.request()
-                    .input('producto_id', sql.Int, productoId)
-                    .input('bodega_id', sql.Int, dbData.bodega_id)
-                    .query(`
-                        INSERT INTO INV.producto_bodega (producto_id, bodega_id)
-                        VALUES (@producto_id, @bodega_id)
-                    `);
-                console.log(`✅ Producto ${productoId} asignado a bodega ${dbData.bodega_id}`);
-            }
-
             // Registrar en movimientos
             await this.registrarMovimiento({
                 producto_id: productoId,
@@ -465,7 +454,7 @@ class ProductoModel {
     }
 
     /**
-     * Actualiza un producto existente (SIN CANTIDAD)
+     * Actualiza un producto existente (SIN CANTIDAD - SIN producto_bodega)
      */
     async update(id, productoData) {
         try {
@@ -511,7 +500,7 @@ class ProductoModel {
             await transaction.begin();
 
             try {
-                // Actualizar tabla productos (sin cantidad)
+                // Actualizar tabla productos (incluyendo bodega_id)
                 let query = 'UPDATE INV.productos SET ';
                 const updates = [];
                 const request = transaction.request();
@@ -520,7 +509,7 @@ class ProductoModel {
                 const updatableFields = [
                     'codigo_qr', 'nombre', 'numero_serie', 'marca', 'modelo',
                     'precio', 'moneda', 'oc_numero', 'factura_numero', 'descripcion', 
-                    'estado', 'condicion', 'imagen_path'
+                    'estado', 'condicion', 'imagen_path', 'bodega_id'
                 ];
 
                 updatableFields.forEach(field => {
@@ -528,6 +517,7 @@ class ProductoModel {
                         updates.push(`${field} = @${field}`);
                         let type = sql.NVarChar;
                         if (field === 'precio') type = sql.Decimal(18,2);
+                        if (field === 'bodega_id') type = sql.Int;
                         request.input(field, type, dbData[field]);
                     }
                 });
@@ -644,50 +634,6 @@ class ProductoModel {
                     }
                 }
 
-                // ===== ACTUALIZAR RELACIÓN CON BODEGA =====
-                let bodegaNombre = null;
-                
-                if (dbData.bodega_id !== undefined) {
-                    const existeRelacion = await transaction.request()
-                        .input('producto_id', sql.Int, idNum)
-                        .query('SELECT id FROM INV.producto_bodega WHERE producto_id = @producto_id');
-
-                    if (existeRelacion.recordset.length > 0) {
-                        if (dbData.bodega_id) {
-                            await transaction.request()
-                                .input('producto_id', sql.Int, idNum)
-                                .input('bodega_id', sql.Int, dbData.bodega_id)
-                                .query(`
-                                    UPDATE INV.producto_bodega 
-                                    SET bodega_id = @bodega_id
-                                    WHERE producto_id = @producto_id
-                                `);
-                            
-                            const bodegaResult = await pool.request()
-                                .input('bodega_id', sql.Int, dbData.bodega_id)
-                                .query('SELECT nombre FROM INV.bodegas WHERE id = @bodega_id');
-                            bodegaNombre = bodegaResult.recordset[0]?.nombre;
-                        } else {
-                            await transaction.request()
-                                .input('producto_id', sql.Int, idNum)
-                                .query('DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id');
-                        }
-                    } else if (dbData.bodega_id) {
-                        await transaction.request()
-                            .input('producto_id', sql.Int, idNum)
-                            .input('bodega_id', sql.Int, dbData.bodega_id)
-                            .query(`
-                                INSERT INTO INV.producto_bodega (producto_id, bodega_id)
-                                VALUES (@producto_id, @bodega_id)
-                            `);
-                        
-                        const bodegaResult = await pool.request()
-                            .input('bodega_id', sql.Int, dbData.bodega_id)
-                            .query('SELECT nombre FROM INV.bodegas WHERE id = @bodega_id');
-                        bodegaNombre = bodegaResult.recordset[0]?.nombre;
-                    }
-                }
-
                 // Registrar movimientos según cambios
                 if (dbData.estado && dbData.estado !== productoActual.estado) {
                     await this.registrarMovimiento({
@@ -700,7 +646,16 @@ class ProductoModel {
                     });
                 }
 
+                // Cambio de bodega (ahora directamente en productos)
                 if (dbData.bodega_id !== undefined && dbData.bodega_id !== productoActual.bodega_id) {
+                    let bodegaNombre = null;
+                    if (dbData.bodega_id) {
+                        const bodegaResult = await pool.request()
+                            .input('bodega_id', sql.Int, dbData.bodega_id)
+                            .query('SELECT nombre FROM INV.bodegas WHERE id = @bodega_id');
+                        bodegaNombre = bodegaResult.recordset[0]?.nombre;
+                    }
+                    
                     await this.registrarMovimiento({
                         producto_id: idNum,
                         accion: 'CAMBIO_BODEGA',
@@ -750,7 +705,7 @@ class ProductoModel {
     }
 
     /**
-     * Elimina un producto (SIN CANTIDAD)
+     * Elimina un producto (SIN CANTIDAD - SIN producto_bodega)
      */
     async delete(id, options = {}) {
         try {
@@ -793,10 +748,8 @@ class ProductoModel {
                     .input('producto_id', sql.Int, idNum)
                     .query('DELETE FROM [INV].[mantenciones] WHERE producto_id = @producto_id');
 
-                await transaction.request()
-                    .input('producto_id', sql.Int, idNum)
-                    .query('DELETE FROM INV.producto_bodega WHERE producto_id = @producto_id');
-
+                // Ya no es necesario eliminar de producto_bodega
+                
                 await this.registrarMovimiento({
                     producto_id: idNum,
                     accion: 'ELIMINACION',
@@ -843,14 +796,13 @@ class ProductoModel {
                            p.marca, p.modelo, p.numero_serie, 
                            p.codigo_qr, p.imagen_path,
                            p.condicion,
+                           p.bodega_id,
+                           b.nombre as bodega_nombre,
                            e.nombre as estado_nombre,
-                           e.color as estado_color,
-                           b.id as bodega_id,
-                           b.nombre as bodega_nombre
+                           e.color as estado_color
                     FROM INV.producto_uso pu
                     INNER JOIN INV.productos p ON pu.producto_id = p.id
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
                     WHERE pu.fecha_devolucion IS NULL
                     ORDER BY pu.fecha_asignacion DESC
@@ -876,11 +828,11 @@ class ProductoModel {
                            p.marca, p.modelo, p.numero_serie, 
                            p.codigo_qr, p.imagen_path,
                            p.condicion,
+                           p.bodega_id,
                            b.nombre as bodega_nombre
                     FROM INV.producto_uso pu
                     INNER JOIN INV.productos p ON pu.producto_id = p.id
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     WHERE pu.email = @email
                     ORDER BY pu.fecha_asignacion DESC
                 `);
@@ -892,7 +844,7 @@ class ProductoModel {
     }
 
     /**
-     * Asigna un producto a un usuario (SIN CANTIDAD)
+     * Asigna un producto a un usuario (SIN CANTIDAD - SIN producto_bodega)
      */
     async asignarAUsuario(asignacionData) {
         try {
@@ -1075,7 +1027,7 @@ class ProductoModel {
     }
 
     /**
-     * Obtiene productos disponibles
+     * Obtiene productos disponibles (SIN producto_bodega)
      */
     async getDisponibles() {
         try {
@@ -1096,12 +1048,11 @@ class ProductoModel {
                         p.condicion,
                         p.imagen_path,
                         p.fecha_creacion,
-                        b.id as bodega_id,
+                        p.bodega_id,
                         b.nombre as bodega_nombre,
                         b.ubicacion as bodega_ubicacion
                     FROM INV.productos p
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     WHERE p.estado = 'DISPONIBLE'
                     ORDER BY p.nombre ASC
                 `);
@@ -1114,7 +1065,7 @@ class ProductoModel {
     }
 
     /**
-     * Obtiene productos por bodega (SIN CANTIDAD)
+     * Obtiene productos por bodega (SIN CANTIDAD - SIN producto_bodega)
      */
     async getProductosPorBodega(bodegaId) {
         try {
@@ -1124,16 +1075,16 @@ class ProductoModel {
                 .query(`
                     SELECT 
                         p.*,
+                        p.bodega_id,
                         b.id as bodega_id,
                         b.nombre as bodega_nombre,
                         b.ubicacion as bodega_ubicacion,
                         e.nombre as estado_nombre,
                         e.color as estado_color
                     FROM INV.productos p
-                    INNER JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    INNER JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
-                    WHERE pb.bodega_id = @bodega_id
+                    WHERE p.bodega_id = @bodega_id
                     ORDER BY p.nombre ASC
                 `);
             
@@ -1217,13 +1168,12 @@ class ProductoModel {
                 .input('codigo_qr', sql.NVarChar, codigo_qr)
                 .query(`
                     SELECT p.*, 
-                           b.id as bodega_id,
+                           p.bodega_id,
                            b.nombre as bodega_nombre,
                            e.nombre as estado_nombre,
                            e.color as estado_color
                     FROM INV.productos p
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
                     WHERE p.codigo_qr = @codigo_qr
                 `);
@@ -1236,7 +1186,7 @@ class ProductoModel {
     }
 
     // ============================================
-    // MÉTODOS AUXILIARES (sin cambios)
+    // MÉTODOS AUXILIARES (sin cambios significativos)
     // ============================================
 
     async registrarMovimiento(movimientoData) {
@@ -1356,9 +1306,10 @@ class ProductoModel {
             await pool.request()
                 .input('producto_id', sql.Int, donacionData.producto_id)
                 .input('estado', sql.NVarChar, 'DONADO')
+                .input('bodega_id', sql.Int, null) // Limpiar bodega
                 .query(`
                     UPDATE INV.productos 
-                    SET estado = @estado
+                    SET estado = @estado, bodega_id = @bodega_id
                     WHERE id = @producto_id
                 `);
 
@@ -1412,9 +1363,10 @@ class ProductoModel {
             await pool.request()
                 .input('producto_id', sql.Int, bajaData.producto_id)
                 .input('estado', sql.NVarChar, 'NO DISPONIBLE')
+                .input('bodega_id', sql.Int, null) // Limpiar bodega
                 .query(`
                     UPDATE INV.productos 
-                    SET estado = @estado
+                    SET estado = @estado, bodega_id = @bodega_id
                     WHERE id = @producto_id
                 `);
 
@@ -1457,8 +1409,7 @@ class ProductoModel {
                         b.nombre as bodega_nombre
                     FROM INV.disposicion_donacion d
                     INNER JOIN INV.productos p ON d.producto_id = p.id
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+                    LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
                     LEFT JOIN INV.usuarios u ON d.usuario_id = u.id
                     ORDER BY d.fecha_entrega DESC
                 `);
@@ -1479,8 +1430,7 @@ class ProductoModel {
                         bodega.nombre as bodega_nombre
                     FROM INV.disposicion_baja b
                     INNER JOIN INV.productos p ON b.producto_id = p.id
-                    LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    LEFT JOIN INV.bodegas bodega ON pb.bodega_id = bodega.id
+                    LEFT JOIN INV.bodegas bodega ON p.bodega_id = bodega.id
                     LEFT JOIN INV.usuarios u ON b.usuario_id = u.id
                     ORDER BY b.fecha_baja DESC
                 `);

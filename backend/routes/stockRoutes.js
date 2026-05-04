@@ -1,4 +1,4 @@
-// backend/routes/stockRoutes.js - NUEVO ARCHIVO PARA STOCK
+// backend/routes/stockRoutes.js - VERSIÓN SIN producto_bodega
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -76,7 +76,9 @@ router.get('/detalle', async (req, res) => {
                 p.condicion,
                 p.id_estado_equipo,
                 p.precio,
+                p.cantidad,
                 p.fecha_creacion,
+                p.bodega_id,
                 b.id as bodega_id,
                 b.nombre as bodega_nombre,
                 a.id as asignacion_id,
@@ -86,8 +88,7 @@ router.get('/detalle', async (req, res) => {
                 c.email as colaborador_email,
                 c.cargo as colaborador_cargo
             FROM INV.productos p
-            LEFT JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-            LEFT JOIN INV.bodegas b ON pb.bodega_id = b.id
+            LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
             LEFT JOIN INV.asignaciones a ON p.id = a.producto_id AND a.fecha_devolucion IS NULL
             LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
             WHERE p.id_estado_equipo != 6
@@ -214,6 +215,82 @@ router.get('/top-marcas', async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en GET /stock/top-marcas:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Obtener productos por bodega (nuevo endpoint)
+router.get('/por-bodega/:bodegaId', async (req, res) => {
+    try {
+        const { bodegaId } = req.params;
+        console.log(`📥 GET /api/stock/por-bodega/${bodegaId}`);
+        
+        const pool = await getConnection();
+        
+        const result = await pool.request()
+            .input('bodegaId', sql.Int, bodegaId)
+            .query(`
+                SELECT 
+                    p.id,
+                    p.nombre,
+                    p.numero_serie,
+                    p.marca,
+                    p.modelo,
+                    p.condicion,
+                    p.id_estado_equipo,
+                    p.precio,
+                    p.cantidad,
+                    CASE 
+                        WHEN p.id_estado_equipo = 1 THEN 'DISPONIBLE'
+                        WHEN p.id_estado_equipo = 2 THEN 'ASIGNADO'
+                        WHEN p.id_estado_equipo = 3 THEN 'EN MANTENCIÓN'
+                        WHEN p.id_estado_equipo = 4 THEN 'EN REPARACIÓN'
+                        WHEN p.id_estado_equipo = 5 THEN 'NO DISPONIBLE'
+                        WHEN p.id_estado_equipo = 6 THEN 'BAJA'
+                        ELSE 'DESCONOCIDO'
+                    END as estado_texto
+                FROM INV.productos p
+                WHERE p.bodega_id = @bodegaId
+                ORDER BY p.nombre ASC
+            `);
+        
+        res.json({ success: true, data: result.recordset });
+        
+    } catch (error) {
+        console.error('❌ Error en GET /stock/por-bodega:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Obtener productos disponibles (sin asignar)
+router.get('/disponibles', async (req, res) => {
+    try {
+        console.log('📥 GET /api/stock/disponibles');
+        
+        const pool = await getConnection();
+        
+        const result = await pool.request()
+            .query(`
+                SELECT 
+                    p.id,
+                    p.nombre,
+                    p.numero_serie,
+                    p.marca,
+                    p.modelo,
+                    p.condicion,
+                    p.precio,
+                    p.cantidad,
+                    b.nombre as bodega_nombre
+                FROM INV.productos p
+                LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
+                WHERE p.id_estado_equipo = 1
+                ORDER BY p.nombre ASC
+            `);
+        
+        res.json({ success: true, data: result.recordset });
+        
+    } catch (error) {
+        console.error('❌ Error en GET /stock/disponibles:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

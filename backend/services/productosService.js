@@ -1,6 +1,6 @@
 import api from './api';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = 'http://localhost:98';
 
 export const productosService = {
     // Listar productos con búsqueda opcional

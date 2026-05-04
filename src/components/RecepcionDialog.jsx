@@ -40,7 +40,7 @@ import {
 import api from '../services/api';
 
 // URL base fija para el backend
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:98';
 
 // Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 180, label = 'Firma' }) => {

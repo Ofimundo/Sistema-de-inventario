@@ -2883,8 +2883,8 @@ const Productos = () => {
     const getImageUrl = (imagenPath) => {
         if (!imagenPath) return null;
         if (imagenPath.startsWith('http')) return imagenPath;
-        if (imagenPath.startsWith('/uploads/')) return `http://localhost:5000${imagenPath}`;
-        return `http://localhost:5000/uploads/${imagenPath}`;
+        if (imagenPath.startsWith('/uploads/')) return `http://localhost:98${imagenPath}`;
+        return `http://localhost:98/uploads/${imagenPath}`;
     };
 
 // ============================================

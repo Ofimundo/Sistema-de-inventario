@@ -1,9 +1,9 @@
-// backend/routes/bodegaRoutes.js - VERSIÓN CORREGIDA
+// backend/routes/bodegaRoutes.js - VERSIÓN SIN producto_bodega
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
 
-// GET - Obtener todas las bodegas (con conteo de productos desde producto_bodega)
+// GET - Obtener todas las bodegas (con conteo de productos)
 router.get('/', async (req, res) => {
     try {
         console.log('📥 GET /api/bodegas');
@@ -20,9 +20,9 @@ router.get('/', async (req, res) => {
                     b.descripcion, 
                     b.responsable,
                     ISNULL((
-                        SELECT COUNT(DISTINCT pb.producto_id)
-                        FROM INV.producto_bodega pb
-                        WHERE pb.bodega_id = b.id
+                        SELECT COUNT(*)
+                        FROM INV.productos p
+                        WHERE p.bodega_id = b.id
                     ), 0) as total_productos
                 FROM INV.bodegas b
                 ORDER BY b.nombre
@@ -67,9 +67,9 @@ router.get('/:id', async (req, res) => {
                     b.descripcion, 
                     b.responsable,
                     ISNULL((
-                        SELECT COUNT(DISTINCT pb.producto_id)
-                        FROM INV.producto_bodega pb
-                        WHERE pb.bodega_id = b.id
+                        SELECT COUNT(*)
+                        FROM INV.productos p
+                        WHERE p.bodega_id = b.id
                     ), 0) as total_productos
                 FROM INV.bodegas b
                 WHERE b.id = @id
@@ -79,7 +79,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Bodega no encontrada' });
         }
         
-        // OBTENER PRODUCTOS asociados a esta bodega
+        // OBTENER PRODUCTOS asociados a esta bodega (directamente por bodega_id)
         const productosResult = await pool.request()
             .input('bodega_id', sql.Int, idNum)
             .query(`
@@ -92,7 +92,7 @@ router.get('/:id', async (req, res) => {
                     p.precio,
                     p.condicion,
                     p.id_estado_equipo,
-                    pb.cantidad,
+                    p.cantidad,
                     CASE 
                         WHEN p.id_estado_equipo = 1 THEN 'DISPONIBLE'
                         WHEN p.id_estado_equipo = 2 THEN 'ASIGNADO'
@@ -103,8 +103,7 @@ router.get('/:id', async (req, res) => {
                         ELSE 'DESCONOCIDO'
                     END as estado_texto
                 FROM INV.productos p
-                INNER JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                WHERE pb.bodega_id = @bodega_id
+                WHERE p.bodega_id = @bodega_id
                 ORDER BY p.nombre
             `);
         
@@ -224,15 +223,15 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Bodega no encontrada' });
         }
         
-        // Verificar si tiene productos asignados
+        // Verificar si tiene productos asignados directamente por bodega_id
         const productosAsignados = await pool.request()
             .input('bodega_id', sql.Int, idNum)
-            .query(`SELECT COUNT(*) as total FROM INV.producto_bodega WHERE bodega_id = @bodega_id`);
+            .query(`SELECT COUNT(*) as total FROM INV.productos WHERE bodega_id = @bodega_id`);
         
         if (productosAsignados.recordset[0].total > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `No se puede eliminar la bodega porque tiene ${productosAsignados.recordset[0].total} productos asociados. Primero elimine las asociaciones.` 
+                message: `No se puede eliminar la bodega porque tiene ${productosAsignados.recordset[0].total} productos asociados. Primero reasigne o elimine los productos.` 
             });
         }
         

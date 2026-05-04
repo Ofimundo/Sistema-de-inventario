@@ -1,4 +1,4 @@
-// backend/controllers/bodegaController.js - VERSIÓN CORREGIDA
+// backend/controllers/bodegaController.js - VERSIÓN SIN producto_bodega
 const { getConnection, sql } = require('../config/database');
 
 const bodegaController = {
@@ -17,9 +17,9 @@ const bodegaController = {
                     b.responsable,
                     b.descripcion,
                     ISNULL((
-                        SELECT COUNT(DISTINCT pb.producto_id)
-                        FROM INV.producto_bodega pb
-                        WHERE pb.bodega_id = b.id
+                        SELECT COUNT(*)
+                        FROM INV.productos p
+                        WHERE p.bodega_id = b.id
                     ), 0) as total_productos
                 FROM INV.bodegas b
                 ORDER BY b.nombre
@@ -61,9 +61,9 @@ const bodegaController = {
                         b.responsable,
                         b.descripcion,
                         ISNULL((
-                            SELECT COUNT(DISTINCT pb.producto_id)
-                            FROM INV.producto_bodega pb
-                            WHERE pb.bodega_id = b.id
+                            SELECT COUNT(*)
+                            FROM INV.productos p
+                            WHERE p.bodega_id = b.id
                         ), 0) as total_productos
                     FROM INV.bodegas b
                     WHERE b.id = @id
@@ -110,7 +110,7 @@ const bodegaController = {
                 });
             }
             
-            // Obtener productos a través de producto_bodega
+            // Obtener productos directamente por bodega_id
             const result = await pool.request()
                 .input('bodegaId', sql.Int, id)
                 .query(`
@@ -123,7 +123,7 @@ const bodegaController = {
                         p.precio,
                         p.condicion,
                         p.id_estado_equipo,
-                        pb.cantidad,
+                        p.cantidad,
                         CASE 
                             WHEN p.id_estado_equipo = 1 THEN 'DISPONIBLE'
                             WHEN p.id_estado_equipo = 2 THEN 'ASIGNADO'
@@ -134,8 +134,7 @@ const bodegaController = {
                             ELSE 'DESCONOCIDO'
                         END as estado_texto
                     FROM INV.productos p
-                    INNER JOIN INV.producto_bodega pb ON p.id = pb.producto_id
-                    WHERE pb.bodega_id = @bodegaId
+                    WHERE p.bodega_id = @bodegaId
                     ORDER BY p.nombre
                 `);
 
@@ -188,7 +187,7 @@ const bodegaController = {
     // Crear nueva bodega
     create: async (req, res) => {
         try {
-            const { nombre, ubicacion, responsable, descripcion } = req.body;
+            const { nombre, ubicacion, responsable_id, responsable, descripcion } = req.body;
 
             if (!nombre) {
                 return res.status(400).json({
@@ -197,20 +196,21 @@ const bodegaController = {
                 });
             }
 
-            console.log('📤 Creando bodega:', { nombre, ubicacion, responsable, descripcion });
+            console.log('📤 Creando bodega:', { nombre, ubicacion, responsable_id, responsable, descripcion });
             
             const pool = await getConnection();
 
             const result = await pool.request()
                 .input('nombre', sql.NVarChar, nombre)
                 .input('ubicacion', sql.NVarChar, ubicacion || null)
+                .input('responsable_id', sql.Int, responsable_id || null)
                 .input('responsable', sql.NVarChar, responsable || null)
                 .input('descripcion', sql.NVarChar, descripcion || null)
                 .query(`
-                    INSERT INTO INV.bodegas (nombre, ubicacion, responsable, descripcion)
+                    INSERT INTO INV.bodegas (nombre, ubicacion, responsable_id, responsable, descripcion)
                     OUTPUT INSERTED.id, INSERTED.nombre, INSERTED.ubicacion, 
-                           INSERTED.responsable, INSERTED.descripcion
-                    VALUES (@nombre, @ubicacion, @responsable, @descripcion)
+                           INSERTED.responsable_id, INSERTED.responsable, INSERTED.descripcion
+                    VALUES (@nombre, @ubicacion, @responsable_id, @responsable, @descripcion)
                 `);
 
             const nuevaBodega = result.recordset[0];
@@ -237,7 +237,7 @@ const bodegaController = {
     update: async (req, res) => {
         try {
             const { id } = req.params;
-            const { nombre, ubicacion, responsable, descripcion } = req.body;
+            const { nombre, ubicacion, responsable_id, responsable, descripcion } = req.body;
 
             if (!nombre) {
                 return res.status(400).json({
@@ -246,7 +246,7 @@ const bodegaController = {
                 });
             }
 
-            console.log(`📤 Actualizando bodega ${id}:`, { nombre, ubicacion, responsable, descripcion });
+            console.log(`📤 Actualizando bodega ${id}:`, { nombre, ubicacion, responsable_id, responsable, descripcion });
             
             const pool = await getConnection();
 
@@ -265,12 +265,14 @@ const bodegaController = {
                 .input('id', sql.Int, id)
                 .input('nombre', sql.NVarChar, nombre)
                 .input('ubicacion', sql.NVarChar, ubicacion || null)
+                .input('responsable_id', sql.Int, responsable_id || null)
                 .input('responsable', sql.NVarChar, responsable || null)
                 .input('descripcion', sql.NVarChar, descripcion || null)
                 .query(`
                     UPDATE INV.bodegas 
                     SET nombre = @nombre, 
                         ubicacion = @ubicacion, 
+                        responsable_id = @responsable_id,
                         responsable = @responsable, 
                         descripcion = @descripcion
                     WHERE id = @id
@@ -283,12 +285,13 @@ const bodegaController = {
                         b.id,
                         b.nombre,
                         b.ubicacion,
+                        b.responsable_id,
                         b.responsable,
                         b.descripcion,
                         ISNULL((
-                            SELECT COUNT(DISTINCT pb.producto_id)
-                            FROM INV.producto_bodega pb
-                            WHERE pb.bodega_id = b.id
+                            SELECT COUNT(*)
+                            FROM INV.productos p
+                            WHERE p.bodega_id = b.id
                         ), 0) as total_productos
                     FROM INV.bodegas b
                     WHERE b.id = @id
@@ -331,19 +334,19 @@ const bodegaController = {
                 });
             }
 
-            // Verificar si tiene productos asociados
+            // Verificar si tiene productos asociados directamente por bodega_id
             const productResult = await pool.request()
                 .input('bodegaId', sql.Int, id)
                 .query(`
                     SELECT COUNT(*) as total 
-                    FROM INV.producto_bodega 
+                    FROM INV.productos 
                     WHERE bodega_id = @bodegaId
                 `);
 
             if (productResult.recordset[0]?.total > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: `No se puede eliminar la bodega porque tiene ${productResult.recordset[0].total} productos asociados.`
+                    message: `No se puede eliminar la bodega porque tiene ${productResult.recordset[0].total} productos asociados. Primero reasigne o elimine los productos.`
                 });
             }
 

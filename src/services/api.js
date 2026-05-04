@@ -13,7 +13,7 @@ const getBaseURL = () => {
     
     // Desarrollo local
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        const url = 'http://localhost:5000/api';
+        const url = 'http://localhost:98/api';
         console.log('✅ Modo: Desarrollo local PC');
         console.log('📡 Conectando a backend:', url);
         return url;
@@ -43,7 +43,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    timeout: 30000,
+    timeout: 60000,
     withCredentials: true
 });
 

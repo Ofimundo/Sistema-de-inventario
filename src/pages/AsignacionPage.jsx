@@ -1,4 +1,5 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (conexión al puerto 98)
+
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -39,10 +40,6 @@ import {
     TableHead,
     TableRow,
     TablePagination,
-    FormControlLabel,
-    Radio,
-    RadioGroup,
-    FormLabel
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -62,11 +59,13 @@ import {
     Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { productosService } from '../services/productos';
 import api from '../services/api';
 import AsignacionCompletaDialog from '../components/AsignacionCompletaDialog';
 import RecepcionDialog from '../components/RecepcionDialog';
 
+// ============================================
+// COLORES
+// ============================================
 const colors = {
     primary: '#0A66C2',
     secondary: '#7C3AED',
@@ -104,15 +103,14 @@ const ESTADO_TEXTO = {
 };
 
 const ESTADO_COLOR = {
-    1: '#10B981',  // verde
-    2: '#F59E0B',  // naranja
-    3: '#3B82F6',  // azul
-    4: '#EF4444',  // rojo
-    5: '#6B7280',  // gris
-    6: '#9CA3AF'   // gris claro
+    1: '#10B981',
+    2: '#F59E0B',
+    3: '#3B82F6',
+    4: '#EF4444',
+    5: '#6B7280',
+    6: '#9CA3AF'
 };
 
-// Función para obtener texto de estado
 const getEstadoTexto = (estadoId) => {
     const id = Number(estadoId);
     return ESTADO_TEXTO[id] || 'DESCONOCIDO';
@@ -124,9 +122,8 @@ const getEstadoColor = (estadoId) => {
 };
 
 // ============================================
-// COMPONENTES STYLED CON BORDES RECTANGULARES
+// COMPONENTES STYLED
 // ============================================
-
 const StyledCard = styled(Card)(({ theme }) => ({
     height: '100%',
     borderRadius: 0,
@@ -161,9 +158,41 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
 }));
 
 // ============================================
+// SERVICIOS LOCALES (conexión al puerto 98)
+// ============================================
+const productosServiceLocal = {
+    getProductos: async (searchTerm = '', filters = {}) => {
+        try {
+            let url = '/productos';
+            const params = new URLSearchParams();
+            
+            if (searchTerm) params.append('search', searchTerm);
+            if (filters.bodega_id) params.append('bodega_id', filters.bodega_id);
+            
+            if (params.toString()) url += `?${params.toString()}`;
+            
+            const response = await api.get(url);
+            return response.data.data || response.data || [];
+        } catch (error) {
+            console.error('Error fetching productos:', error);
+            throw error;
+        }
+    },
+    
+    getBodegas: async () => {
+        try {
+            const response = await api.get('/bodegas');
+            return response.data.data || response.data || [];
+        } catch (error) {
+            console.error('Error fetching bodegas:', error);
+            return [];
+        }
+    }
+};
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
-
 const AsignacionPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery('(max-width:600px)');
@@ -207,8 +236,8 @@ const AsignacionPage = () => {
             const filterParams = {};
             if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
             
-            console.log('📤 Cargando productos...');
-            const productosData = await productosService.getProductos(searchTerm, filterParams);
+            console.log('📤 Cargando productos desde puerto 98...');
+            const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
             
             console.log('📦 Productos recibidos:', productosData?.length || 0);
             
@@ -219,11 +248,11 @@ const AsignacionPage = () => {
                 todosLosProductos = productosData.data;
             }
             
-            // DEPURACIÓN: Mostrar los primeros productos para ver el estado
+            // Depuración
             if (todosLosProductos.length > 0) {
-                console.log('🔍 Primeros 3 productos para depuración:');
+                console.log('🔍 Primeros 3 productos:');
                 todosLosProductos.slice(0, 3).forEach(p => {
-                    console.log(`   - ${p.nombre}: id_estado_equipo = ${p.id_estado_equipo} (${typeof p.id_estado_equipo})`);
+                    console.log(`   - ${p.nombre}: estado = ${p.estado}, id_estado_equipo = ${p.id_estado_equipo}`);
                 });
             }
             
@@ -240,7 +269,6 @@ const AsignacionPage = () => {
             console.log(`📊 Productos cargados: ${productosFiltrados.length} total`);
             console.log(`   📊 Disponibles (estado 1): ${productosFiltrados.filter(p => p.id_estado_equipo === 1).length}`);
             console.log(`   📊 Asignados (estado 2): ${productosFiltrados.filter(p => p.id_estado_equipo === 2).length}`);
-            console.log(`   📊 Otros estados: ${productosFiltrados.filter(p => p.id_estado_equipo > 2 && p.id_estado_equipo !== 6).length}`);
             
             // Cargar asignaciones activas
             try {
@@ -266,8 +294,9 @@ const AsignacionPage = () => {
             
             // Cargar bodegas
             try {
-                const bodegasData = await productosService.getBodegas();
+                const bodegasData = await productosServiceLocal.getBodegas();
                 setBodegas(bodegasData || []);
+                console.log(`✅ ${bodegasData?.length || 0} bodegas cargadas`);
             } catch (err) {
                 console.error('Error cargando bodegas:', err);
                 setBodegas([]);
@@ -405,7 +434,7 @@ const AsignacionPage = () => {
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
                             <Button color="inherit" size="small" onClick={() => fetchData(true)} sx={{ borderRadius: 0 }}>REINTENTAR</Button>
                         }>
-                            No se pudo conectar con el servidor.
+                            No se pudo conectar con el servidor en http://localhost:98
                         </Alert>
                     )}
                 </Paper>
@@ -629,7 +658,6 @@ const AsignacionPage = () => {
                                                                 size="small" 
                                                                 onClick={() => {
                                                                     setAsignacionSeleccionada(asignacionActiva);
-                                                                    // Abrir diálogo de detalle
                                                                 }} 
                                                                 sx={{ color: colors.info }}
                                                             >

@@ -505,7 +505,7 @@ export const productosService = {
         }
         
         // Construir URL usando la base de api
-        const baseURL = api.defaults.baseURL || 'http://localhost:5000/api/';
+        const baseURL = api.defaults.baseURL || 'http://localhost:98';
         const baseApiUrl = baseURL.replace('/api/', '');
         
         if (imagenPath.startsWith('/uploads/')) {
