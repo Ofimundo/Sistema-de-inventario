@@ -13,9 +13,9 @@ const getBaseURL = () => {
     }
     
     // Luego intentar con Create React App
-    if (process.env && process.env.REACT_APP_API_URL) {
+    if (process.env && process.env.REACT_APP_API_URL ) {
         console.log('✅ Usando REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-        return process.env.REACT_APP_API_URL;
+        return process.env.REACT_APP_API_URL ;
     }
     
     // Fallback para desarrollo local
