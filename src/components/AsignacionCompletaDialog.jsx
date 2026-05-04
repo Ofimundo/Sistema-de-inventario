@@ -35,7 +35,7 @@ import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA CORREGIDA
+// 🔥 URL BASE DINÁMICA - CORREGIDA
 // ============================================
 const getApiBaseUrl = () => {
     // Para Vite
@@ -63,6 +63,9 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+// Agregar log para verificar la URL
+console.log('🔧 API_BASE_URL final en AsignacionCompletaDialog:', API_BASE_URL);
 
 // Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 150, label = 'Firma' }) => {
@@ -319,14 +322,21 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO
+    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO - USANDO API_BASE_URL
     const handleDescargarDocumento = async () => {
-        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+        console.log('🔍 Iniciando descarga...');
+        console.log('🔍 documentoGenerado:', documentoGenerado);
+        console.log('🔍 API_BASE_URL:', API_BASE_URL);
+        
+        if (!documentoGenerado || !documentoGenerado.filename || downloading) {
+            console.log('❌ Condiciones no cumplidas para descarga');
+            return;
+        }
         
         setDownloading(true);
         try {
             const token = localStorage.getItem('token');
-            // ✅ Usar API_BASE_URL (sin /api al final) y agregar /api en la URL
+            // ✅ Usar API_BASE_URL (que viene de la variable de entorno)
             const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
             console.log('📥 Descargando documento desde:', downloadUrl);
             
@@ -336,6 +346,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                     'Authorization': `Bearer ${token}`
                 }
             });
+
+            console.log('📥 Respuesta fetch:', response.status, response.ok);
 
             if (!response.ok) {
                 throw new Error(`Error HTTP: ${response.status}`);
