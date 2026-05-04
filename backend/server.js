@@ -1,6 +1,7 @@
 // backend/server.js - VERSIÓN CORREGIDA
 const express = require('express');
 const cors = require('cors');
+const app = express();
 const path = require('path');
 const fileUpload = require('express-fileupload');
 require('dotenv').config();
@@ -20,6 +21,11 @@ const colaboradorRoutes = require('./routes/colaboradorRoutes');
 
 const app = express();
 
+// USAR CORS (agregar esto ANTES de las rutas)
+app.use(cors(corsOptions));
+
+// Permitir preflight para todas las rutas
+app.options('*', cors(corsOptions));
 
 // ✅ LÍNEA 2: Configuración CORS (agrega esto después de crear 'app')
 const corsOptions = {
