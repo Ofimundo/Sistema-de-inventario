@@ -1,5 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (conexión al puerto 98)
-
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -158,7 +157,7 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
 }));
 
 // ============================================
-// SERVICIOS LOCALES (conexión al puerto 98)
+// SERVICIOS LOCALES
 // ============================================
 const productosServiceLocal = {
     getProductos: async (searchTerm = '', filters = {}) => {
@@ -236,7 +235,7 @@ const AsignacionPage = () => {
             const filterParams = {};
             if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
             
-            console.log('📤 Cargando productos desde puerto 98...');
+            console.log('📤 Cargando productos...');
             const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
             
             console.log('📦 Productos recibidos:', productosData?.length || 0);
@@ -434,7 +433,7 @@ const AsignacionPage = () => {
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
                             <Button color="inherit" size="small" onClick={() => fetchData(true)} sx={{ borderRadius: 0 }}>REINTENTAR</Button>
                         }>
-                            No se pudo conectar con el servidor en http://localhost:98
+                            No se pudo conectar con el servidor. Verifica tu conexión.
                         </Alert>
                     )}
                 </Paper>

@@ -1,4 +1,4 @@
-// src/components/RecepcionDialog.jsx
+// src/components/RecepcionDialog.jsx - VERSIÓN CORREGIDA
 /* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
@@ -39,8 +39,9 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 
-// URL base fija para el backend
-const API_BASE_URL = 'http://localhost:98';
+// ✅ URL BASE CORREGIDA - FORZADA A PRODUCCIÓN
+const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
+console.log('🔧 RecepcionDialog - API_BASE_URL:', API_BASE_URL);
 
 // Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 180, label = 'Firma' }) => {
@@ -165,9 +166,6 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height
                 <Button size="small" variant="outlined" onClick={clearCanvas} startIcon={<ClearIcon />} sx={{ borderRadius: 0 }}>
                     Limpiar
                 </Button>
-                <Button size="small" variant="outlined" onClick={clearCanvas} startIcon={<RestartIcon />} sx={{ borderRadius: 0 }}>
-                    Reiniciar
-                </Button>
             </Box>
         </Box>
     );
@@ -264,19 +262,38 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         return firmaGerenteText;
     };
 
-    const handleDescargarDocumento = () => {
+    // ✅ FUNCIÓN DE DESCARGA CORREGIDA
+    const handleDescargarDocumento = async () => {
         if (documentoGenerado && documentoGenerado.filename && !downloading) {
             setDownloading(true);
             try {
+                const token = localStorage.getItem('token');
+                // ✅ Usar URL de producción
                 const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-                console.log('📥 Descargando documento:', documentoGenerado.filename);
+                console.log('📥 Descargando documento desde:', downloadUrl);
                 
+                const response = await fetch(downloadUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.href = downloadUrl;
+                link.href = url;
                 link.download = documentoGenerado.filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                
+                console.log('✅ Documento descargado:', documentoGenerado.filename);
             } catch (error) {
                 console.error('❌ Error descargando documento:', error);
                 alert('Error al descargar el documento. Por favor, intente nuevamente.');
@@ -308,7 +325,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         setError('');
 
         try {
-            // IMPORTANTE: Los nombres de los campos deben coincidir con el backend
             const payload = {
                 fecha_devolucion: new Date().toISOString(),
                 motivo_devolucion: motivoDevolucion,
@@ -319,8 +335,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             };
 
             console.log('📤 Enviando devolución:', payload);
-            console.log('🔍 Firma trabajador recibida:', firmaTrabajadorFinal ? '✅ Si' : '❌ No');
-            console.log('🔍 Firma gerente recibida:', firmaGerenteFinal ? '✅ Si' : '❌ No');
 
             const response = await api.put(`/asignaciones/${asignacion.id}/finalizar`, payload);
 
