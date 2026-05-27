@@ -728,7 +728,7 @@ const AsignacionPage = () => {
                 <Toolbar>
                     <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}><HomeIcon /></IconButton>
                     <AssignmentIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones y Préstamos</Typography>
+                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones</Typography>
                     <IconButton color="inherit" onClick={() => fetchData(true)} disabled={refreshing}>
                         {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
                     </IconButton>
@@ -737,7 +737,7 @@ const AsignacionPage = () => {
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones y Préstamos con Firma Digital</Typography>
+                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones</Typography>
                     <Typography sx={{ opacity: 0.9, mb: 3 }}>Asigna productos a colaboradores, registra préstamos temporales y controla devoluciones</Typography>
                     {apiError && (
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
