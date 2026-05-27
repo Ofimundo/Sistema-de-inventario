@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN COMPLETAMENTE CORREGIDA
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -18,12 +18,7 @@ import {
     FormControl,
     RadioGroup,
     FormControlLabel,
-    Radio,
-    Switch,
-    Grid,
-    Select,
-    MenuItem,
-    FormHelperText
+    Radio
 } from '@mui/material';
 import {
     Assignment as AssignmentIcon,
@@ -35,33 +30,39 @@ import {
     Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
     Clear as ClearIcon,
-    LocalOffer as LocalOfferIcon
 } from '@mui/icons-material';
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA
+// 🔥 URL BASE DINÁMICA - CORREGIDA
 // ============================================
 const getApiBaseUrl = () => {
+    // Para Vite
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         let url = import.meta.env.VITE_API_URL;
+        // Eliminar /api del final si existe para no duplicar
         if (url.endsWith('/api')) {
             url = url.slice(0, -4);
         }
+        console.log('📍 API Base URL (desde VITE):', url);
         return url;
     }
+    // Para Create React App
     if (process.env && process.env.REACT_APP_API_URL) {
         let url = process.env.REACT_APP_API_URL;
         if (url.endsWith('/api')) {
             url = url.slice(0, -4);
         }
+        console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
-    return 'http://localhost:5000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+// Agregar log para verificar la URL
+console.log('🔧 API_BASE_URL final en AsignacionCompletaDialog:', API_BASE_URL);
 
 // Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 150, label = 'Firma' }) => {
@@ -266,11 +267,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
-    
-    // 🔥 NUEVOS ESTADOS PARA PRÉSTAMO
-    const [esPrestamo, setEsPrestamo] = useState(false);
-    const [diasPrestamo, setDiasPrestamo] = useState(7);
-    const [fechaDevolucionEstimada, setFechaDevolucionEstimada] = useState('');
 
     useEffect(() => {
         if (open && productoSeleccionado) {
@@ -289,21 +285,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             setDocumentoGenerado(null);
             setTipoFirmaTrabajador('texto');
             setTipoFirmaGerente('texto');
-            // Resetear préstamo
-            setEsPrestamo(false);
-            setDiasPrestamo(7);
-            setFechaDevolucionEstimada('');
         }
     }, [open, productoSeleccionado]);
-
-    // Calcular fecha de devolución estimada cuando cambian los días
-    useEffect(() => {
-        if (esPrestamo && diasPrestamo > 0) {
-            const fecha = new Date();
-            fecha.setDate(fecha.getDate() + diasPrestamo);
-            setFechaDevolucionEstimada(fecha.toISOString().split('T')[0]);
-        }
-    }, [diasPrestamo, esPrestamo]);
 
     const cargarColaboradores = async () => {
         try {
@@ -336,42 +319,47 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    const handleDescargarDocumento = async () => {
-        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO - USANDO API_BASE_URL
+    // src/components/AsignacionCompletaDialog.jsx
+const handleDescargarDocumento = async () => {
+    if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+    
+    setDownloading(true);
+    try {
+        const token = localStorage.getItem('token');
+        // ✅ URL FORZADA A RENDER
+        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
+        console.log('📥 Descargando documento desde:', downloadUrl);
         
-        setDownloading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-            console.log('📥 Descargando documento desde:', downloadUrl);
-            
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
+        const response = await fetch(downloadUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
             }
+        });
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = documentoGenerado.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            console.log('✅ Documento descargado:', documentoGenerado.filename);
-        } catch (error) {
-            console.error('❌ Error descargando documento:', error);
-            alert('Error al descargar el documento. Por favor, intente nuevamente.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
         }
-    };
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = documentoGenerado.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ Documento descargado:', documentoGenerado.filename);
+    } catch (error) {
+        console.error('❌ Error descargando documento:', error);
+        alert('Error al descargar el documento. Por favor, intente nuevamente.');
+    } finally {
+        setTimeout(() => setDownloading(false), 1000);
+    }
+};
 
     const handleSubmit = async () => {
         if (!colaboradorSeleccionado) {
@@ -410,7 +398,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 }
             }
             
-            // 🔥 INCLUIR DATOS DE PRÉSTAMO
             const asignacionResponse = await api.post('/asignaciones', {
                 producto_id: productoSeleccionado.id,
                 colaborador_id: colaboradorSeleccionado.id,
@@ -419,13 +406,11 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 fecha_asignacion: new Date().toISOString().split('T')[0],
                 usuario_responsable: usuarioResponsable,
                 firma_trabajador: firmaTrabajador,
-                firma_gerente: firmaGerente,
-                es_prestamo: esPrestamo,
-                fecha_devolucion_estimada: esPrestamo ? fechaDevolucionEstimada : null
+                firma_gerente: firmaGerente
             });
 
             if (asignacionResponse.data?.success) {
-                const tipoAsignacion = esPrestamo ? 'Préstamo' : 'Asignación';
+                // Generar acta PDF después de la asignación
                 const actaData = {
                     id_asignacion: asignacionResponse.data.data?.id,
                     colaborador: {
@@ -436,7 +421,9 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                         departamento: colaboradorSeleccionado.departamento,
                         nacionalidad: 'chilena',
                         fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
-                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || ''
+                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
+                        comuna: colaboradorSeleccionado.comuna || '',
+                        ciudad: colaboradorSeleccionado.ciudad || ''
                     },
                     productos: [{
                         tipo: 'Equipo',
@@ -466,10 +453,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 if (onSuccess) {
                     onSuccess({
                         success: true,
-                        message: `✅ ${tipoAsignacion} completada exitosamente para ${productoSeleccionado.nombre}`,
-                        documento: actaResponse.data,
-                        es_prestamo: esPrestamo,
-                        fecha_devolucion_estimada: fechaDevolucionEstimada
+                        message: `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}`,
+                        documento: actaResponse.data
                     });
                 }
             } else {
@@ -496,32 +481,22 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         setSuccess(false);
         setShowConfirmDialog(false);
         setDocumentoGenerado(null);
-        setEsPrestamo(false);
-        setDiasPrestamo(7);
-        setFechaDevolucionEstimada('');
         onClose();
     };
 
     // Ventana de confirmación con documento
     const ConfirmacionDialog = () => (
         <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
-            <DialogTitle sx={{ bgcolor: esPrestamo ? '#F59E0B' : '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
+            <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    ¡{esPrestamo ? 'Préstamo' : 'Asignación'} Exitosa!
+                    ¡Asignación Exitosa!
                 </Typography>
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    El acta de <strong>{esPrestamo ? 'Préstamo' : 'Asignación'}</strong> se ha generado correctamente.
+                    El acta de <strong>Asignación</strong> se ha generado correctamente.
                 </Typography>
-                {esPrestamo && fechaDevolucionEstimada && (
-                    <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
-                        <Typography variant="body2">
-                            <strong>Fecha estimada de devolución:</strong> {new Date(fechaDevolucionEstimada).toLocaleDateString('es-CL')}
-                        </Typography>
-                    </Alert>
-                )}
                 <Box sx={{ 
                     mt: 2, 
                     p: 2, 
@@ -538,7 +513,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                     </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                    Se ha {esPrestamo ? 'prestado' : 'asignado'} el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                    Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
                 </Typography>
                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
                     <Button 
@@ -571,17 +546,15 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <CheckCircleIcon sx={{ color: '#4caf50' }} />
-                        <Typography variant="h6">¡{esPrestamo ? 'Préstamo' : 'Asignación'} Exitosa!</Typography>
+                        <Typography variant="h6">¡Asignación Exitosa!</Typography>
                     </Box>
                 </DialogTitle>
                 <DialogContent dividers>
                     <Box textAlign="center" py={2}>
                         <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>
-                            {esPrestamo ? 'Préstamo' : 'Asignación'} completada exitosamente
-                        </Typography>
+                        <Typography variant="h6" gutterBottom>Asignación completada exitosamente</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Se ha {esPrestamo ? 'prestado' : 'asignado'} el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                            Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
                         </Typography>
                         <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0 }}>Cerrar</Button>
                     </Box>
@@ -598,92 +571,20 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <AssignmentIcon sx={{ color: '#0A66C2' }} />
-                        <Typography variant="h6">Asignar / Prestar Producto con Firma Digital</Typography>
+                        <Typography variant="h6">Asignar Producto con Firma Digital</Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         Producto: <strong>{productoSeleccionado.nombre}</strong> | N° Serie: <strong>{productoSeleccionado.numero_serie || 'N/A'}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Estado actual: <strong style={{ color: productoSeleccionado.id_estado_equipo === 1 ? '#10B981' : '#F59E0B' }}>
+                            {productoSeleccionado.id_estado_equipo === 1 ? 'DISPONIBLE' : productoSeleccionado.id_estado_equipo === 2 ? 'ASIGNADO' : 'NO DISPONIBLE'}
+                        </strong>
                     </Typography>
                 </DialogTitle>
 
                 <DialogContent dividers>
                     <Stack spacing={3}>
-                        {/* 🔥 NUEVA SECCIÓN: TIPO DE ASIGNACIÓN (PRÉSTAMO) */}
-                        <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha('#3B82F6', 0.03) }}>
-                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                                Tipo de Asignación
-                            </Typography>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={esPrestamo}
-                                        onChange={(e) => setEsPrestamo(e.target.checked)}
-                                        color="primary"
-                                    />
-                                }
-                                label={
-                                    <Box>
-                                        <Typography variant="body2">
-                                            {esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {esPrestamo 
-                                                ? 'El producto será devuelto en una fecha determinada' 
-                                                : 'El producto queda asignado de forma permanente'}
-                                        </Typography>
-                                    </Box>
-                                }
-                            />
-                        </Paper>
-
-                        {/* 🔥 CAMPOS PARA PRÉSTAMO */}
-                        {esPrestamo && (
-                            <Paper variant="outlined" sx={{ p: 2, borderColor: '#F59E0B', bgcolor: alpha('#F59E0B', 0.02) }}>
-                                <Typography variant="subtitle2" fontWeight={600} gutterBottom color="#F59E0B">
-                                    <LocalOfferIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                                    Datos del Préstamo
-                                </Typography>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} md={6}>
-                                        <FormControl fullWidth size="small">
-                                            <InputLabel>Días del préstamo</InputLabel>
-                                            <Select
-                                                value={diasPrestamo}
-                                                onChange={(e) => setDiasPrestamo(Number(e.target.value))}
-                                                label="Días del préstamo"
-                                            >
-                                                <MenuItem value={1}>1 día</MenuItem>
-                                                <MenuItem value={3}>3 días</MenuItem>
-                                                <MenuItem value={5}>5 días</MenuItem>
-                                                <MenuItem value={7}>7 días (1 semana)</MenuItem>
-                                                <MenuItem value={14}>14 días (2 semanas)</MenuItem>
-                                                <MenuItem value={21}>21 días (3 semanas)</MenuItem>
-                                                <MenuItem value={30}>30 días (1 mes)</MenuItem>
-                                                <MenuItem value={60}>60 días (2 meses)</MenuItem>
-                                                <MenuItem value={90}>90 días (3 meses)</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                    <Grid item xs={12} md={6}>
-                                        <TextField
-                                            fullWidth
-                                            type="date"
-                                            label="Fecha estimada de devolución"
-                                            value={fechaDevolucionEstimada}
-                                            InputLabelProps={{ shrink: true }}
-                                            disabled
-                                            size="small"
-                                            helperText="Se calcula automáticamente según los días seleccionados"
-                                        />
-                                    </Grid>
-                                </Grid>
-                                <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
-                                    <Typography variant="caption">
-                                        ⚠️ Este es un PRÉSTAMO. El producto debe ser devuelto antes de la fecha estimada.
-                                    </Typography>
-                                </Alert>
-                            </Paper>
-                        )}
-
                         {/* Selección de Colaborador */}
                         <TextField
                             fullWidth
@@ -746,12 +647,12 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                         {/* Motivo y Observaciones */}
                         <TextField
                             fullWidth
-                            label="Motivo *"
+                            label="Motivo de asignación *"
                             value={motivo}
                             onChange={(e) => setMotivo(e.target.value)}
                             multiline
                             rows={2}
-                            placeholder={esPrestamo ? "Ej: Préstamo para reunión, Uso temporal, Evento, etc." : "Ej: Proyecto específico, Reemplazo de equipo, Asignación permanente, etc."}
+                            placeholder="Ej: Proyecto específico, Reemplazo de equipo, Uso temporal, etc."
                             required
                         />
                         
@@ -842,15 +743,16 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                                 onClick={handleSubmit}
                                 disabled={loading || !colaboradorSeleccionado || !motivo}
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
-                                sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2' }}
+                                sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
                             >
-                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Confirmar Asignación')}
+                                {loading ? 'Procesando...' : 'Confirmar Asignación'}
                             </Button>
                         </Box>
                     </Stack>
                 </DialogContent>
             </Dialog>
 
+            {/* Ventana de confirmación con documento */}
             <ConfirmacionDialog />
         </>
     );

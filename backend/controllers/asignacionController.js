@@ -3,7 +3,7 @@ const { getConnection, sql } = require('../config/database');
 
 const asignacionController = {
     /**
-     * Crear una nueva asignación (con soporte para préstamos)
+     * Crear una nueva asignación
      */
     crearAsignacion: async (req, res) => {
         let pool;
@@ -21,9 +21,7 @@ const asignacionController = {
                 fecha_asignacion,
                 usuario_responsable,
                 firma_trabajador,
-                firma_gerente,
-                es_prestamo,                    // NUEVO
-                fecha_devolucion_estimada       // NUEVO
+                firma_gerente
             } = req.body;
             
             // Validaciones
@@ -60,7 +58,7 @@ const asignacionController = {
                     throw new Error(`El producto no está disponible para asignación. Estado actual: ${producto.id_estado_equipo === 2 ? 'ASIGNADO' : 'NO DISPONIBLE'}`);
                 }
                 
-                // 2. Crear la asignación - CON CAMPOS DE PRÉSTAMO
+                // 2. Crear la asignación - INCLUIR id_estado_equipo
                 const asignacionResult = await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('colaborador_id', sql.Int, colaborador_id)
@@ -71,8 +69,6 @@ const asignacionController = {
                     .input('firma_trabajador', sql.NVarChar, firma_trabajador || null)
                     .input('firma_gerente', sql.NVarChar, firma_gerente || null)
                     .input('usuario_responsable', sql.NVarChar, usuario_responsable || 'Sistema')
-                    .input('es_prestamo', sql.Bit, es_prestamo || false)                           // NUEVO
-                    .input('fecha_devolucion_estimada', sql.Date, fecha_devolucion_estimada || null) // NUEVO
                     .query(`
                         INSERT INTO INV.asignaciones (
                             producto_id,
@@ -84,8 +80,6 @@ const asignacionController = {
                             firma_trabajador,
                             firma_gerente,
                             usuario_responsable,
-                            es_prestamo,
-                            fecha_devolucion_estimada,
                             fecha_creacion
                         )
                         OUTPUT INSERTED.*
@@ -99,8 +93,6 @@ const asignacionController = {
                             @firma_trabajador,
                             @firma_gerente,
                             @usuario_responsable,
-                            @es_prestamo,
-                            @fecha_devolucion_estimada,
                             GETDATE()
                         )
                     `);
@@ -120,12 +112,10 @@ const asignacionController = {
                 console.log(`✅ Producto ${producto_id} actualizado a ASIGNADO (2)`);
                 
                 // 4. Registrar en el historial
-                const tipoAsignacion = es_prestamo ? 'PRÉSTAMO' : 'ASIGNACION';
-                const fechaEstimadaTexto = es_prestamo && fecha_devolucion_estimada ? ` Fecha estimada devolución: ${fecha_devolucion_estimada}` : '';
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
-                    .input('accion', sql.NVarChar, tipoAsignacion)
-                    .input('detalles', sql.NVarChar, `${tipoAsignacion} de producto a colaborador ID: ${colaborador_id}. Motivo: ${motivo}${fechaEstimadaTexto}`)
+                    .input('accion', sql.NVarChar, 'ASIGNACION')
+                    .input('detalles', sql.NVarChar, `Producto asignado a colaborador ID: ${colaborador_id}. Motivo: ${motivo}`)
                     .input('fecha_hora', sql.DateTime, new Date())
                     .query(`
                         INSERT INTO INV.historial (
@@ -144,11 +134,11 @@ const asignacionController = {
                 
                 await transaction.commit();
                 
-                console.log(`✅ ${tipoAsignacion} creada exitosamente`);
+                console.log('✅ Asignación creada exitosamente');
                 
                 res.json({
                     success: true,
-                    message: `${tipoAsignacion} creada exitosamente`,
+                    message: 'Asignación creada exitosamente',
                     data: {
                         id: nuevaAsignacion.id,
                         producto_id: nuevaAsignacion.producto_id,
@@ -156,9 +146,7 @@ const asignacionController = {
                         fecha_asignacion: nuevaAsignacion.fecha_asignacion,
                         motivo: nuevaAsignacion.motivo,
                         firma_trabajador: nuevaAsignacion.firma_trabajador,
-                        firma_gerente: nuevaAsignacion.firma_gerente,
-                        es_prestamo: nuevaAsignacion.es_prestamo,
-                        fecha_devolucion_estimada: nuevaAsignacion.fecha_devolucion_estimada
+                        firma_gerente: nuevaAsignacion.firma_gerente
                     }
                 });
                 
@@ -177,7 +165,7 @@ const asignacionController = {
     },
     
     /**
-     * Obtener asignaciones activas (con datos de préstamo)
+     * Obtener asignaciones activas
      */
     getAsignacionesActivas: async (req, res) => {
         try {
@@ -198,8 +186,6 @@ const asignacionController = {
                     a.firma_trabajador,
                     a.firma_gerente,
                     a.usuario_responsable,
-                    a.es_prestamo,
-                    a.fecha_devolucion_estimada,
                     p.nombre as producto_nombre,
                     p.marca,
                     p.modelo,
@@ -260,7 +246,7 @@ const asignacionController = {
                 const asignacionResult = await transaction.request()
                     .input('id', sql.Int, id)
                     .query(`
-                        SELECT producto_id, colaborador_id, es_prestamo 
+                        SELECT producto_id, colaborador_id 
                         FROM INV.asignaciones 
                         WHERE id = @id AND fecha_devolucion IS NULL
                     `);
@@ -270,7 +256,6 @@ const asignacionController = {
                 }
                 
                 const asignacion = asignacionResult.recordset[0];
-                const esPrestamo = asignacion.es_prestamo === true;
                 
                 // 2. Actualizar la asignación con la devolución
                 await transaction.request()
@@ -304,11 +289,10 @@ const asignacionController = {
                 console.log(`✅ Producto ${asignacion.producto_id} actualizado a DISPONIBLE (1)`);
                 
                 // 4. Registrar en el historial
-                const tipoOperacion = esPrestamo ? 'DEVOLUCION_PRESTAMO' : 'DEVOLUCION';
                 await transaction.request()
                     .input('producto_id', sql.Int, asignacion.producto_id)
-                    .input('accion', sql.NVarChar, tipoOperacion)
-                    .input('detalles', sql.NVarChar, `${esPrestamo ? 'Devolución de préstamo' : 'Devolución de producto'}. Condición: ${condicion_entrega}. Observaciones: ${observaciones || 'Ninguna'}`)
+                    .input('accion', sql.NVarChar, 'DEVOLUCION')
+                    .input('detalles', sql.NVarChar, `Producto devuelto. Condición: ${condicion_entrega}. Observaciones: ${observaciones || 'Ninguna'}`)
                     .input('fecha_hora', sql.DateTime, new Date())
                     .query(`
                         INSERT INTO INV.historial (
@@ -327,11 +311,11 @@ const asignacionController = {
                 
                 await transaction.commit();
                 
-                console.log(`✅ ${esPrestamo ? 'Préstamo' : 'Asignación'} finalizado exitosamente`);
+                console.log('✅ Asignación finalizada exitosamente');
                 
                 res.json({
                     success: true,
-                    message: esPrestamo ? 'Devolución de préstamo registrada exitosamente' : 'Devolución registrada exitosamente'
+                    message: 'Devolución registrada exitosamente'
                 });
                 
             } catch (error) {
@@ -349,7 +333,7 @@ const asignacionController = {
     },
     
     /**
-     * Obtener todas las asignaciones (con datos de préstamo)
+     * Obtener todas las asignaciones
      */
     getAsignaciones: async (req, res) => {
         try {
@@ -372,8 +356,6 @@ const asignacionController = {
                     a.usuario_responsable,
                     a.observaciones_devolucion,
                     a.condicion_entrega,
-                    a.es_prestamo,
-                    a.fecha_devolucion_estimada,
                     p.nombre as producto_nombre,
                     p.marca,
                     p.modelo,
