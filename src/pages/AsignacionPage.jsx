@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA CON PRÉSTAMO
+// src/pages/AsignacionPage.jsx - VERSIÓN ACTUALIZADA CON TIPO DE ASIGNACIÓN VISIBLE
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -288,6 +288,8 @@ const AsignacionPage = () => {
                 const activas = asignaciones.filter(a => !a.fecha_devolucion);
                 setAsignacionesActivas(activas);
                 console.log(`✅ ${activas.length} asignaciones activas encontradas`);
+                console.log(`   📊 Préstamos activos: ${activas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length}`);
+                console.log(`   📊 Asignaciones activas: ${activas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length}`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
                 setAsignacionesActivas([]);
@@ -358,7 +360,7 @@ const AsignacionPage = () => {
             id: producto.id,
             nombre: producto.nombre,
             id_estado_equipo: producto.id_estado_equipo,
-            asignacionActiva: asignacionActiva ? `Encontrada (ID: ${asignacionActiva.id})` : 'No encontrada'
+            asignacionActiva: asignacionActiva ? `Encontrada (ID: ${asignacionActiva.id}, es_prestamo: ${asignacionActiva.es_prestamo})` : 'No encontrada'
         });
         
         if (!asignacionActiva) {
@@ -474,6 +476,20 @@ const AsignacionPage = () => {
                                     {loading ? <CircularProgress size={24} /> : asignacionesActivas.length}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Asignaciones Activas</Typography>
+                                {!loading && (
+                                    <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                                        <Chip 
+                                            label={`Préstamos: ${asignacionesActivas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length}`} 
+                                            size="small" 
+                                            sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, fontSize: '0.7rem' }}
+                                        />
+                                        <Chip 
+                                            label={`Asignaciones: ${asignacionesActivas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length}`} 
+                                            size="small" 
+                                            sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, fontSize: '0.7rem' }}
+                                        />
+                                    </Stack>
+                                )}
                             </CardContent>
                         </StyledCard>
                     </Grid>
@@ -557,7 +573,7 @@ const AsignacionPage = () => {
                                 <StyledTableCell>N° Serie</StyledTableCell>
                                 <StyledTableCell>Bodega</StyledTableCell>
                                 <StyledTableCell>Condición</StyledTableCell>
-                                <StyledTableCell>Estado</StyledTableCell>
+                                <StyledTableCell>Estado / Tipo</StyledTableCell>
                                 <StyledTableCell>Asignado a</StyledTableCell>
                                 <StyledTableCell align="center">Acciones</StyledTableCell>
                             </TableRow>
@@ -572,6 +588,7 @@ const AsignacionPage = () => {
                                     const asignacionActiva = getAsignacionActiva(producto.id);
                                     const estaDisponible = producto.id_estado_equipo === 1;
                                     const estaAsignado = producto.id_estado_equipo === 2;
+                                    const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
                                     
                                     return (
                                         <TableRow key={producto.id} hover>
@@ -613,20 +630,37 @@ const AsignacionPage = () => {
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                <Chip 
-                                                    label={getEstadoTexto(producto.id_estado_equipo)} 
-                                                    size="small"
-                                                    sx={{ 
-                                                        backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), 
-                                                        color: getEstadoColor(producto.id_estado_equipo),
-                                                        fontWeight: 500
-                                                    }}
-                                                />
+                                                <Stack direction="column" spacing={0.5}>
+                                                    <Chip 
+                                                        label={getEstadoTexto(producto.id_estado_equipo)} 
+                                                        size="small"
+                                                        sx={{ 
+                                                            backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), 
+                                                            color: getEstadoColor(producto.id_estado_equipo),
+                                                            fontWeight: 500,
+                                                            fontSize: '0.7rem'
+                                                        }}
+                                                    />
+                                                    {asignacionActiva && (
+                                                        <Chip 
+                                                            icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />}
+                                                            label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} 
+                                                            size="small"
+                                                            sx={{ 
+                                                                backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1),
+                                                                color: esPrestamo ? colors.warning : colors.primary,
+                                                                fontWeight: 600,
+                                                                fontSize: '0.65rem',
+                                                                height: 20
+                                                            }}
+                                                        />
+                                                    )}
+                                                </Stack>
                                             </TableCell>
                                             <TableCell>
                                                 {asignacionActiva ? (
                                                     <Box display="flex" alignItems="center" gap={1}>
-                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.success, 0.1) }}>
+                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}>
                                                             <PersonIcon sx={{ fontSize: 14 }} />
                                                         </Avatar>
                                                         <Typography variant="body2">
@@ -665,13 +699,13 @@ const AsignacionPage = () => {
                                                             </Tooltip>
                                                         </>
                                                     ) : estaAsignado ? (
-                                                        <Tooltip title="Recibir producto (devolución)">
+                                                        <Tooltip title={`Recibir ${esPrestamo ? 'préstamo' : 'producto'} (devolución)`}>
                                                             <Button
                                                                 variant="contained"
                                                                 size="small"
                                                                 startIcon={<ReceiptIcon />}
                                                                 onClick={() => handleRecibir(producto)}
-                                                                sx={{ bgcolor: colors.warning, borderRadius: 0 }}
+                                                                sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0 }}
                                                             >
                                                                 Recibir
                                                             </Button>
@@ -689,13 +723,13 @@ const AsignacionPage = () => {
                                                         </Tooltip>
                                                     )}
                                                     {asignacionActiva && (
-                                                        <Tooltip title="Ver detalles de asignación">
+                                                        <Tooltip title="Ver detalles">
                                                             <IconButton 
                                                                 size="small" 
                                                                 onClick={() => {
                                                                     setAsignacionSeleccionada(asignacionActiva);
                                                                 }} 
-                                                                sx={{ color: colors.info }}
+                                                                sx={{ color: esPrestamo ? colors.warning : colors.info }}
                                                             >
                                                                 <VisibilityIcon fontSize="small" />
                                                             </IconButton>

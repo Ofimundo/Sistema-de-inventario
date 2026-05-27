@@ -1,4 +1,4 @@
-// src/components/RecepcionDialog.jsx - VERSIÓN CORREGIDA
+// src/components/RecepcionDialog.jsx - VERSIÓN ACTUALIZADA CON SOPORTE PARA PRÉSTAMOS
 /* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
@@ -248,6 +248,9 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
     const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
 
+    // Detectar si es préstamo
+    const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
+
     const getFirmaTrabajadorFinal = () => {
         if (tipoFirmaTrabajador === 'dibujo') {
             return firmaTrabajadorDibujo || '';
@@ -268,7 +271,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             setDownloading(true);
             try {
                 const token = localStorage.getItem('token');
-                // ✅ Usar URL de producción
                 const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
                 console.log('📥 Descargando documento desde:', downloadUrl);
                 
@@ -304,21 +306,24 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
     };
 
     const handleSubmit = async () => {
-        if (!motivoDevolucion.trim()) {
-            setError('Debe ingresar el MOTIVO DE LA DEVOLUCIÓN (campo obligatorio)');
-            return;
-        }
-        
-        const firmaTrabajadorFinal = getFirmaTrabajadorFinal();
-        const firmaGerenteFinal = getFirmaGerenteFinal();
+        // Para préstamos, las firmas son opcionales
+        if (!esPrestamo) {
+            if (!motivoDevolucion.trim()) {
+                setError('Debe ingresar el MOTIVO DE LA DEVOLUCIÓN (campo obligatorio)');
+                return;
+            }
+            
+            const firmaTrabajadorFinal = getFirmaTrabajadorFinal();
+            const firmaGerenteFinal = getFirmaGerenteFinal();
 
-        if (!firmaTrabajadorFinal) {
-            setError('La firma del trabajador es requerida');
-            return;
-        }
-        if (!firmaGerenteFinal) {
-            setError('La firma del gerente general es requerida');
-            return;
+            if (!firmaTrabajadorFinal) {
+                setError('La firma del trabajador es requerida');
+                return;
+            }
+            if (!firmaGerenteFinal) {
+                setError('La firma del gerente general es requerida');
+                return;
+            }
         }
 
         setLoading(true);
@@ -327,11 +332,11 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         try {
             const payload = {
                 fecha_devolucion: new Date().toISOString(),
-                motivo_devolucion: motivoDevolucion,
+                motivo_devolucion: motivoDevolucion || (esPrestamo ? 'Devolución de préstamo' : ''),
                 observaciones_devolucion: observacionesDevolucion,
                 condicion_entrega: condicionEntrega,
-                firma_trabajador_devolucion: firmaTrabajadorFinal,
-                firma_gerente_devolucion: firmaGerenteFinal
+                firma_trabajador_devolucion: esPrestamo ? null : getFirmaTrabajadorFinal(),
+                firma_gerente_devolucion: esPrestamo ? null : getFirmaGerenteFinal()
             };
 
             console.log('📤 Enviando devolución:', payload);
@@ -341,17 +346,23 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             console.log('📥 Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                if (response.data.data?.documento) {
+                // Solo guardar documento si NO es préstamo y existe
+                if (!esPrestamo && response.data.data?.documento) {
                     setDocumentoGenerado(response.data.data.documento);
                 }
                 setShowConfirmDialog(true);
                 setSuccess(true);
                 
                 if (onSuccess) {
+                    const mensaje = esPrestamo 
+                        ? 'Devolución de préstamo registrada exitosamente (sin documento)'
+                        : 'Producto recibido correctamente';
+                    
                     onSuccess({
                         success: true,
-                        message: 'Producto recibido correctamente',
-                        documento: response.data.data?.documento
+                        message: mensaje,
+                        documento: response.data.data?.documento,
+                        es_prestamo: esPrestamo
                     });
                 }
             } else {
@@ -380,9 +391,68 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         onClose();
     };
 
-    // Ventana de confirmación con documento
-    const ConfirmacionDialog = () => (
-        <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
+    // Ventana de confirmación para PRÉSTAMOS (sin documento)
+    const ConfirmacionPrestamoDialog = () => (
+        <Dialog open={showConfirmDialog && esPrestamo && !documentoGenerado} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
+            <DialogTitle sx={{ bgcolor: '#F59E0B', color: 'white', textAlign: 'center', py: 2 }}>
+                <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
+                <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                    ¡Devolución de Préstamo Exitosa!
+                </Typography>
+            </DialogTitle>
+            <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="body1" gutterBottom>
+                    La devolución del <strong>PRÉSTAMO</strong> se ha registrado correctamente en el sistema.
+                </Typography>
+                
+                <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
+                    <Typography variant="body2">
+                        <strong>ℹ️ Nota:</strong> Este es un préstamo, por lo tanto no se ha generado un documento formal de recepción.
+                    </Typography>
+                </Alert>
+                
+                <Paper variant="outlined" sx={{ p: 2, mt: 2, textAlign: 'left', bgcolor: '#f9f9f9' }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                        <DescriptionIcon fontSize="small" sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                        Resumen de la Devolución:
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                        <strong>Motivo:</strong> {motivoDevolucion || 'Devolución de préstamo'}
+                    </Typography>
+                    {observacionesDevolucion && (
+                        <Typography variant="body2">
+                            <strong>Observaciones:</strong> {observacionesDevolucion}
+                        </Typography>
+                    )}
+                    <Typography variant="body2">
+                        <strong>Condición:</strong> {condicionEntrega}
+                    </Typography>
+                </Paper>
+                
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                    Producto: <strong>{producto?.nombre}</strong><br />
+                    Colaborador: <strong>{asignacion?.colaborador_nombre}</strong>
+                </Typography>
+                
+                <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+                    <Button 
+                        variant="contained" 
+                        onClick={() => {
+                            setShowConfirmDialog(false);
+                            handleClose();
+                        }}
+                        sx={{ borderRadius: 0, bgcolor: '#F59E0B' }}
+                    >
+                        Cerrar
+                    </Button>
+                </Box>
+            </DialogContent>
+        </Dialog>
+    );
+
+    // Ventana de confirmación para ASIGNACIONES (con documento)
+    const ConfirmacionAsignacionDialog = () => (
+        <Dialog open={showConfirmDialog && !esPrestamo && documentoGenerado !== null} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
@@ -458,7 +528,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         </Dialog>
     );
 
-    if (success && !showConfirmDialog) {
+    if (success && !showConfirmDialog && !esPrestamo) {
         return (
             <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
@@ -481,18 +551,61 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         );
     }
 
+    if (success && !showConfirmDialog && esPrestamo) {
+        return (
+            <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff3e0' }}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <CheckCircleIcon sx={{ color: '#F59E0B' }} />
+                        <Typography variant="h6">¡Devolución de Préstamo Exitosa!</Typography>
+                    </Box>
+                </DialogTitle>
+                <DialogContent dividers>
+                    <Box textAlign="center" py={2}>
+                        <CheckCircleIcon sx={{ fontSize: 60, color: '#F59E0B', mb: 2 }} />
+                        <Typography variant="h6" gutterBottom>Devolución de préstamo registrada</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Se ha registrado la devolución del producto <strong>{producto?.nombre}</strong>
+                        </Typography>
+                        <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
+                            Nota: Este es un préstamo, no se ha generado documento formal.
+                        </Alert>
+                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: '#F59E0B' }}>
+                            Cerrar
+                        </Button>
+                    </Box>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
     return (
         <>
             <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        <ReceiptIcon sx={{ color: '#F59E0B' }} />
-                        <Typography variant="h6" fontWeight={600}>
-                            Acta de Recepción / Devolución de Equipo
-                        </Typography>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <ReceiptIcon sx={{ color: esPrestamo ? '#F59E0B' : '#0A66C2' }} />
+                            <Typography variant="h6" fontWeight={600}>
+                                {esPrestamo ? 'Devolución de Préstamo' : 'Acta de Recepción / Devolución de Equipo'}
+                            </Typography>
+                            {esPrestamo && (
+                                <Chip 
+                                    label="PRÉSTAMO - SIN DOCUMENTO" 
+                                    size="small" 
+                                    sx={{ 
+                                        bgcolor: '#F59E0B', 
+                                        color: 'white',
+                                        fontWeight: 500,
+                                        fontSize: '0.7rem'
+                                    }} 
+                                />
+                            )}
+                        </Box>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         ID Asignación: <strong>{asignacion?.id}</strong> | Fecha: <strong>{new Date().toLocaleDateString('es-CL')}</strong>
+                        {esPrestamo && <Chip label="PRÉSTAMO" size="small" sx={{ ml: 1, bgcolor: '#F59E0B', color: 'white' }} />}
                     </Typography>
                 </DialogTitle>
 
@@ -556,7 +669,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                         <Box>
                             <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
                                 <WarningIcon fontSize="small" sx={{ color: '#F59E0B' }} />
-                                4. MOTIVO DE LA DEVOLUCIÓN *
+                                4. MOTIVO DE LA DEVOLUCIÓN {!esPrestamo && '*'}
                             </Typography>
                             <TextField
                                 fullWidth
@@ -564,9 +677,12 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                                 onChange={(e) => setMotivoDevolucion(e.target.value)}
                                 multiline
                                 rows={3}
-                                placeholder="Ej: Término de contrato, Cambio de equipo, Equipo defectuoso, Mantención preventiva, Actualización tecnológica, etc."
-                                helperText="Campo obligatorio. Explique detalladamente la razón de la devolución."
-                                error={!!error && !motivoDevolucion}
+                                placeholder={esPrestamo 
+                                    ? "Ej: Término del préstamo, Devolución anticipada, etc."
+                                    : "Ej: Término de contrato, Cambio de equipo, Equipo defectuoso, Mantención preventiva, Actualización tecnológica, etc."
+                                }
+                                helperText={esPrestamo ? "Campo opcional para préstamos" : "Campo obligatorio. Explique detalladamente la razón de la devolución."}
+                                error={!!error && !esPrestamo && !motivoDevolucion}
                                 sx={{ mt: 1 }}
                             />
                         </Box>
@@ -602,78 +718,91 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
 
                         <Divider />
 
-                        {/* Firmas */}
-                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                            Firmas de Conformidad
-                        </Typography>
+                        {/* Firmas - Solo para asignaciones normales */}
+                        {!esPrestamo && (
+                            <>
+                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                    Firmas de Conformidad
+                                </Typography>
 
-                        {/* Firma del Trabajador */}
-                        <Box>
-                            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
-                                Firma del Trabajador / Colaborador *
-                            </Typography>
-                            <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup
-                                    row
-                                    value={tipoFirmaTrabajador}
-                                    onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
-                                >
-                                    <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                    <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                                </RadioGroup>
-                            </FormControl>
-                            
-                            {tipoFirmaTrabajador === 'texto' ? (
-                                <FirmaTexto
-                                    onFirmaCapturada={setFirmaTrabajadorText}
-                                    valorInicial={firmaTrabajadorText}
-                                    required={true}
-                                    label="Firma del Trabajador"
-                                />
-                            ) : (
-                                <FirmaDibujada
-                                    onFirmaGuardada={setFirmaTrabajadorDibujo}
-                                    valorInicial={firmaTrabajadorDibujo}
-                                    width={450}
-                                    height={150}
-                                    label="Dibuje su firma aquí"
-                                />
-                            )}
-                        </Box>
+                                {/* Firma del Trabajador */}
+                                <Box>
+                                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                        Firma del Trabajador / Colaborador *
+                                    </Typography>
+                                    <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                        <RadioGroup
+                                            row
+                                            value={tipoFirmaTrabajador}
+                                            onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
+                                        >
+                                            <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                            <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                        </RadioGroup>
+                                    </FormControl>
+                                    
+                                    {tipoFirmaTrabajador === 'texto' ? (
+                                        <FirmaTexto
+                                            onFirmaCapturada={setFirmaTrabajadorText}
+                                            valorInicial={firmaTrabajadorText}
+                                            required={true}
+                                            label="Firma del Trabajador"
+                                        />
+                                    ) : (
+                                        <FirmaDibujada
+                                            onFirmaGuardada={setFirmaTrabajadorDibujo}
+                                            valorInicial={firmaTrabajadorDibujo}
+                                            width={450}
+                                            height={150}
+                                            label="Dibuje su firma aquí"
+                                        />
+                                    )}
+                                </Box>
 
-                        {/* Firma del Gerente */}
-                        <Box>
-                            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
-                                Firma del Gerente General / Autorizante *
-                            </Typography>
-                            <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup
-                                    row
-                                    value={tipoFirmaGerente}
-                                    onChange={(e) => setTipoFirmaGerente(e.target.value)}
-                                >
-                                    <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                    <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                                </RadioGroup>
-                            </FormControl>
-                            
-                            {tipoFirmaGerente === 'texto' ? (
-                                <FirmaTexto
-                                    onFirmaCapturada={setFirmaGerenteText}
-                                    valorInicial={firmaGerenteText}
-                                    required={true}
-                                    label="Firma del Gerente"
-                                />
-                            ) : (
-                                <FirmaDibujada
-                                    onFirmaGuardada={setFirmaGerenteDibujo}
-                                    valorInicial={firmaGerenteDibujo}
-                                    width={450}
-                                    height={150}
-                                    label="Dibuje su firma aquí"
-                                />
-                            )}
-                        </Box>
+                                {/* Firma del Gerente */}
+                                <Box>
+                                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                        Firma del Gerente General / Autorizante *
+                                    </Typography>
+                                    <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                        <RadioGroup
+                                            row
+                                            value={tipoFirmaGerente}
+                                            onChange={(e) => setTipoFirmaGerente(e.target.value)}
+                                        >
+                                            <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                            <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                        </RadioGroup>
+                                    </FormControl>
+                                    
+                                    {tipoFirmaGerente === 'texto' ? (
+                                        <FirmaTexto
+                                            onFirmaCapturada={setFirmaGerenteText}
+                                            valorInicial={firmaGerenteText}
+                                            required={true}
+                                            label="Firma del Gerente"
+                                        />
+                                    ) : (
+                                        <FirmaDibujada
+                                            onFirmaGuardada={setFirmaGerenteDibujo}
+                                            valorInicial={firmaGerenteDibujo}
+                                            width={450}
+                                            height={150}
+                                            label="Dibuje su firma aquí"
+                                        />
+                                    )}
+                                </Box>
+                            </>
+                        )}
+
+                        {esPrestamo && (
+                            <Alert severity="info" sx={{ borderRadius: 1 }}>
+                                <Typography variant="body2">
+                                    <strong>⚠️ Préstamo:</strong> No se requieren firmas para la devolución de un préstamo. 
+                                    Solo se registrará la devolución en el sistema sin generar documento formal.
+                                </Typography>
+                            </Alert>
+                        )}
 
                         {error && (
                             <Alert severity="error" sx={{ borderRadius: 1 }}>
@@ -688,18 +817,19 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                             <Button
                                 variant="contained"
                                 onClick={handleSubmit}
-                                disabled={loading || !motivoDevolucion.trim() || !getFirmaTrabajadorFinal() || !getFirmaGerenteFinal()}
+                                disabled={loading || (!esPrestamo && (!motivoDevolucion.trim() || !getFirmaTrabajadorFinal() || !getFirmaGerenteFinal()))}
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
-                                sx={{ borderRadius: 0, bgcolor: '#F59E0B', '&:hover': { bgcolor: '#d97706' } }}
+                                sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2', '&:hover': { bgcolor: esPrestamo ? '#d97706' : '#0050a0' } }}
                             >
-                                {loading ? 'Procesando...' : 'Confirmar Recepción'}
+                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Devolución' : 'Confirmar Recepción')}
                             </Button>
                         </Box>
                     </Stack>
                 </DialogContent>
             </Dialog>
 
-            <ConfirmacionDialog />
+            <ConfirmacionPrestamoDialog />
+            <ConfirmacionAsignacionDialog />
         </>
     );
 };
