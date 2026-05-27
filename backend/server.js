@@ -116,7 +116,7 @@ const estadosRoutes = require('./routes/estadosRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
 const usuariosRoutes = require('./routes/usuarios');
 const colaboradorRoutes = require('./routes/colaboradorRoutes');
-
+const colaboradorController = require('./controllers/colaboradorController');
 // ============================================
 // RUTAS DE AUTENTICACIÓN (públicas - SIN authenticateToken)
 // ============================================

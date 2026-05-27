@@ -6,78 +6,41 @@ const { authenticateToken } = require('../middleware/auth');
 
 console.log('🔧 Inicializando colaboradorRoutes.js...');
 
-// GET - Obtener todos los colaboradores
-router.get('/', authenticateToken, async (req, res) => {
+// ============================================
+// NUEVA RUTA - Obtener empresas únicas (DEBE IR ANTES DE /:id)
+// ============================================
+router.get('/empresas', authenticateToken, async (req, res) => {
     try {
-        console.log('📥 GET /api/colaboradores');
+        console.log('📥 GET /api/colaboradores/empresas');
         
-        const { estado, departamento, search } = req.query;
         const pool = await getConnection();
         
-        // CORREGIDO: Usar la tabla correcta 'asignaciones' en lugar de 'producto_uso'
-        let query = `
-            SELECT 
-                c.id, 
-                c.nombre, 
-                c.email, 
-                c.rut, 
-                c.cargo, 
-                c.departamento, 
-                c.telefono, 
-                c.direccion, 
-                c.estado,
-                c.fecha_ingreso,
-                c.fecha_nacimiento,
-                ISNULL((
-                    SELECT COUNT(*) 
-                    FROM INV.asignaciones a 
-                    WHERE a.colaborador_id = c.id 
-                      AND a.fecha_devolucion IS NULL
-                ), 0) as asignaciones_activas,
-                ISNULL((
-                    SELECT COUNT(*) 
-                    FROM INV.asignaciones a 
-                    WHERE a.colaborador_id = c.id
-                ), 0) as total_asignaciones
-            FROM INV.colaboradores c
-            WHERE 1=1
-        `;
+        const result = await pool.request()
+            .query(`
+                SELECT DISTINCT empresa as nombre
+                FROM INV.colaboradores
+                WHERE empresa IS NOT NULL AND empresa != ''
+                ORDER BY empresa
+            `);
         
-        const params = [];
-        
-        if (estado) {
-            query += ` AND c.estado = @estado`;
-            params.push({ name: 'estado', value: estado });
+        // Si no hay empresas en la tabla, devolver las opciones por defecto
+        const empresas = result.recordset.map(r => r.nombre);
+        if (empresas.length === 0) {
+            return res.json({ 
+                success: true, 
+                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'] 
+            });
         }
         
-        if (departamento) {
-            query += ` AND c.departamento = @departamento`;
-            params.push({ name: 'departamento', value: departamento });
-        }
-        
-        if (search) {
-            query += ` AND (c.nombre LIKE @search OR c.email LIKE @search OR c.rut LIKE @search)`;
-            params.push({ name: 'search', value: `%${search}%` });
-        }
-        
-        query += ` ORDER BY c.nombre`;
-        
-        let request = pool.request();
-        params.forEach(p => request = request.input(p.name, p.value));
-        
-        const result = await request.query(query);
-        
-        // Verificar Adan Moris
-        const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
-        if (adan) {
-            console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
-        }
-        
-        res.json({ success: true, data: result.recordset });
+        res.json({ success: true, data: empresas });
         
     } catch (error) {
-        console.error('❌ Error en GET /colaboradores:', error);
-        res.status(500).json({ success: false, message: error.message });
+        console.error('❌ Error en GET /colaboradores/empresas:', error);
+        // Devolver opciones por defecto en caso de error
+        res.json({ 
+            success: true, 
+            data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'] 
+        });
     }
 });
 
@@ -88,7 +51,6 @@ router.get('/stats', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
-        // CORREGIDO: Usar la tabla correcta 'asignaciones'
         const result = await pool.request()
             .query(`
                 SELECT 
@@ -131,7 +93,84 @@ router.get('/departamentos', authenticateToken, async (req, res) => {
     }
 });
 
-// GET - Obtener colaborador por ID
+// GET - Obtener todos los colaboradores (CON EMPRESA)
+router.get('/', authenticateToken, async (req, res) => {
+    try {
+        console.log('📥 GET /api/colaboradores');
+        
+        const { estado, departamento, empresa, search } = req.query;
+        const pool = await getConnection();
+        
+        let query = `
+            SELECT 
+                c.id, 
+                c.nombre, 
+                c.email, 
+                c.rut, 
+                c.cargo, 
+                c.departamento, 
+                c.empresa,
+                c.telefono, 
+                c.direccion, 
+                c.estado,
+                c.fecha_ingreso,
+                c.fecha_nacimiento,
+                ISNULL((
+                    SELECT COUNT(*) 
+                    FROM INV.asignaciones a 
+                    WHERE a.colaborador_id = c.id 
+                      AND a.fecha_devolucion IS NULL
+                ), 0) as asignaciones_activas,
+                ISNULL((
+                    SELECT COUNT(*) 
+                    FROM INV.asignaciones a 
+                    WHERE a.colaborador_id = c.id
+                ), 0) as total_asignaciones
+            FROM INV.colaboradores c
+            WHERE 1=1
+        `;
+        
+        const request = pool.request();
+        
+        if (estado) {
+            query += ` AND c.estado = @estado`;
+            request.input('estado', sql.NVarChar, estado);
+        }
+        
+        if (departamento) {
+            query += ` AND c.departamento = @departamento`;
+            request.input('departamento', sql.NVarChar, departamento);
+        }
+        
+        if (empresa) {
+            query += ` AND c.empresa = @empresa`;
+            request.input('empresa', sql.NVarChar, empresa);
+        }
+        
+        if (search) {
+            query += ` AND (c.nombre LIKE @search OR c.email LIKE @search OR c.rut LIKE @search)`;
+            request.input('search', sql.NVarChar, `%${search}%`);
+        }
+        
+        query += ` ORDER BY c.nombre`;
+        
+        const result = await request.query(query);
+        
+        // Verificar Adan Moris
+        const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
+        if (adan) {
+            console.log(`🔴 ADAN MORIS: Empresa=${adan.empresa}, Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+        }
+        
+        res.json({ success: true, data: result.recordset });
+        
+    } catch (error) {
+        console.error('❌ Error en GET /colaboradores:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Obtener colaborador por ID (CON EMPRESA)
 router.get('/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -144,12 +183,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
-        // CORREGIDO: Usar la tabla correcta 'asignaciones'
         const result = await pool.request()
             .input('id', sql.Int, idNum)
             .query(`
                 SELECT 
-                    c.id, c.nombre, c.email, c.rut, c.cargo, c.departamento,
+                    c.id, c.nombre, c.email, c.rut, c.cargo, c.departamento, c.empresa,
                     c.telefono, c.direccion, c.estado, c.fecha_ingreso, c.fecha_nacimiento,
                     ISNULL((
                         SELECT COUNT(*) 
@@ -177,7 +215,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// GET - Obtener productos asignados a un colaborador (CORREGIDO)
+// GET - Obtener productos asignados a un colaborador
 router.get('/:id/productos-asignados', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -190,7 +228,6 @@ router.get('/:id/productos-asignados', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
-        // CORREGIDO: Usar la tabla correcta 'asignaciones' y 'productos'
         const result = await pool.request()
             .input('colaborador_id', sql.Int, idNum)
             .query(`
@@ -226,10 +263,8 @@ router.get('/:id/productos-asignados', authenticateToken, async (req, res) => {
     }
 });
 
-// Mantener la ruta antigua por compatibilidad (redirige a la nueva)
+// Mantener la ruta antigua por compatibilidad
 router.get('/:id/productos', authenticateToken, async (req, res) => {
-    req.params.id = req.params.id;
-    // Redirigir a la ruta correcta
     const { id } = req.params;
     const idNum = parseInt(id);
     if (isNaN(idNum)) {
@@ -268,13 +303,13 @@ router.get('/:id/productos', authenticateToken, async (req, res) => {
     }
 });
 
-// POST - Crear colaborador
+// POST - Crear colaborador (CON EMPRESA)
 router.post('/', authenticateToken, async (req, res) => {
     try {
         console.log('📥 POST /api/colaboradores');
         console.log('Body:', req.body);
         
-        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento } = req.body;
+        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, empresa } = req.body;
         
         if (!nombre || !email) {
             return res.status(400).json({ success: false, message: 'Nombre y email son requeridos' });
@@ -291,15 +326,16 @@ router.post('/', authenticateToken, async (req, res) => {
             .input('telefono', sql.NVarChar, telefono || '')
             .input('direccion', sql.NVarChar, direccion || '')
             .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
+            .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
             .input('estado', sql.NVarChar, 'ACTIVO')
             .input('fecha_ingreso', sql.Date, new Date())
             .query(`
                 INSERT INTO INV.colaboradores (
                     nombre, email, rut, cargo, departamento, telefono, 
-                    direccion, fecha_nacimiento, estado, fecha_ingreso
+                    direccion, fecha_nacimiento, empresa, estado, fecha_ingreso
                 ) VALUES (
                     @nombre, @email, @rut, @cargo, @departamento, @telefono,
-                    @direccion, @fecha_nacimiento, @estado, @fecha_ingreso
+                    @direccion, @fecha_nacimiento, @empresa, @estado, @fecha_ingreso
                 );
                 SELECT SCOPE_IDENTITY() as id;
             `);
@@ -312,7 +348,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
-// PUT - Actualizar colaborador
+// PUT - Actualizar colaborador (CON EMPRESA)
 router.put('/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -323,7 +359,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, message: 'ID inválido' });
         }
         
-        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, estado } = req.body;
+        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, estado, empresa } = req.body;
         
         const pool = await getConnection();
         
@@ -338,11 +374,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
             .input('direccion', sql.NVarChar, direccion || '')
             .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
             .input('estado', sql.NVarChar, estado || 'ACTIVO')
+            .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
             .query(`
                 UPDATE INV.colaboradores SET
                     nombre = @nombre, email = @email, rut = @rut, cargo = @cargo,
                     departamento = @departamento, telefono = @telefono, direccion = @direccion,
-                    fecha_nacimiento = @fecha_nacimiento, estado = @estado
+                    fecha_nacimiento = @fecha_nacimiento, estado = @estado, empresa = @empresa
                 WHERE id = @id
             `);
         
@@ -367,7 +404,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         
         const pool = await getConnection();
         
-        // Verificar si tiene productos asignados activos usando la tabla correcta
+        // Verificar si tiene productos asignados activos
         const productosAsignados = await pool.request()
             .input('colaborador_id', sql.Int, idNum)
             .query(`
