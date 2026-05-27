@@ -1,4 +1,4 @@
-// backend/server.js - VERSIÓN CORREGIDA
+// backend/server.js - VERSIÓN COMPLETA CORREGIDA
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -19,6 +19,7 @@ const corsOptions = {
         'http://127.0.0.1:5500',
         'https://main.d23vw4mszg17gc.amplifyapp.com',
         'https://*.amplifyapp.com',
+        'https://sistema-inventario-backend-p3xg.onrender.com',
         'https://sistema-inventario-backend-p3xg.onrender.com'
     ],
     credentials: true,
@@ -84,6 +85,22 @@ app.get('/api/test', (req, res) => {
 
 app.get('/api/health', (req, res) => {
     res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString(), database: 'connected' });
+});
+
+// 🔥 RUTA BASE PARA /api - CORREGIDO
+app.get('/api', (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'API funcionando correctamente',
+        endpoints: {
+            productos: '/api/productos',
+            bodegas: '/api/bodegas',
+            colaboradores: '/api/colaboradores',
+            asignaciones: '/api/asignaciones',
+            auth: '/api/auth',
+            export: '/api/export'
+        }
+    });
 });
 
 // ============================================

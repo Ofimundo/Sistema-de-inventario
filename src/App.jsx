@@ -24,6 +24,7 @@ const AsignacionPage = lazy(() => import('./pages/AsignacionPage'));
 const ColaboradoresPage = lazy(() => import('./pages/ColaboradoresPage'));
 const StockPage = lazy(() => import('./pages/StockPage'));
 
+
 // Componente para mostrar mientras carga
 const LoadingScreen = () => (
     <Box sx={{ 
