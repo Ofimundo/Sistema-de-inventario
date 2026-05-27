@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA ACTUALIZADA CON PRÉSTAMOS
+// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CORREGIDA
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -172,7 +172,6 @@ const productosServiceLocal = {
             
             if (searchTerm) params.append('search', searchTerm);
             if (filters.bodega_id) params.append('bodega_id', filters.bodega_id);
-            if (filters.tipo_asignacion) params.append('tipo_asignacion', filters.tipo_asignacion);
             
             if (params.toString()) url += `?${params.toString()}`;
             
@@ -208,10 +207,9 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     
-    // NUEVO: Estado para tipo de asignación (Préstamo o Asignación permanente)
     const [esPrestamo, setEsPrestamo] = useState(false);
     const [fechaDevolucionEstimada, setFechaDevolucionEstimada] = useState('');
-    const [diasPrestamo, setDiasPrestamo] = useState(7); // Por defecto 7 días
+    const [diasPrestamo, setDiasPrestamo] = useState(7);
 
     useEffect(() => {
         if (open) {
@@ -228,7 +226,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         }
     }, [open]);
 
-    // Calcular fecha de devolución estimada cuando cambian días
     useEffect(() => {
         if (esPrestamo && diasPrestamo > 0) {
             const fecha = new Date();
@@ -320,186 +317,76 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
 
             <DialogContent dividers>
                 <Stack spacing={3}>
-                    {/* NUEVO: Tipo de Asignación */}
                     <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha(colors.info, 0.03) }}>
-                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                            Tipo de Asignación
-                        </Typography>
+                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>Tipo de Asignación</Typography>
                         <FormControlLabel
-                            control={
-                                <Switch
-                                    checked={esPrestamo}
-                                    onChange={(e) => setEsPrestamo(e.target.checked)}
-                                    color="primary"
-                                />
-                            }
+                            control={<Switch checked={esPrestamo} onChange={(e) => setEsPrestamo(e.target.checked)} color="primary" />}
                             label={
                                 <Box>
-                                    <Typography variant="body2">
-                                        {esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {esPrestamo 
-                                            ? 'El producto será devuelto en una fecha determinada' 
-                                            : 'El producto queda asignado de forma permanente'}
-                                    </Typography>
+                                    <Typography variant="body2">{esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{esPrestamo ? 'El producto será devuelto en una fecha determinada' : 'El producto queda asignado de forma permanente'}</Typography>
                                 </Box>
                             }
                         />
                     </Paper>
 
-                    {/* Campos para Préstamo */}
                     {esPrestamo && (
                         <Paper variant="outlined" sx={{ p: 2, borderColor: colors.warning, bgcolor: alpha(colors.warning, 0.02) }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom color={colors.warning}>
-                                <LocalOfferIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                                Datos del Préstamo
+                                <LocalOfferIcon sx={{ fontSize: 16, mr: 0.5 }} /> Datos del Préstamo
                             </Typography>
                             <Grid container spacing={2}>
                                 <Grid item xs={12} md={6}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel>Días del préstamo</InputLabel>
-                                        <Select
-                                            value={diasPrestamo}
-                                            onChange={(e) => setDiasPrestamo(Number(e.target.value))}
-                                            label="Días del préstamo"
-                                        >
-                                            <MenuItem value={1}>1 día</MenuItem>
-                                            <MenuItem value={3}>3 días</MenuItem>
-                                            <MenuItem value={5}>5 días</MenuItem>
-                                            <MenuItem value={7}>7 días (1 semana)</MenuItem>
-                                            <MenuItem value={14}>14 días (2 semanas)</MenuItem>
+                                        <Select value={diasPrestamo} onChange={(e) => setDiasPrestamo(Number(e.target.value))} label="Días del préstamo">
+                                            <MenuItem value={1}>1 día</MenuItem><MenuItem value={3}>3 días</MenuItem><MenuItem value={5}>5 días</MenuItem>
+                                            <MenuItem value={7}>7 días (1 semana)</MenuItem><MenuItem value={14}>14 días (2 semanas)</MenuItem>
                                             <MenuItem value={21}>21 días (3 semanas)</MenuItem>
-                                            <MenuItem value={30}>30 días (1 mes)</MenuItem>
-                                            <MenuItem value={60}>60 días (2 meses)</MenuItem>
-                                            <MenuItem value={90}>90 días (3 meses)</MenuItem>
+                                            <MenuItem value={30}>30 días (1 mes)</MenuItem><MenuItem value={60}>60 días (2 meses)</MenuItem><MenuItem value={90}>90 días (3 meses)</MenuItem>
                                         </Select>
                                     </FormControl>
                                 </Grid>
                                 <Grid item xs={12} md={6}>
-                                    <TextField
-                                        fullWidth
-                                        type="date"
-                                        label="Fecha estimada de devolución"
-                                        value={fechaDevolucionEstimada}
-                                        InputLabelProps={{ shrink: true }}
-                                        disabled
-                                        size="small"
-                                        helperText="Se calcula automáticamente según los días seleccionados"
-                                    />
+                                    <TextField fullWidth type="date" label="Fecha estimada de devolución" value={fechaDevolucionEstimada} InputLabelProps={{ shrink: true }} disabled size="small" helperText="Se calcula automáticamente según los días seleccionados" />
                                 </Grid>
                             </Grid>
-                            <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
-                                <Typography variant="caption">
-                                    ⚠️ Este es un PRÉSTAMO. El producto debe ser devuelto antes de la fecha estimada.
-                                </Typography>
-                            </Alert>
+                            <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}><Typography variant="caption">⚠️ Este es un PRÉSTAMO. El producto debe ser devuelto antes de la fecha estimada.</Typography></Alert>
                         </Paper>
                     )}
 
-                    {/* Búsqueda de colaborador */}
-                    <TextField
-                        fullWidth
-                        placeholder="Buscar colaborador por nombre, RUT o email..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        size="small"
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><PersonIcon sx={{ color: '#6B7280' }} /></InputAdornment>,
-                        }}
-                    />
+                    <TextField fullWidth placeholder="Buscar colaborador por nombre, RUT o email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} size="small" InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon sx={{ color: '#6B7280' }} /></InputAdornment> }} />
 
                     <Paper variant="outlined" sx={{ maxHeight: 250, overflow: 'auto' }}>
                         {colaboradoresFiltrados.length === 0 ? (
-                            <Box sx={{ p: 3, textAlign: 'center' }}>
-                                <Typography color="text.secondary">
-                                    {searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores registrados'}
-                                </Typography>
-                            </Box>
+                            <Box sx={{ p: 3, textAlign: 'center' }}><Typography color="text.secondary">{searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores registrados'}</Typography></Box>
                         ) : (
                             colaboradoresFiltrados.map((col) => (
-                                <Box
-                                    key={col.id}
-                                    sx={{
-                                        p: 1.5,
-                                        borderBottom: `1px solid ${colors.border}`,
-                                        cursor: 'pointer',
-                                        backgroundColor: selectedColaborador === col.id ? alpha(colors.primary, 0.05) : 'transparent',
-                                        '&:hover': { backgroundColor: alpha(colors.primary, 0.03) },
-                                    }}
-                                    onClick={() => setSelectedColaborador(col.id)}
-                                >
+                                <Box key={col.id} sx={{ p: 1.5, borderBottom: `1px solid ${colors.border}`, cursor: 'pointer', backgroundColor: selectedColaborador === col.id ? alpha(colors.primary, 0.05) : 'transparent', '&:hover': { backgroundColor: alpha(colors.primary, 0.03) } }} onClick={() => setSelectedColaborador(col.id)}>
                                     <Box display="flex" alignItems="center" gap={2}>
-                                        <Avatar sx={{ width: 36, height: 36, bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>
-                                            {col.nombre?.charAt(0) || '?'}
-                                        </Avatar>
+                                        <Avatar sx={{ width: 36, height: 36, bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>{col.nombre?.charAt(0) || '?'}</Avatar>
                                         <Box flex={1}>
-                                            <Typography variant="body2" fontWeight={500}>
-                                                {col.nombre}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}
-                                            </Typography>
-                                            <Typography variant="caption" display="block" color="text.secondary">
-                                                {col.email} {col.rut && `• ${col.rut}`}
-                                            </Typography>
+                                            <Typography variant="body2" fontWeight={500}>{col.nombre}</Typography>
+                                            <Typography variant="caption" color="text.secondary">{col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}</Typography>
+                                            <Typography variant="caption" display="block" color="text.secondary">{col.email} {col.rut && `• ${col.rut}`}</Typography>
                                         </Box>
-                                        {selectedColaborador === col.id && (
-                                            <CheckCircleIcon sx={{ color: colors.success }} />
-                                        )}
+                                        {selectedColaborador === col.id && <CheckCircleIcon sx={{ color: colors.success }} />}
                                     </Box>
                                 </Box>
                             ))
                         )}
                     </Paper>
 
-                    <TextField
-                        fullWidth
-                        label="Motivo de la asignación / préstamo *"
-                        value={motivo}
-                        onChange={(e) => setMotivo(e.target.value)}
-                        placeholder={esPrestamo ? "Ej: Préstamo para reunión, Uso temporal, Evento, etc." : "Ej: Asignación permanente por cargo, Reemplazo de equipo, etc."}
-                        multiline
-                        rows={2}
-                        size="small"
-                    />
-
-                    <TextField
-                        fullWidth
-                        type="date"
-                        label="Fecha de asignación"
-                        value={fechaAsignacion}
-                        onChange={(e) => setFechaAsignacion(e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-
-                    <TextField
-                        fullWidth
-                        label="Observaciones adicionales"
-                        value={observaciones}
-                        onChange={(e) => setObservaciones(e.target.value)}
-                        placeholder="Detalles adicionales sobre la asignación..."
-                        multiline
-                        rows={2}
-                        size="small"
-                    />
-
+                    <TextField fullWidth label="Motivo de la asignación / préstamo *" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={esPrestamo ? "Ej: Préstamo para reunión..." : "Ej: Asignación permanente..."} multiline rows={2} size="small" />
+                    <TextField fullWidth type="date" label="Fecha de asignación" value={fechaAsignacion} onChange={(e) => setFechaAsignacion(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                    <TextField fullWidth label="Observaciones adicionales" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles adicionales sobre la asignación..." multiline rows={2} size="small" />
                     {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
                 </Stack>
             </DialogContent>
 
             <DialogActions sx={{ p: 2, gap: 1 }}>
-                <Button onClick={onClose} disabled={loading} variant="outlined">
-                    Cancelar
-                </Button>
-                <Button
-                    onClick={handleSubmit}
-                    variant="contained"
-                    disabled={loading || !selectedColaborador}
-                    startIcon={loading ? <CircularProgress size={20} /> : <AssignmentIcon />}
-                    sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}
-                >
+                <Button onClick={onClose} disabled={loading} variant="outlined">Cancelar</Button>
+                <Button onClick={handleSubmit} variant="contained" disabled={loading || !selectedColaborador} startIcon={loading ? <CircularProgress size={20} /> : <AssignmentIcon />} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}>
                     {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Asignar Producto')}
                 </Button>
             </DialogActions>
@@ -555,7 +442,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
 
     if (!producto) return null;
 
-    // Determinar si es préstamo
     const esPrestamo = asignacion?.es_prestamo === true;
     const fechaEstimada = asignacion?.fecha_devolucion_estimada;
     const estaVencido = fechaEstimada && new Date(fechaEstimada) < new Date();
@@ -565,26 +451,18 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Box display="flex" alignItems="center" gap={1}>
                     <ReceiptIcon sx={{ color: colors.warning }} />
-                    <Typography variant="h6">
-                        {esPrestamo ? 'Devolución de Préstamo' : 'Recepción de Producto'}
-                    </Typography>
+                    <Typography variant="h6">{esPrestamo ? 'Devolución de Préstamo' : 'Recepción de Producto'}</Typography>
                 </Box>
             </DialogTitle>
 
             <DialogContent dividers>
                 <Stack spacing={2}>
                     <Box sx={{ p: 1.5, bgcolor: alpha(colors.primary, 0.05), borderRadius: 1 }}>
-                        <Typography variant="body2">
-                            <strong>Producto:</strong> {producto.nombre}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            <strong>Serie:</strong> {producto.numero_serie || 'N/A'}
-                        </Typography>
+                        <Typography variant="body2"><strong>Producto:</strong> {producto.nombre}</Typography>
+                        <Typography variant="body2" color="text.secondary"><strong>Serie:</strong> {producto.numero_serie || 'N/A'}</Typography>
                         {asignacion && (
                             <>
-                                <Typography variant="body2" color="text.secondary">
-                                    <strong>Colaborador:</strong> {asignacion.colaborador_nombre}
-                                </Typography>
+                                <Typography variant="body2" color="text.secondary"><strong>Colaborador:</strong> {asignacion.colaborador_nombre}</Typography>
                                 {esPrestamo && fechaEstimada && (
                                     <Typography variant="body2" color={estaVencido ? colors.error : colors.warning}>
                                         <strong>Fecha estimada de devolución:</strong> {format(new Date(fechaEstimada), 'dd/MM/yyyy')}
@@ -595,37 +473,15 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                         )}
                     </Box>
 
-                    <TextField
-                        fullWidth
-                        type="date"
-                        label="Fecha de devolución"
-                        value={fechaDevolucion}
-                        onChange={(e) => setFechaDevolucion(e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-
+                    <TextField fullWidth type="date" label="Fecha de devolución" value={fechaDevolucion} onChange={(e) => setFechaDevolucion(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
                     <FormControl fullWidth size="small">
                         <InputLabel>Condición del producto</InputLabel>
                         <Select value={condicion} onChange={(e) => setCondicion(e.target.value)} label="Condición del producto">
-                            <MenuItem value="BUENO">Bueno</MenuItem>
-                            <MenuItem value="REGULAR">Regular</MenuItem>
-                            <MenuItem value="MALO">Malo</MenuItem>
-                            <MenuItem value="DAÑADO">Dañado</MenuItem>
+                            <MenuItem value="BUENO">Bueno</MenuItem><MenuItem value="REGULAR">Regular</MenuItem>
+                            <MenuItem value="MALO">Malo</MenuItem><MenuItem value="DAÑADO">Dañado</MenuItem>
                         </Select>
                     </FormControl>
-
-                    <TextField
-                        fullWidth
-                        label="Observaciones de la devolución"
-                        value={observaciones}
-                        onChange={(e) => setObservaciones(e.target.value)}
-                        placeholder="Detalles sobre el estado del producto, etc."
-                        multiline
-                        rows={3}
-                        size="small"
-                    />
-
+                    <TextField fullWidth label="Observaciones de la devolución" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles sobre el estado del producto..." multiline rows={3} size="small" />
                     {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
                 </Stack>
             </DialogContent>
@@ -704,7 +560,7 @@ const AsignacionPage = () => {
             const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
             setProductos(productosFiltrados);
             
-            // Cargar asignaciones activas con información de préstamos y colaboradores
+            // Cargar asignaciones activas
             try {
                 const asignacionesResponse = await api.get('/asignaciones/activas');
                 
@@ -717,20 +573,21 @@ const AsignacionPage = () => {
                     }
                 }
                 
-                // Log para verificar que los colaboradores llegan
-                console.log('📊 Asignaciones activas con colaboradores:', asignaciones.map(a => ({
-                    id: a.id,
-                    producto: a.producto_nombre,
-                    colaborador: a.colaborador_nombre,
-                    es_prestamo: a.es_prestamo
-                })));
+                // 🔥 CORREGIDO: Log para depuración
+                console.log('📊 Asignaciones activas recibidas:', asignaciones.length);
+                if (asignaciones.length > 0) {
+                    console.log('📋 Primera asignación:', {
+                        id: asignaciones[0].id,
+                        producto_id: asignaciones[0].producto_id,
+                        producto_nombre: asignaciones[0].producto_nombre,
+                        colaborador: asignaciones[0].colaborador_nombre
+                    });
+                }
                 
                 const activas = asignaciones.filter(a => !a.fecha_devolucion);
                 setAsignacionesActivas(activas);
                 
-                // Contar préstamos activos
-                const prestamosActivos = activas.filter(a => a.es_prestamo === true).length;
-                console.log(`✅ ${activas.length} asignaciones activas (${prestamosActivos} son préstamos)`);
+                console.log(`✅ ${activas.length} asignaciones activas encontradas`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
                 setAsignacionesActivas([]);
@@ -768,17 +625,30 @@ const AsignacionPage = () => {
         setOpenAsignacion(true);
     };
 
+    // 🔥 FUNCIÓN CORREGIDA para recibir producto
     const handleRecibir = (producto) => {
-        const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
+        // Convertir IDs a número para comparación correcta
+        const productoId = Number(producto.id);
+        const asignacionActiva = asignacionesActivas.find(a => Number(a.producto_id) === productoId);
+        
+        console.log('🔍 Buscando asignación para producto:', {
+            productoId: productoId,
+            productoNombre: producto.nombre,
+            asignacionesDisponibles: asignacionesActivas.map(a => ({
+                id: a.id,
+                producto_id: a.producto_id,
+                tipo_producto_id: typeof a.producto_id,
+                producto_nombre: a.producto_nombre
+            }))
+        });
         
         if (!asignacionActiva) {
-            showSnackbar('No se encontró una asignación activa para este producto', 'error');
+            showSnackbar(`No se encontró una asignación activa para el producto "${producto.nombre}"`, 'error');
             return;
         }
         
-        console.log('📤 Recibiendo producto:', {
-            producto: producto.nombre,
-            asignacionId: asignacionActiva.id,
+        console.log('✅ Asignación encontrada:', {
+            id: asignacionActiva.id,
             colaborador: asignacionActiva.colaborador_nombre,
             esPrestamo: asignacionActiva.es_prestamo
         });
@@ -815,8 +685,17 @@ const AsignacionPage = () => {
         setPage(0);
     };
 
+    // 🔥 FUNCIÓN CORREGIDA para obtener asignación activa
     const getAsignacionActiva = (productoId) => {
-        return asignacionesActivas.find(a => a.producto_id === productoId);
+        // Convertir a número para comparación correcta
+        const idProducto = Number(productoId);
+        const asignacion = asignacionesActivas.find(a => Number(a.producto_id) === idProducto);
+        
+        if (asignacion) {
+            console.log(`✅ Asignación encontrada para producto ${productoId}:`, asignacion.colaborador_nombre);
+        }
+        
+        return asignacion;
     };
 
     const filteredProductos = productos.filter(producto => {
@@ -839,7 +718,6 @@ const AsignacionPage = () => {
 
     const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length;
 
-    // Estadísticas
     const prestamosActivos = asignacionesActivas.filter(a => a.es_prestamo === true).length;
     const disponibles = productos.filter(p => p.id_estado_equipo === 1).length;
     const asignados = productos.filter(p => p.id_estado_equipo === 2).length;
@@ -848,13 +726,9 @@ const AsignacionPage = () => {
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar position="static" elevation={0} sx={{ bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
                 <Toolbar>
-                    <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}>
-                        <HomeIcon />
-                    </IconButton>
+                    <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}><HomeIcon /></IconButton>
                     <AssignmentIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
-                        Gestión de Asignaciones y Préstamos
-                    </Typography>
+                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones y Préstamos</Typography>
                     <IconButton color="inherit" onClick={() => fetchData(true)} disabled={refreshing}>
                         {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
                     </IconButton>
@@ -862,91 +736,35 @@ const AsignacionPage = () => {
             </AppBar>
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
-                {/* Header */}
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>
-                        Gestión de Asignaciones y Préstamos con Firma Digital
-                    </Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                        Asigna productos a colaboradores, registra préstamos temporales y controla devoluciones
-                    </Typography>
+                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones y Préstamos con Firma Digital</Typography>
+                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Asigna productos a colaboradores, registra préstamos temporales y controla devoluciones</Typography>
                     {apiError && (
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
                             <Button color="inherit" size="small" onClick={() => fetchData(true)} sx={{ borderRadius: 0 }}>REINTENTAR</Button>
-                        }>
-                            No se pudo conectar con el servidor.
-                        </Alert>
+                        }>No se pudo conectar con el servidor.</Alert>
                     )}
                 </Paper>
 
-                {/* Stats Cards */}
                 <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
                     <Grid item xs={6} sm={3} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary }}>
-                                    {loading ? <CircularProgress size={24} /> : asignacionesActivas.length}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">Asignaciones Activas</Typography>
-                            </CardContent>
-                        </StyledCard>
+                        <StyledCard><CardContent><Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary }}>{loading ? <CircularProgress size={24} /> : asignacionesActivas.length}</Typography><Typography variant="body2" color="text.secondary">Asignaciones Activas</Typography></CardContent></StyledCard>
                     </Grid>
-                    
                     <Grid item xs={6} sm={3} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.warning }}>
-                                    {loading ? <CircularProgress size={24} /> : prestamosActivos}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">Préstamos Activos</Typography>
-                            </CardContent>
-                        </StyledCard>
+                        <StyledCard><CardContent><Typography variant="h4" sx={{ fontWeight: 700, color: colors.warning }}>{loading ? <CircularProgress size={24} /> : prestamosActivos}</Typography><Typography variant="body2" color="text.secondary">Préstamos Activos</Typography></CardContent></StyledCard>
                     </Grid>
-                    
                     <Grid item xs={6} sm={3} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.success }}>
-                                    {loading ? <CircularProgress size={24} /> : disponibles}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">Productos Disponibles</Typography>
-                            </CardContent>
-                        </StyledCard>
+                        <StyledCard><CardContent><Typography variant="h4" sx={{ fontWeight: 700, color: colors.success }}>{loading ? <CircularProgress size={24} /> : disponibles}</Typography><Typography variant="body2" color="text.secondary">Productos Disponibles</Typography></CardContent></StyledCard>
                     </Grid>
-                    
                     <Grid item xs={6} sm={3} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.info }}>
-                                    {loading ? <CircularProgress size={24} /> : asignados}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">Productos Asignados</Typography>
-                            </CardContent>
-                        </StyledCard>
+                        <StyledCard><CardContent><Typography variant="h4" sx={{ fontWeight: 700, color: colors.info }}>{loading ? <CircularProgress size={24} /> : asignados}</Typography><Typography variant="body2" color="text.secondary">Productos Asignados</Typography></CardContent></StyledCard>
                     </Grid>
                 </Grid>
 
-                {/* Filtros */}
                 <FilterPaper>
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} md={5}>
-                            <TextField
-                                fullWidth
-                                placeholder="Buscar por nombre, marca, modelo o número de serie..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
-                                    endAdornment: searchTerm && (
-                                        <InputAdornment position="end">
-                                            <IconButton size="small" onClick={() => setSearchTerm('')}>
-                                                <CloseIcon fontSize="small" />
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                size="small"
-                            />
+                            <TextField fullWidth placeholder="Buscar por nombre, marca, modelo o número de serie..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>, endAdornment: searchTerm && (<InputAdornment position="end"><IconButton size="small" onClick={() => setSearchTerm('')}><CloseIcon fontSize="small" /></IconButton></InputAdornment>) }} size="small" />
                         </Grid>
                         <Grid item xs={6} md={3}>
                             <FormControl fullWidth size="small">
@@ -958,14 +776,11 @@ const AsignacionPage = () => {
                             </FormControl>
                         </Grid>
                         <Grid item xs={6} md={4}>
-                            <Button fullWidth variant="outlined" color="error" startIcon={<FilterListOffIcon />} onClick={handleClearFilters} disabled={!searchTerm && activeFiltersCount === 0} sx={{ borderRadius: 0 }}>
-                                Limpiar filtros
-                            </Button>
+                            <Button fullWidth variant="outlined" color="error" startIcon={<FilterListOffIcon />} onClick={handleClearFilters} disabled={!searchTerm && activeFiltersCount === 0} sx={{ borderRadius: 0 }}>Limpiar filtros</Button>
                         </Grid>
                     </Grid>
                 </FilterPaper>
 
-                {/* Tabla de Productos */}
                 <StyledTableContainer>
                     <Table size={isMobile ? 'small' : 'medium'}>
                         <TableHead>
@@ -996,90 +811,22 @@ const AsignacionPage = () => {
                                     
                                     return (
                                         <TableRow key={producto.id} hover>
-                                            <TableCell>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}>
-                                                        <InventoryIcon sx={{ fontSize: 16 }} />
-                                                    </Avatar>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {producto.nombre}
-                                                    </Typography>
-                                                </Box>
-                                            </TableCell>
+                                            <TableCell><Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}><InventoryIcon sx={{ fontSize: 16 }} /></Avatar><Typography variant="body2" fontWeight={500}>{producto.nombre}</Typography></Box></TableCell>
                                             <TableCell>{producto.marca || '-'}</TableCell>
                                             <TableCell>{producto.modelo || '-'}</TableCell>
-                                            <TableCell>
-                                                <Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip label={getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), color: getEstadoColor(producto.id_estado_equipo), fontWeight: 500 }} />
-                                            </TableCell>
-                                            <TableCell>
-                                                {asignacionActiva && (
-                                                    <Chip 
-                                                        label={esPrestamo ? '📋 PRÉSTAMO' : '🔒 ASIGNACIÓN'} 
-                                                        size="small" 
-                                                        sx={{ 
-                                                            backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1),
-                                                            color: esPrestamo ? colors.warning : colors.primary,
-                                                            fontWeight: 500
-                                                        }} 
-                                                    />
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {asignacionActiva ? (
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.success, 0.1) }}>
-                                                            <PersonIcon sx={{ fontSize: 14 }} />
-                                                        </Avatar>
-                                                        <Typography variant="body2" fontWeight={500}>
-                                                            {asignacionActiva.colaborador_nombre}
-                                                        </Typography>
-                                                    </Box>
-                                                ) : (
-                                                    <Typography variant="body2" color="text.secondary">-</Typography>
-                                                )}
-                                            </TableCell>
+                                            <TableCell><Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" /></TableCell>
+                                            <TableCell><Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} /></TableCell>
+                                            <TableCell><Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} /></TableCell>
+                                            <TableCell><Chip label={getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), color: getEstadoColor(producto.id_estado_equipo), fontWeight: 500 }} /></TableCell>
+                                            <TableCell>{asignacionActiva && (<Chip label={esPrestamo ? '📋 PRÉSTAMO' : '🔒 ASIGNACIÓN'} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 500 }} />)}</TableCell>
+                                            <TableCell>{asignacionActiva ? (<Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.success, 0.1) }}><PersonIcon sx={{ fontSize: 14 }} /></Avatar><Typography variant="body2" fontWeight={500}>{asignacionActiva.colaborador_nombre}</Typography></Box>) : (<Typography variant="body2" color="text.secondary">-</Typography>)}</TableCell>
                                             <TableCell align="center">
                                                 <Stack direction="row" spacing={1} justifyContent="center">
                                                     {estaDisponible ? (
-                                                        <Tooltip title="Asignar / Prestar producto">
-                                                            <Button
-                                                                variant="contained"
-                                                                size="small"
-                                                                startIcon={<AssignmentIcon />}
-                                                                onClick={() => handleAsignar(producto)}
-                                                                sx={{ bgcolor: colors.primary, borderRadius: 0 }}
-                                                            >
-                                                                Asignar
-                                                            </Button>
-                                                        </Tooltip>
+                                                        <Tooltip title="Asignar / Prestar producto"><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0 }}>Asignar</Button></Tooltip>
                                                     ) : estaAsignado ? (
-                                                        <Tooltip title="Recibir / Devolver producto">
-                                                            <Button
-                                                                variant="contained"
-                                                                size="small"
-                                                                startIcon={<ReceiptIcon />}
-                                                                onClick={() => handleRecibir(producto)}
-                                                                sx={{ bgcolor: esPrestamo ? colors.warning : colors.info, borderRadius: 0 }}
-                                                            >
-                                                                {esPrestamo ? 'Devolver' : 'Recibir'}
-                                                            </Button>
-                                                        </Tooltip>
-                                                    ) : (
-                                                        <Tooltip title="Producto no disponible">
-                                                            <Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>
-                                                                No disponible
-                                                            </Button>
-                                                        </Tooltip>
-                                                    )}
+                                                        <Tooltip title="Recibir / Devolver producto"><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.info, borderRadius: 0 }}>{esPrestamo ? 'Devolver' : 'Recibir'}</Button></Tooltip>
+                                                    ) : (<Tooltip title="Producto no disponible"><Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button></Tooltip>)}
                                                 </Stack>
                                             </TableCell>
                                         </TableRow>
@@ -1088,43 +835,14 @@ const AsignacionPage = () => {
                             )}
                         </TableBody>
                     </Table>
-                    <TablePagination 
-                        rowsPerPageOptions={[5, 10, 25, 50]} 
-                        component="div" 
-                        count={filteredProductos.length} 
-                        rowsPerPage={rowsPerPage} 
-                        page={page} 
-                        onPageChange={handleChangePage} 
-                        onRowsPerPageChange={handleChangeRowsPerPage} 
-                        labelRowsPerPage="Filas" 
-                    />
+                    <TablePagination rowsPerPageOptions={[5, 10, 25, 50]} component="div" count={filteredProductos.length} rowsPerPage={rowsPerPage} page={page} onPageChange={handleChangePage} onRowsPerPageChange={handleChangeRowsPerPage} labelRowsPerPage="Filas" />
                 </StyledTableContainer>
 
-                {/* Diálogos */}
-                <AsignacionCompletaDialog 
-                    open={openAsignacion} 
-                    onClose={() => setOpenAsignacion(false)} 
-                    productoSeleccionado={productoSeleccionado} 
-                    onSuccess={handleAsignacionSuccess} 
-                />
-                
-                <RecepcionDialog 
-                    open={openRecepcion} 
-                    onClose={() => setOpenRecepcion(false)} 
-                    producto={productoSeleccionado} 
-                    asignacion={asignacionSeleccionada} 
-                    onSuccess={handleRecepcionSuccess} 
-                />
+                <AsignacionCompletaDialog open={openAsignacion} onClose={() => setOpenAsignacion(false)} productoSeleccionado={productoSeleccionado} onSuccess={handleAsignacionSuccess} />
+                <RecepcionDialog open={openRecepcion} onClose={() => setOpenRecepcion(false)} producto={productoSeleccionado} asignacion={asignacionSeleccionada} onSuccess={handleRecepcionSuccess} />
 
-                <Snackbar 
-                    open={snackbar.open} 
-                    autoHideDuration={6000} 
-                    onClose={handleCloseSnackbar} 
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                >
-                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>
-                        {snackbar.message}
-                    </Alert>
+                <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>{snackbar.message}</Alert>
                 </Snackbar>
             </Container>
         </Box>
