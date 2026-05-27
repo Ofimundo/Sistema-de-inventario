@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA CON PRÉSTAMO
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -61,6 +61,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import AsignacionCompletaDialog from '../components/AsignacionCompletaDialog';
 import RecepcionDialog from '../components/RecepcionDialog';
+import PrestamoDialog from '../components/PrestamoDialog';
 
 // ============================================
 // COLORES
@@ -208,6 +209,7 @@ const AsignacionPage = () => {
     const [bodegas, setBodegas] = useState([]);
     const [openAsignacion, setOpenAsignacion] = useState(false);
     const [openRecepcion, setOpenRecepcion] = useState(false);
+    const [openPrestamo, setOpenPrestamo] = useState(false);
     const [productoSeleccionado, setProductoSeleccionado] = useState(null);
     const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -333,6 +335,22 @@ const AsignacionPage = () => {
         setOpenAsignacion(true);
     };
 
+    const handlePrestamo = (producto) => {
+        console.log('🔍 Préstamo producto:', {
+            id: producto.id,
+            nombre: producto.nombre,
+            id_estado_equipo: producto.id_estado_equipo,
+            estado: getEstadoTexto(producto.id_estado_equipo)
+        });
+        
+        if (producto.id_estado_equipo !== 1) {
+            showSnackbar(`Este producto no está disponible para préstamo. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning');
+            return;
+        }
+        setProductoSeleccionado(producto);
+        setOpenPrestamo(true);
+    };
+
     const handleRecibir = (producto) => {
         const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
         
@@ -356,6 +374,12 @@ const AsignacionPage = () => {
     const handleAsignacionSuccess = (result) => {
         showSnackbar(result.message || 'Asignación completada exitosamente', 'success');
         setOpenAsignacion(false);
+        fetchData(true);
+    };
+
+    const handlePrestamoSuccess = (result) => {
+        showSnackbar(result.message || 'Préstamo registrado exitosamente', 'success');
+        setOpenPrestamo(false);
         fetchData(true);
     };
 
@@ -616,17 +640,30 @@ const AsignacionPage = () => {
                                             <TableCell align="center">
                                                 <Stack direction="row" spacing={1} justifyContent="center">
                                                     {estaDisponible ? (
-                                                        <Tooltip title="Asignar producto">
-                                                            <Button
-                                                                variant="contained"
-                                                                size="small"
-                                                                startIcon={<AssignmentIcon />}
-                                                                onClick={() => handleAsignar(producto)}
-                                                                sx={{ bgcolor: colors.primary, borderRadius: 0 }}
-                                                            >
-                                                                Asignar
-                                                            </Button>
-                                                        </Tooltip>
+                                                        <>
+                                                            <Tooltip title="Asignar producto (con documento)">
+                                                                <Button
+                                                                    variant="contained"
+                                                                    size="small"
+                                                                    startIcon={<AssignmentIcon />}
+                                                                    onClick={() => handleAsignar(producto)}
+                                                                    sx={{ bgcolor: colors.primary, borderRadius: 0 }}
+                                                                >
+                                                                    Asignar
+                                                                </Button>
+                                                            </Tooltip>
+                                                            <Tooltip title="Préstamo (sin documento)">
+                                                                <Button
+                                                                    variant="outlined"
+                                                                    size="small"
+                                                                    startIcon={<PersonIcon />}
+                                                                    onClick={() => handlePrestamo(producto)}
+                                                                    sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning }}
+                                                                >
+                                                                    Préstamo
+                                                                </Button>
+                                                            </Tooltip>
+                                                        </>
                                                     ) : estaAsignado ? (
                                                         <Tooltip title="Recibir producto (devolución)">
                                                             <Button
@@ -698,6 +735,13 @@ const AsignacionPage = () => {
                     producto={productoSeleccionado} 
                     asignacion={asignacionSeleccionada} 
                     onSuccess={handleRecepcionSuccess} 
+                />
+
+                <PrestamoDialog 
+                    open={openPrestamo} 
+                    onClose={() => setOpenPrestamo(false)} 
+                    productoSeleccionado={productoSeleccionado} 
+                    onSuccess={handlePrestamoSuccess} 
                 />
 
                 <Snackbar 

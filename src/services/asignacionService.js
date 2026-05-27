@@ -1,4 +1,4 @@
-// src/services/asignacionService.js - VERSIÓN COMPLETAMENTE CORREGIDA
+// src/services/asignacionService.js - VERSIÓN ACTUALIZADA CON SOPORTE PARA PRÉSTAMOS
 import api from './api';
 
 // ============================================
@@ -59,7 +59,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener todas las asignaciones
+     * Obtener todas las asignaciones (incluye préstamos)
      */
     getAsignaciones: async () => {
         try {
@@ -72,6 +72,33 @@ export const asignacionService = {
             return [];
         } catch (error) {
             console.error('❌ Error en getAsignaciones:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Obtener solo préstamos activos
+     */
+    getPrestamosActivos: async () => {
+        try {
+            console.log('📤 Solicitando préstamos activos...');
+            const response = await api.get('/asignaciones/prestamos/activos');
+            console.log('📥 Respuesta:', response.data);
+            
+            if (response.data) {
+                if (response.data.success && response.data.data) {
+                    return response.data.data;
+                }
+                if (response.data.data) {
+                    return response.data.data;
+                }
+                if (Array.isArray(response.data)) {
+                    return response.data;
+                }
+            }
+            return [];
+        } catch (error) {
+            console.error('❌ Error en getPrestamosActivos:', error);
             return [];
         }
     },
@@ -93,21 +120,24 @@ export const asignacionService = {
     },
 
     /**
-     * Crear una nueva asignación
+     * Crear una nueva asignación (puede ser préstamo o asignación normal)
      */
     crearAsignacion: async (data) => {
         try {
-            console.log('📤 Creando asignación...');
-            const response = await api.post('/asignaciones', {
+            console.log('📤 Creando asignación...', data);
+            const payload = {
                 producto_id: data.producto_id,
                 colaborador_id: data.colaborador_id,
-                motivo: data.motivo,
+                motivo: data.motivo || (data.es_prestamo ? 'PRÉSTAMO TEMPORAL' : 'ASIGNACIÓN DE EQUIPO'),
                 observaciones: data.observaciones || '',
                 fecha_asignacion: data.fecha_asignacion || new Date().toISOString().split('T')[0],
                 usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema',
                 firma_trabajador: data.firma_trabajador || null,
-                firma_gerente: data.firma_gerente || null
-            });
+                firma_gerente: data.firma_gerente || null,
+                es_prestamo: data.es_prestamo || false
+            };
+            
+            const response = await api.post('/asignaciones', payload);
             console.log('✅ Asignación creada:', response.data);
             return response.data;
         } catch (error) {
@@ -117,11 +147,45 @@ export const asignacionService = {
     },
 
     /**
-     * Generar acta de asignación PDF
+     * Crear un préstamo (sin generar documento)
+     */
+    crearPrestamo: async (data) => {
+        try {
+            console.log('📤 Creando préstamo (sin documento)...');
+            const payload = {
+                producto_id: data.producto_id,
+                colaborador_id: data.colaborador_id,
+                motivo: 'PRÉSTAMO TEMPORAL',
+                observaciones: data.observaciones || `Préstamo registrado el ${new Date().toLocaleDateString()}`,
+                fecha_asignacion: data.fecha_asignacion || new Date().toISOString().split('T')[0],
+                usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema',
+                firma_trabajador: null,
+                firma_gerente: null,
+                es_prestamo: true
+            };
+            
+            const response = await api.post('/asignaciones', payload);
+            console.log('✅ Préstamo creado:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en crearPrestamo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Generar acta de asignación PDF (solo para asignaciones normales, no préstamos)
      */
     generarActaAsignacion: async (data) => {
         try {
             console.log('📤 Generando acta de asignación...');
+            
+            // Verificar si es préstamo
+            if (data.es_prestamo) {
+                console.log('⚠️ Es un préstamo, no se genera documento');
+                return { success: true, message: 'Préstamo registrado sin documento', es_prestamo: true };
+            }
+            
             const response = await api.post('/asignaciones/generar-acta-asignacion', {
                 id_asignacion: data.id_asignacion,
                 colaborador: data.colaborador,
@@ -142,11 +206,18 @@ export const asignacionService = {
     },
 
     /**
-     * Generar acta de recepción PDF
+     * Generar acta de recepción PDF (solo para asignaciones normales, no préstamos)
      */
     generarActaRecepcion: async (data) => {
         try {
             console.log('📤 Generando acta de recepción...');
+            
+            // Verificar si es préstamo
+            if (data.es_prestamo) {
+                console.log('⚠️ Es un préstamo, no se genera documento de recepción');
+                return { success: true, message: 'Devolución de préstamo registrada sin documento', es_prestamo: true };
+            }
+            
             const response = await api.post('/asignaciones/generar-acta-recepcion', {
                 id_asignacion: data.id_asignacion,
                 colaborador: data.colaborador,
@@ -212,45 +283,45 @@ export const asignacionService = {
      * ✅ FUNCIÓN CORREGIDA - Descargar documento usando URL absoluta
      */
     descargarDocumento: async (filename) => {
-    try {
-        console.log(`📤 Descargando: ${filename}`);
-        
-        // La URL está correcta
-        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${filename}`;
-        console.log('📥 URL de descarga:', downloadUrl);
-        
-        const token = localStorage.getItem('token');
-        
-        const response = await fetch(downloadUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
+        try {
+            console.log(`📤 Descargando: ${filename}`);
+            
+            // La URL está correcta
+            const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${filename}`;
+            console.log('📥 URL de descarga:', downloadUrl);
+            
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                console.error(`❌ Error HTTP: ${response.status}`);
+                console.error('Respuesta del servidor:', await response.text());
+                throw new Error(`Error HTTP: ${response.status}`);
             }
-        });
 
-        if (!response.ok) {
-            console.error(`❌ Error HTTP: ${response.status}`);
-            console.error('Respuesta del servidor:', await response.text());
-            throw new Error(`Error HTTP: ${response.status}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ Documento descargado:', filename);
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Error en descargarDocumento:', error);
+            throw error;
         }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-        
-        console.log('✅ Documento descargado:', filename);
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Error en descargarDocumento:', error);
-        throw error;
-    }
-},
+    },
 
     /**
      * ✅ FUNCIÓN CORREGIDA - Descargar documento por ID usando URL absoluta
@@ -296,7 +367,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener historial de asignaciones
+     * Obtener historial de asignaciones (incluye préstamos)
      */
     getHistorial: async (filtros = {}) => {
         try {
@@ -307,6 +378,22 @@ export const asignacionService = {
             return [];
         } catch (error) {
             console.error('❌ Error en getHistorial:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Obtener historial de préstamos
+     */
+    getHistorialPrestamos: async (filtros = {}) => {
+        try {
+            const response = await api.get('/asignaciones/prestamos/historial', { params: filtros });
+            if (response.data && response.data.success) {
+                return response.data.data;
+            }
+            return [];
+        } catch (error) {
+            console.error('❌ Error en getHistorialPrestamos:', error);
             return [];
         }
     },
@@ -334,7 +421,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener estadísticas de asignaciones
+     * Obtener estadísticas de asignaciones (incluye préstamos)
      */
     getEstadisticas: async () => {
         try {
@@ -347,7 +434,9 @@ export const asignacionService = {
                 activas: 0,
                 completadas: 0,
                 totalProductosAsignados: 0,
-                totalProductosRecibidos: 0
+                totalProductosRecibidos: 0,
+                totalPrestamos: 0,
+                prestamosActivos: 0
             };
         } catch (error) {
             console.error('❌ Error en getEstadisticas:', error);
@@ -356,17 +445,49 @@ export const asignacionService = {
                 activas: 0,
                 completadas: 0,
                 totalProductosAsignados: 0,
-                totalProductosRecibidos: 0
+                totalProductosRecibidos: 0,
+                totalPrestamos: 0,
+                prestamosActivos: 0
             };
         }
     },
 
     /**
-     * Generar y visualizar documento de asignación
+     * Obtener estadísticas de préstamos
+     */
+    getEstadisticasPrestamos: async () => {
+        try {
+            const response = await api.get('/asignaciones/prestamos/estadisticas');
+            if (response.data && response.data.success) {
+                return response.data.data;
+            }
+            return {
+                totalPrestamos: 0,
+                activos: 0,
+                devueltos: 0
+            };
+        } catch (error) {
+            console.error('❌ Error en getEstadisticasPrestamos:', error);
+            return {
+                totalPrestamos: 0,
+                activos: 0,
+                devueltos: 0
+            };
+        }
+    },
+
+    /**
+     * Generar y visualizar documento de asignación (solo para asignaciones normales)
      */
     generarYVisualizarDocumento: async (data) => {
         try {
             console.log('📤 Generando documento de asignación...');
+            
+            // Verificar si es préstamo
+            if (data.es_prestamo) {
+                console.log('⚠️ Es un préstamo, no se genera documento');
+                return { success: true, message: 'Préstamo - No requiere documento', es_prestamo: true };
+            }
             
             // Crear el documento de asignación
             const documentoData = {

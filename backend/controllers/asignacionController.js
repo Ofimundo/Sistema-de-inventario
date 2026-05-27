@@ -1,4 +1,4 @@
-// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
+// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS COMPLETO
 const { getConnection, sql } = require('../config/database');
 
 const asignacionController = {
@@ -228,6 +228,189 @@ const asignacionController = {
     },
     
     /**
+     * Obtener solo préstamos activos
+     */
+    getPrestamosActivos: async (req, res) => {
+        try {
+            console.log('📥 GET /api/asignaciones/prestamos/activos');
+            
+            const pool = await getConnection();
+            
+            const result = await pool.request().query(`
+                SELECT 
+                    a.id,
+                    a.producto_id,
+                    a.colaborador_id,
+                    a.id_estado_equipo,
+                    a.motivo,
+                    a.observaciones,
+                    a.fecha_asignacion,
+                    a.fecha_devolucion,
+                    a.firma_trabajador,
+                    a.firma_gerente,
+                    a.usuario_responsable,
+                    a.es_prestamo,
+                    p.nombre as producto_nombre,
+                    p.marca,
+                    p.modelo,
+                    p.numero_serie,
+                    p.id_estado_equipo as producto_estado,
+                    c.nombre as colaborador_nombre,
+                    c.rut as colaborador_rut,
+                    c.email as colaborador_email,
+                    c.cargo as colaborador_cargo,
+                    c.departamento as colaborador_departamento
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.fecha_devolucion IS NULL AND a.es_prestamo = 1
+                ORDER BY a.fecha_asignacion DESC
+            `);
+            
+            console.log(`✅ ${result.recordset.length} préstamos activos encontrados`);
+            
+            res.json({
+                success: true,
+                data: result.recordset
+            });
+            
+        } catch (error) {
+            console.error('❌ Error en getPrestamosActivos:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                data: []
+            });
+        }
+    },
+    
+    /**
+     * Obtener historial de préstamos
+     */
+    getHistorialPrestamos: async (req, res) => {
+        try {
+            console.log('📥 GET /api/asignaciones/prestamos/historial');
+            
+            const { fecha_inicio, fecha_fin, colaborador_id } = req.query;
+            
+            const pool = await getConnection();
+            let query = `
+                SELECT 
+                    a.id,
+                    a.producto_id,
+                    a.colaborador_id,
+                    a.motivo,
+                    a.observaciones,
+                    a.fecha_asignacion,
+                    a.fecha_devolucion,
+                    a.observaciones_devolucion,
+                    a.condicion_entrega,
+                    a.usuario_responsable,
+                    a.es_prestamo,
+                    p.nombre as producto_nombre,
+                    p.marca,
+                    p.modelo,
+                    p.numero_serie,
+                    c.nombre as colaborador_nombre,
+                    c.rut as colaborador_rut,
+                    c.email as colaborador_email,
+                    c.cargo as colaborador_cargo
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.es_prestamo = 1
+            `;
+            
+            const request = pool.request();
+            let condiciones = [];
+            
+            if (fecha_inicio) {
+                request.input('fecha_inicio', sql.DateTime, fecha_inicio);
+                condiciones.push('a.fecha_asignacion >= @fecha_inicio');
+            }
+            
+            if (fecha_fin) {
+                request.input('fecha_fin', sql.DateTime, fecha_fin);
+                condiciones.push('a.fecha_asignacion <= @fecha_fin');
+            }
+            
+            if (colaborador_id) {
+                request.input('colaborador_id', sql.Int, colaborador_id);
+                condiciones.push('a.colaborador_id = @colaborador_id');
+            }
+            
+            if (condiciones.length > 0) {
+                query += ' AND ' + condiciones.join(' AND ');
+            }
+            
+            query += ' ORDER BY a.fecha_asignacion DESC';
+            
+            const result = await request.query(query);
+            
+            console.log(`✅ ${result.recordset.length} préstamos encontrados en historial`);
+            
+            res.json({
+                success: true,
+                data: result.recordset
+            });
+            
+        } catch (error) {
+            console.error('❌ Error en getHistorialPrestamos:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                data: []
+            });
+        }
+    },
+    
+    /**
+     * Obtener estadísticas de préstamos
+     */
+    getEstadisticasPrestamos: async (req, res) => {
+        try {
+            console.log('📥 GET /api/asignaciones/prestamos/estadisticas');
+            
+            const pool = await getConnection();
+            
+            const result = await pool.request().query(`
+                SELECT 
+                    COUNT(*) as total_prestamos,
+                    SUM(CASE WHEN fecha_devolucion IS NULL THEN 1 ELSE 0 END) as prestamos_activos,
+                    SUM(CASE WHEN fecha_devolucion IS NOT NULL THEN 1 ELSE 0 END) as prestamos_devueltos,
+                    COUNT(DISTINCT colaborador_id) as colaboradores_con_prestamos
+                FROM INV.asignaciones
+                WHERE es_prestamo = 1
+            `);
+            
+            console.log(`✅ Estadísticas de préstamos:`, result.recordset[0]);
+            
+            res.json({
+                success: true,
+                data: {
+                    totalPrestamos: result.recordset[0].total_prestamos || 0,
+                    activos: result.recordset[0].prestamos_activos || 0,
+                    devueltos: result.recordset[0].prestamos_devueltos || 0,
+                    colaboradoresConPrestamos: result.recordset[0].colaboradores_con_prestamos || 0
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error en getEstadisticasPrestamos:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                data: {
+                    totalPrestamos: 0,
+                    activos: 0,
+                    devueltos: 0,
+                    colaboradoresConPrestamos: 0
+                }
+            });
+        }
+    },
+    
+    /**
      * Finalizar asignación (devolución) - CON PRÉSTAMO
      */
     finalizarAsignacion: async (req, res) => {
@@ -393,6 +576,119 @@ const asignacionController = {
                 success: false,
                 message: error.message,
                 data: []
+            });
+        }
+    },
+    
+    /**
+     * Obtener asignación por ID
+     */
+    getAsignacionById: async (req, res) => {
+        try {
+            const { id } = req.params;
+            console.log(`📥 GET /api/asignaciones/${id}`);
+            
+            const pool = await getConnection();
+            
+            const result = await pool.request()
+                .input('id', sql.Int, id)
+                .query(`
+                    SELECT 
+                        a.id,
+                        a.producto_id,
+                        a.colaborador_id,
+                        a.id_estado_equipo,
+                        a.motivo,
+                        a.observaciones,
+                        a.fecha_asignacion,
+                        a.fecha_devolucion,
+                        a.firma_trabajador,
+                        a.firma_gerente,
+                        a.usuario_responsable,
+                        a.observaciones_devolucion,
+                        a.condicion_entrega,
+                        a.es_prestamo,
+                        p.nombre as producto_nombre,
+                        p.marca,
+                        p.modelo,
+                        p.numero_serie,
+                        p.id_estado_equipo as producto_estado,
+                        c.nombre as colaborador_nombre,
+                        c.rut as colaborador_rut,
+                        c.email as colaborador_email,
+                        c.cargo as colaborador_cargo,
+                        c.departamento as colaborador_departamento
+                    FROM INV.asignaciones a
+                    LEFT JOIN INV.productos p ON a.producto_id = p.id
+                    LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                    WHERE a.id = @id
+                `);
+            
+            if (result.recordset.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Asignación no encontrada'
+                });
+            }
+            
+            res.json({
+                success: true,
+                data: result.recordset[0]
+            });
+            
+        } catch (error) {
+            console.error('❌ Error en getAsignacionById:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    },
+    
+    /**
+     * Obtener estadísticas generales (incluye préstamos)
+     */
+    getEstadisticas: async (req, res) => {
+        try {
+            console.log('📥 GET /api/asignaciones/estadisticas');
+            
+            const pool = await getConnection();
+            
+            const result = await pool.request().query(`
+                SELECT 
+                    COUNT(*) as total_asignaciones,
+                    SUM(CASE WHEN fecha_devolucion IS NULL THEN 1 ELSE 0 END) as asignaciones_activas,
+                    SUM(CASE WHEN fecha_devolucion IS NOT NULL THEN 1 ELSE 0 END) as asignaciones_completadas,
+                    SUM(CASE WHEN es_prestamo = 1 THEN 1 ELSE 0 END) as total_prestamos,
+                    SUM(CASE WHEN es_prestamo = 1 AND fecha_devolucion IS NULL THEN 1 ELSE 0 END) as prestamos_activos
+                FROM INV.asignaciones
+            `);
+            
+            console.log(`✅ Estadísticas generales:`, result.recordset[0]);
+            
+            res.json({
+                success: true,
+                data: {
+                    totalAsignaciones: result.recordset[0].total_asignaciones || 0,
+                    activas: result.recordset[0].asignaciones_activas || 0,
+                    completadas: result.recordset[0].asignaciones_completadas || 0,
+                    totalPrestamos: result.recordset[0].total_prestamos || 0,
+                    prestamosActivos: result.recordset[0].prestamos_activos || 0
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error en getEstadisticas:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                data: {
+                    totalAsignaciones: 0,
+                    activas: 0,
+                    completadas: 0,
+                    totalPrestamos: 0,
+                    prestamosActivos: 0
+                }
             });
         }
     }

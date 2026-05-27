@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN COMPLETAMENTE CORREGIDA
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN ACTUALIZADA CON SOPORTE PARA PRÉSTAMOS
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -249,7 +249,7 @@ const FirmaTexto = ({ label, onFirmaCapturada, valorInicial = '', required = tru
     );
 };
 
-const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSuccess }) => {
+const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSuccess, esPrestamo = false }) => {
     const [colaboradores, setColaboradores] = useState([]);
     const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
     const [motivo, setMotivo] = useState('');
@@ -272,8 +272,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         if (open && productoSeleccionado) {
             cargarColaboradores();
             setColaboradorSeleccionado(null);
-            setMotivo('');
-            setObservaciones('');
+            setMotivo(esPrestamo ? 'PRÉSTAMO TEMPORAL DE EQUIPO' : '');
+            setObservaciones(esPrestamo ? `Préstamo registrado el ${new Date().toLocaleDateString()}` : '');
             setFirmaTrabajadorText('');
             setFirmaGerenteText('');
             setFirmaTrabajadorDibujo('');
@@ -286,7 +286,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             setTipoFirmaTrabajador('texto');
             setTipoFirmaGerente('texto');
         }
-    }, [open, productoSeleccionado]);
+    }, [open, productoSeleccionado, esPrestamo]);
 
     const cargarColaboradores = async () => {
         try {
@@ -319,47 +319,44 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO - USANDO API_BASE_URL
-    // src/components/AsignacionCompletaDialog.jsx
-const handleDescargarDocumento = async () => {
-    if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
-    
-    setDownloading(true);
-    try {
-        const token = localStorage.getItem('token');
-        // ✅ URL FORZADA A RENDER
-        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
-        console.log('📥 Descargando documento desde:', downloadUrl);
+    const handleDescargarDocumento = async () => {
+        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
         
-        const response = await fetch(downloadUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
+            console.log('📥 Descargando documento desde:', downloadUrl);
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
             }
-        });
 
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = documentoGenerado.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ Documento descargado:', documentoGenerado.filename);
+        } catch (error) {
+            console.error('❌ Error descargando documento:', error);
+            alert('Error al descargar el documento. Por favor, intente nuevamente.');
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
         }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = documentoGenerado.filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-        console.log('✅ Documento descargado:', documentoGenerado.filename);
-    } catch (error) {
-        console.error('❌ Error descargando documento:', error);
-        alert('Error al descargar el documento. Por favor, intente nuevamente.');
-    } finally {
-        setTimeout(() => setDownloading(false), 1000);
-    }
-};
+    };
 
     const handleSubmit = async () => {
         if (!colaboradorSeleccionado) {
@@ -371,16 +368,19 @@ const handleDescargarDocumento = async () => {
             return;
         }
         
-        const firmaTrabajador = getFirmaTrabajadorFinal();
-        const firmaGerente = getFirmaGerenteFinal();
+        // Para préstamos, las firmas son opcionales
+        if (!esPrestamo) {
+            const firmaTrabajador = getFirmaTrabajadorFinal();
+            const firmaGerente = getFirmaGerenteFinal();
 
-        if (!firmaTrabajador) {
-            setError('La firma del trabajador es requerida');
-            return;
-        }
-        if (!firmaGerente) {
-            setError('La firma del gerente general es requerida');
-            return;
+            if (!firmaTrabajador) {
+                setError('La firma del trabajador es requerida');
+                return;
+            }
+            if (!firmaGerente) {
+                setError('La firma del gerente general es requerida');
+                return;
+            }
         }
 
         setLoading(true);
@@ -398,6 +398,7 @@ const handleDescargarDocumento = async () => {
                 }
             }
             
+            // Crear la asignación/préstamo
             const asignacionResponse = await api.post('/asignaciones', {
                 producto_id: productoSeleccionado.id,
                 colaborador_id: colaboradorSeleccionado.id,
@@ -405,56 +406,73 @@ const handleDescargarDocumento = async () => {
                 observaciones: observaciones,
                 fecha_asignacion: new Date().toISOString().split('T')[0],
                 usuario_responsable: usuarioResponsable,
-                firma_trabajador: firmaTrabajador,
-                firma_gerente: firmaGerente
+                firma_trabajador: esPrestamo ? null : getFirmaTrabajadorFinal(),
+                firma_gerente: esPrestamo ? null : getFirmaGerenteFinal(),
+                es_prestamo: esPrestamo || false
             });
 
-            if (asignacionResponse.data?.success) {
-                // Generar acta PDF después de la asignación
-                const actaData = {
-                    id_asignacion: asignacionResponse.data.data?.id,
-                    colaborador: {
-                        nombre: colaboradorSeleccionado.nombre,
-                        rut: colaboradorSeleccionado.rut,
-                        email: colaboradorSeleccionado.email,
-                        cargo: colaboradorSeleccionado.cargo,
-                        departamento: colaboradorSeleccionado.departamento,
-                        nacionalidad: 'chilena',
-                        fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
-                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
-                        comuna: colaboradorSeleccionado.comuna || '',
-                        ciudad: colaboradorSeleccionado.ciudad || ''
-                    },
-                    productos: [{
-                        tipo: 'Equipo',
-                        nombre: productoSeleccionado.nombre,
-                        marca: productoSeleccionado.marca,
-                        modelo: productoSeleccionado.modelo,
-                        numero_serie: productoSeleccionado.numero_serie,
-                        condicion: productoSeleccionado.condicion || 'NUEVO'
-                    }],
-                    fecha_asignacion: new Date(),
-                    motivo: motivo,
-                    observaciones: observaciones,
-                    firma_trabajador: getFirmaTrabajadorFinal(),
-                    firma_gerente: getFirmaGerenteFinal(),
-                    usuario_responsable: usuarioResponsable
-                };
-
-                const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData);
+            if (asignacionResponse.data?.success || asignacionResponse.data?.id) {
+                const asignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
                 
-                if (actaResponse.data?.success) {
-                    setDocumentoGenerado(actaResponse.data);
+                let documentoData = null;
+                
+                // Solo generar documento si NO es préstamo
+                if (!esPrestamo) {
+                    try {
+                        const actaData = {
+                            id_asignacion: asignacionId,
+                            colaborador: {
+                                nombre: colaboradorSeleccionado.nombre,
+                                rut: colaboradorSeleccionado.rut,
+                                email: colaboradorSeleccionado.email,
+                                cargo: colaboradorSeleccionado.cargo,
+                                departamento: colaboradorSeleccionado.departamento,
+                                nacionalidad: 'chilena',
+                                fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
+                                domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
+                                comuna: colaboradorSeleccionado.comuna || '',
+                                ciudad: colaboradorSeleccionado.ciudad || ''
+                            },
+                            productos: [{
+                                tipo: 'Equipo',
+                                nombre: productoSeleccionado.nombre,
+                                marca: productoSeleccionado.marca,
+                                modelo: productoSeleccionado.modelo,
+                                numero_serie: productoSeleccionado.numero_serie,
+                                condicion: productoSeleccionado.condicion || 'NUEVO'
+                            }],
+                            fecha_asignacion: new Date(),
+                            motivo: motivo,
+                            observaciones: observaciones,
+                            firma_trabajador: getFirmaTrabajadorFinal(),
+                            firma_gerente: getFirmaGerenteFinal(),
+                            usuario_responsable: usuarioResponsable
+                        };
+
+                        const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData);
+                        
+                        if (actaResponse.data?.success) {
+                            documentoData = actaResponse.data;
+                            setDocumentoGenerado(documentoData);
+                        }
+                    } catch (docError) {
+                        console.warn('⚠️ Error generando documento (no crítico):', docError);
+                    }
                 }
                 
                 setShowConfirmDialog(true);
                 setSuccess(true);
                 
                 if (onSuccess) {
+                    const mensaje = esPrestamo 
+                        ? `✅ Préstamo registrado exitosamente para ${productoSeleccionado.nombre} (sin documento)` 
+                        : `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}`;
+                    
                     onSuccess({
                         success: true,
-                        message: `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}`,
-                        documento: actaResponse.data
+                        message: mensaje,
+                        documento: documentoData,
+                        es_prestamo: esPrestamo
                     });
                 }
             } else {
@@ -487,44 +505,65 @@ const handleDescargarDocumento = async () => {
     // Ventana de confirmación con documento
     const ConfirmacionDialog = () => (
         <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
-            <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
+            <DialogTitle sx={{ bgcolor: esPrestamo ? '#F59E0B' : '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    ¡Asignación Exitosa!
+                    {esPrestamo ? '¡Préstamo Registrado!' : '¡Asignación Exitosa!'}
                 </Typography>
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    El acta de <strong>Asignación</strong> se ha generado correctamente.
+                    {esPrestamo 
+                        ? 'El préstamo se ha registrado correctamente en el sistema.'
+                        : 'El acta de Asignación se ha generado correctamente.'
+                    }
                 </Typography>
-                <Box sx={{ 
-                    mt: 2, 
-                    p: 2, 
-                    bgcolor: '#f5f5f5', 
-                    borderRadius: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 1
-                }}>
-                    <PdfIcon sx={{ color: '#f44336' }} />
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {documentoGenerado?.filename || 'acta_asignacion.pdf'}
-                    </Typography>
-                </Box>
+                
+                {!esPrestamo && documentoGenerado && (
+                    <Box sx={{ 
+                        mt: 2, 
+                        p: 2, 
+                        bgcolor: '#f5f5f5', 
+                        borderRadius: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 1
+                    }}>
+                        <PdfIcon sx={{ color: '#f44336' }} />
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            {documentoGenerado?.filename || 'acta_asignacion.pdf'}
+                        </Typography>
+                    </Box>
+                )}
+                
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                    Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                    {esPrestamo 
+                        ? `Se ha registrado el préstamo del producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
+                        : `Se ha asignado el producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
+                    }
                 </Typography>
+                
+                {esPrestamo && (
+                    <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
+                        <Typography variant="body2">
+                            <strong>ℹ️ Nota:</strong> Este es un préstamo temporal y no genera documento formal.
+                        </Typography>
+                    </Alert>
+                )}
+                
                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
-                    <Button 
-                        variant="contained" 
-                        startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-                        onClick={handleDescargarDocumento}
-                        disabled={downloading}
-                        sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
-                    >
-                        {downloading ? 'Descargando...' : 'Descargar Acta'}
-                    </Button>
+                    {!esPrestamo && documentoGenerado && (
+                        <Button 
+                            variant="contained" 
+                            startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                            onClick={handleDescargarDocumento}
+                            disabled={downloading}
+                            sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
+                        >
+                            {downloading ? 'Descargando...' : 'Descargar Acta'}
+                        </Button>
+                    )}
                     <Button 
                         variant="outlined" 
                         onClick={() => {
@@ -545,17 +584,27 @@ const handleDescargarDocumento = async () => {
             <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
-                        <CheckCircleIcon sx={{ color: '#4caf50' }} />
-                        <Typography variant="h6">¡Asignación Exitosa!</Typography>
+                        <CheckCircleIcon sx={{ color: esPrestamo ? '#F59E0B' : '#4caf50' }} />
+                        <Typography variant="h6">{esPrestamo ? '¡Préstamo Registrado!' : '¡Asignación Exitosa!'}</Typography>
                     </Box>
                 </DialogTitle>
                 <DialogContent dividers>
                     <Box textAlign="center" py={2}>
-                        <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>Asignación completada exitosamente</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                        <CheckCircleIcon sx={{ fontSize: 60, color: esPrestamo ? '#F59E0B' : '#4caf50', mb: 2 }} />
+                        <Typography variant="h6" gutterBottom>
+                            {esPrestamo ? 'Préstamo registrado exitosamente' : 'Asignación completada exitosamente'}
                         </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {esPrestamo 
+                                ? `Se ha registrado el préstamo del producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
+                                : `Se ha asignado el producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
+                            }
+                        </Typography>
+                        {esPrestamo && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                Nota: Este préstamo no requiere documento formal.
+                            </Typography>
+                        )}
                         <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0 }}>Cerrar</Button>
                     </Box>
                 </DialogContent>
@@ -570,8 +619,25 @@ const handleDescargarDocumento = async () => {
             <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
-                        <AssignmentIcon sx={{ color: '#0A66C2' }} />
-                        <Typography variant="h6">Asignar Producto con Firma Digital</Typography>
+                        {esPrestamo ? (
+                            <PersonIcon sx={{ color: '#F59E0B' }} />
+                        ) : (
+                            <AssignmentIcon sx={{ color: '#0A66C2' }} />
+                        )}
+                        <Typography variant="h6">
+                            {esPrestamo ? 'Registrar Préstamo de Producto' : 'Asignar Producto con Firma Digital'}
+                        </Typography>
+                        {esPrestamo && (
+                            <Chip 
+                                label="SIN DOCUMENTO" 
+                                size="small" 
+                                sx={{ 
+                                    bgcolor: '#F59E0B', 
+                                    color: 'white',
+                                    fontWeight: 500
+                                }} 
+                            />
+                        )}
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         Producto: <strong>{productoSeleccionado.nombre}</strong> | N° Serie: <strong>{productoSeleccionado.numero_serie || 'N/A'}</strong>
@@ -625,7 +691,7 @@ const handleDescargarDocumento = async () => {
                                         onClick={() => setColaboradorSeleccionado(col)}
                                     >
                                         <Box display="flex" alignItems="center" gap={2}>
-                                            <Avatar sx={{ bgcolor: '#0A66C2', color: 'white' }}>
+                                            <Avatar sx={{ bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2', color: 'white' }}>
                                                 {col.nombre?.charAt(0) || '?'}
                                             </Avatar>
                                             <Box flex={1}>
@@ -647,12 +713,15 @@ const handleDescargarDocumento = async () => {
                         {/* Motivo y Observaciones */}
                         <TextField
                             fullWidth
-                            label="Motivo de asignación *"
+                            label={esPrestamo ? "Motivo del préstamo *" : "Motivo de asignación *"}
                             value={motivo}
                             onChange={(e) => setMotivo(e.target.value)}
                             multiline
                             rows={2}
-                            placeholder="Ej: Proyecto específico, Reemplazo de equipo, Uso temporal, etc."
+                            placeholder={esPrestamo 
+                                ? "Ej: Préstamo para capacitación, Uso temporal para evento, etc."
+                                : "Ej: Proyecto específico, Reemplazo de equipo, Uso temporal, etc."
+                            }
                             required
                         />
                         
@@ -663,76 +732,93 @@ const handleDescargarDocumento = async () => {
                             onChange={(e) => setObservaciones(e.target.value)}
                             multiline
                             rows={2}
-                            placeholder="Observaciones importantes sobre la transacción..."
+                            placeholder={esPrestamo 
+                                ? "Observaciones sobre el préstamo..."
+                                : "Observaciones importantes sobre la transacción..."
+                            }
                         />
 
-                        {/* Firma del Trabajador */}
-                        <Box>
-                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
-                                Firma del Trabajador / Colaborador *
-                            </Typography>
-                            <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup
-                                    row
-                                    value={tipoFirmaTrabajador}
-                                    onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
-                                >
-                                    <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                    <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                                </RadioGroup>
-                            </FormControl>
-                            
-                            {tipoFirmaTrabajador === 'texto' ? (
-                                <FirmaTexto
-                                    label="Firma del Trabajador (Texto)"
-                                    onFirmaCapturada={setFirmaTrabajadorText}
-                                    valorInicial={firmaTrabajadorText}
-                                    required={true}
-                                />
-                            ) : (
-                                <FirmaDibujada
-                                    label="Firma del Trabajador (Dibujada)"
-                                    onFirmaGuardada={setFirmaTrabajadorDibujo}
-                                    valorInicial={firmaTrabajadorDibujo}
-                                    width={450}
-                                    height={150}
-                                />
-                            )}
-                        </Box>
+                        {/* Firmas - Solo para asignaciones normales */}
+                        {!esPrestamo && (
+                            <>
+                                {/* Firma del Trabajador */}
+                                <Box>
+                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                        Firma del Trabajador / Colaborador *
+                                    </Typography>
+                                    <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                        <RadioGroup
+                                            row
+                                            value={tipoFirmaTrabajador}
+                                            onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
+                                        >
+                                            <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                            <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                        </RadioGroup>
+                                    </FormControl>
+                                    
+                                    {tipoFirmaTrabajador === 'texto' ? (
+                                        <FirmaTexto
+                                            label="Firma del Trabajador (Texto)"
+                                            onFirmaCapturada={setFirmaTrabajadorText}
+                                            valorInicial={firmaTrabajadorText}
+                                            required={true}
+                                        />
+                                    ) : (
+                                        <FirmaDibujada
+                                            label="Firma del Trabajador (Dibujada)"
+                                            onFirmaGuardada={setFirmaTrabajadorDibujo}
+                                            valorInicial={firmaTrabajadorDibujo}
+                                            width={450}
+                                            height={150}
+                                        />
+                                    )}
+                                </Box>
 
-                        {/* Firma del Gerente */}
-                        <Box>
-                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
-                                Firma del Gerente General / Autorizante *
-                            </Typography>
-                            <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup
-                                    row
-                                    value={tipoFirmaGerente}
-                                    onChange={(e) => setTipoFirmaGerente(e.target.value)}
-                                >
-                                    <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                    <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                                </RadioGroup>
-                            </FormControl>
-                            
-                            {tipoFirmaGerente === 'texto' ? (
-                                <FirmaTexto
-                                    label="Firma del Gerente (Texto)"
-                                    onFirmaCapturada={setFirmaGerenteText}
-                                    valorInicial={firmaGerenteText}
-                                    required={true}
-                                />
-                            ) : (
-                                <FirmaDibujada
-                                    label="Firma del Gerente (Dibujada)"
-                                    onFirmaGuardada={setFirmaGerenteDibujo}
-                                    valorInicial={firmaGerenteDibujo}
-                                    width={450}
-                                    height={150}
-                                />
-                            )}
-                        </Box>
+                                {/* Firma del Gerente */}
+                                <Box>
+                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                        Firma del Gerente General / Autorizante *
+                                    </Typography>
+                                    <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                        <RadioGroup
+                                            row
+                                            value={tipoFirmaGerente}
+                                            onChange={(e) => setTipoFirmaGerente(e.target.value)}
+                                        >
+                                            <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                            <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                        </RadioGroup>
+                                    </FormControl>
+                                    
+                                    {tipoFirmaGerente === 'texto' ? (
+                                        <FirmaTexto
+                                            label="Firma del Gerente (Texto)"
+                                            onFirmaCapturada={setFirmaGerenteText}
+                                            valorInicial={firmaGerenteText}
+                                            required={true}
+                                        />
+                                    ) : (
+                                        <FirmaDibujada
+                                            label="Firma del Gerente (Dibujada)"
+                                            onFirmaGuardada={setFirmaGerenteDibujo}
+                                            valorInicial={firmaGerenteDibujo}
+                                            width={450}
+                                            height={150}
+                                        />
+                                    )}
+                                </Box>
+                            </>
+                        )}
+
+                        {esPrestamo && (
+                            <Alert severity="info" sx={{ borderRadius: 0 }}>
+                                <Typography variant="body2">
+                                    <strong>ℹ️ Préstamo sin documento:</strong> Este préstamo se registrará en el sistema 
+                                    con la bandera <strong>es_prestamo = 1</strong> y no generará un documento formal.
+                                </Typography>
+                            </Alert>
+                        )}
 
                         {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
                         
@@ -743,9 +829,9 @@ const handleDescargarDocumento = async () => {
                                 onClick={handleSubmit}
                                 disabled={loading || !colaboradorSeleccionado || !motivo}
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
-                                sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
+                                sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2' }}
                             >
-                                {loading ? 'Procesando...' : 'Confirmar Asignación'}
+                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Confirmar Asignación')}
                             </Button>
                         </Box>
                     </Stack>
