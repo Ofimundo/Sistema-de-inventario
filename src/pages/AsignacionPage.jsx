@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CON PRÉSTAMO/SIN FECHA DE DEVOLUCIÓN
+// src/pages/AsignacionPage.jsx - VERSIÓN CON BOTÓN PARA VER PDF
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -59,7 +59,9 @@ import {
     Close as CloseIcon,
     CheckCircle as CheckCircleIcon,
     Visibility as VisibilityIcon,
-    LocalOffer as LocalOfferIcon
+    LocalOffer as LocalOfferIcon,
+    PictureAsPdf as PdfIcon,
+    Download as DownloadIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -298,137 +300,47 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
 
             <DialogContent dividers>
                 <Stack spacing={3}>
-                    {/* Tipo de Asignación */}
                     <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha(colors.info, 0.03) }}>
-                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                            Tipo de Asignación
-                        </Typography>
+                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>Tipo de Asignación</Typography>
                         <FormControlLabel
-                            control={
-                                <Switch
-                                    checked={esPrestamo}
-                                    onChange={(e) => setEsPrestamo(e.target.checked)}
-                                    color="primary"
-                                />
-                            }
-                            label={
-                                <Box>
-                                    <Typography variant="body2">
-                                        {esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {esPrestamo 
-                                            ? 'El producto será devuelto en el futuro' 
-                                            : 'El producto queda asignado de forma permanente'}
-                                    </Typography>
-                                </Box>
-                            }
+                            control={<Switch checked={esPrestamo} onChange={(e) => setEsPrestamo(e.target.checked)} color="primary" />}
+                            label={<Box><Typography variant="body2">{esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}</Typography>
+                            <Typography variant="caption" color="text.secondary">{esPrestamo ? 'El producto será devuelto en el futuro' : 'El producto queda asignado de forma permanente'}</Typography></Box>}
                         />
                     </Paper>
 
-                    {/* Búsqueda de colaborador */}
-                    <TextField
-                        fullWidth
-                        placeholder="Buscar colaborador por nombre, RUT o email..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        size="small"
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><PersonIcon sx={{ color: '#6B7280' }} /></InputAdornment>,
-                        }}
-                    />
+                    <TextField fullWidth placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} size="small" InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon /></InputAdornment> }} />
 
                     <Paper variant="outlined" sx={{ maxHeight: 250, overflow: 'auto' }}>
                         {colaboradoresFiltrados.length === 0 ? (
-                            <Box sx={{ p: 3, textAlign: 'center' }}>
-                                <Typography color="text.secondary">
-                                    {searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores registrados'}
-                                </Typography>
-                            </Box>
+                            <Box sx={{ p: 3, textAlign: 'center' }}><Typography color="text.secondary">{searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores registrados'}</Typography></Box>
                         ) : (
                             colaboradoresFiltrados.map((col) => (
-                                <Box
-                                    key={col.id}
-                                    sx={{
-                                        p: 1.5,
-                                        borderBottom: `1px solid ${colors.border}`,
-                                        cursor: 'pointer',
-                                        backgroundColor: selectedColaborador === col.id ? alpha(colors.primary, 0.05) : 'transparent',
-                                        '&:hover': { backgroundColor: alpha(colors.primary, 0.03) },
-                                    }}
-                                    onClick={() => setSelectedColaborador(col.id)}
-                                >
+                                <Box key={col.id} sx={{ p: 1.5, borderBottom: `1px solid ${colors.border}`, cursor: 'pointer', backgroundColor: selectedColaborador === col.id ? alpha(colors.primary, 0.05) : 'transparent', '&:hover': { backgroundColor: alpha(colors.primary, 0.03) } }} onClick={() => setSelectedColaborador(col.id)}>
                                     <Box display="flex" alignItems="center" gap={2}>
-                                        <Avatar sx={{ width: 36, height: 36, bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>
-                                            {col.nombre?.charAt(0) || '?'}
-                                        </Avatar>
+                                        <Avatar sx={{ width: 36, height: 36, bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>{col.nombre?.charAt(0) || '?'}</Avatar>
                                         <Box flex={1}>
-                                            <Typography variant="body2" fontWeight={500}>
-                                                {col.nombre}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}
-                                            </Typography>
-                                            <Typography variant="caption" display="block" color="text.secondary">
-                                                {col.email} {col.rut && `• ${col.rut}`}
-                                            </Typography>
+                                            <Typography variant="body2" fontWeight={500}>{col.nombre}</Typography>
+                                            <Typography variant="caption" color="text.secondary">{col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}</Typography>
+                                            <Typography variant="caption" display="block" color="text.secondary">{col.email} {col.rut && `• ${col.rut}`}</Typography>
                                         </Box>
-                                        {selectedColaborador === col.id && (
-                                            <CheckCircleIcon sx={{ color: colors.success }} />
-                                        )}
+                                        {selectedColaborador === col.id && <CheckCircleIcon sx={{ color: colors.success }} />}
                                     </Box>
                                 </Box>
                             ))
                         )}
                     </Paper>
 
-                    <TextField
-                        fullWidth
-                        label="Motivo de la asignación / préstamo *"
-                        value={motivo}
-                        onChange={(e) => setMotivo(e.target.value)}
-                        placeholder={esPrestamo ? "Ej: Préstamo para reunión, Uso temporal, Evento, etc." : "Ej: Asignación permanente por cargo, Reemplazo de equipo, etc."}
-                        multiline
-                        rows={2}
-                        size="small"
-                    />
-
-                    <TextField
-                        fullWidth
-                        type="date"
-                        label="Fecha de asignación"
-                        value={fechaAsignacion}
-                        onChange={(e) => setFechaAsignacion(e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-
-                    <TextField
-                        fullWidth
-                        label="Observaciones adicionales"
-                        value={observaciones}
-                        onChange={(e) => setObservaciones(e.target.value)}
-                        placeholder="Detalles adicionales sobre la asignación..."
-                        multiline
-                        rows={2}
-                        size="small"
-                    />
-
-                    {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
+                    <TextField fullWidth label="Motivo *" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={esPrestamo ? "Ej: Préstamo para reunión..." : "Ej: Asignación permanente..."} multiline rows={2} size="small" />
+                    <TextField fullWidth type="date" label="Fecha de asignación" value={fechaAsignacion} onChange={(e) => setFechaAsignacion(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                    <TextField fullWidth label="Observaciones adicionales" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} multiline rows={2} size="small" />
+                    {error && <Alert severity="error">{error}</Alert>}
                 </Stack>
             </DialogContent>
 
             <DialogActions sx={{ p: 2, gap: 1 }}>
-                <Button onClick={onClose} disabled={loading} variant="outlined">
-                    Cancelar
-                </Button>
-                <Button
-                    onClick={handleSubmit}
-                    variant="contained"
-                    disabled={loading || !selectedColaborador}
-                    startIcon={loading ? <CircularProgress size={20} /> : <AssignmentIcon />}
-                    sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}
-                >
+                <Button onClick={onClose} disabled={loading} variant="outlined">Cancelar</Button>
+                <Button onClick={handleSubmit} variant="contained" disabled={loading || !selectedColaborador} startIcon={loading ? <CircularProgress size={20} /> : <AssignmentIcon />} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}>
                     {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Asignar Producto')}
                 </Button>
             </DialogActions>
@@ -491,67 +403,33 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Box display="flex" alignItems="center" gap={1}>
                     <ReceiptIcon sx={{ color: colors.warning }} />
-                    <Typography variant="h6">
-                        {esPrestamo ? 'Devolución de Préstamo' : 'Recepción de Producto'}
-                    </Typography>
+                    <Typography variant="h6">{esPrestamo ? 'Devolución de Préstamo' : 'Recepción de Producto'}</Typography>
                 </Box>
             </DialogTitle>
 
             <DialogContent dividers>
                 <Stack spacing={2}>
                     <Box sx={{ p: 1.5, bgcolor: alpha(colors.primary, 0.05), borderRadius: 1 }}>
-                        <Typography variant="body2">
-                            <strong>Producto:</strong> {producto.nombre}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            <strong>Serie:</strong> {producto.numero_serie || 'N/A'}
-                        </Typography>
+                        <Typography variant="body2"><strong>Producto:</strong> {producto.nombre}</Typography>
+                        <Typography variant="body2" color="text.secondary"><strong>Serie:</strong> {producto.numero_serie || 'N/A'}</Typography>
                         {asignacion && (
                             <>
-                                <Typography variant="body2" color="text.secondary">
-                                    <strong>Colaborador:</strong> {asignacion.colaborador_nombre}
-                                </Typography>
-                                {esPrestamo && (
-                                    <Typography variant="body2" color={colors.warning}>
-                                        <strong>⚠️ Este es un PRÉSTAMO</strong>
-                                    </Typography>
-                                )}
+                                <Typography variant="body2" color="text.secondary"><strong>Colaborador:</strong> {asignacion.colaborador_nombre}</Typography>
+                                {esPrestamo && <Typography variant="body2" color={colors.warning}><strong>⚠️ Este es un PRÉSTAMO</strong></Typography>}
                             </>
                         )}
                     </Box>
 
-                    <TextField
-                        fullWidth
-                        type="date"
-                        label="Fecha de devolución"
-                        value={fechaDevolucion}
-                        onChange={(e) => setFechaDevolucion(e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-
+                    <TextField fullWidth type="date" label="Fecha de devolución" value={fechaDevolucion} onChange={(e) => setFechaDevolucion(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
                     <FormControl fullWidth size="small">
                         <InputLabel>Condición del producto</InputLabel>
                         <Select value={condicion} onChange={(e) => setCondicion(e.target.value)} label="Condición del producto">
-                            <MenuItem value="BUENO">Bueno</MenuItem>
-                            <MenuItem value="REGULAR">Regular</MenuItem>
-                            <MenuItem value="MALO">Malo</MenuItem>
-                            <MenuItem value="DAÑADO">Dañado</MenuItem>
+                            <MenuItem value="BUENO">Bueno</MenuItem><MenuItem value="REGULAR">Regular</MenuItem>
+                            <MenuItem value="MALO">Malo</MenuItem><MenuItem value="DAÑADO">Dañado</MenuItem>
                         </Select>
                     </FormControl>
-
-                    <TextField
-                        fullWidth
-                        label="Observaciones de la devolución"
-                        value={observaciones}
-                        onChange={(e) => setObservaciones(e.target.value)}
-                        placeholder="Detalles sobre el estado del producto, etc."
-                        multiline
-                        rows={3}
-                        size="small"
-                    />
-
-                    {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
+                    <TextField fullWidth label="Observaciones" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} multiline rows={3} size="small" />
+                    {error && <Alert severity="error">{error}</Alert>}
                 </Stack>
             </DialogContent>
 
@@ -588,6 +466,7 @@ const AsignacionPage = () => {
     const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [apiError, setApiError] = useState(false);
+    const [downloading, setDownloading] = useState(false);
 
     const showSnackbar = (message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
@@ -599,6 +478,53 @@ const AsignacionPage = () => {
 
     const handleGoHome = () => {
         navigate('/dashboard');
+    };
+
+    // 🔥 FUNCIÓN PARA DESCARGAR ACTA
+    const handleDescargarActa = async (asignacion) => {
+        if (!asignacion || !asignacion.documento_path) {
+            showSnackbar('No hay documento disponible para esta asignación', 'warning');
+            return;
+        }
+        
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const filename = asignacion.documento_path?.split('/').pop();
+            
+            if (!filename) {
+                throw new Error('Nombre de archivo no encontrado');
+            }
+            
+            const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${filename}`;
+            console.log('📥 Descargando acta desde:', downloadUrl);
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            showSnackbar('Acta descargada exitosamente', 'success');
+        } catch (error) {
+            console.error('❌ Error descargando acta:', error);
+            showSnackbar('Error al descargar el acta', 'error');
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
+        }
     };
 
     const fetchData = async (showRefresh = false) => {
@@ -629,7 +555,6 @@ const AsignacionPage = () => {
             const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
             setProductos(productosFiltrados);
             
-            // Cargar asignaciones activas
             try {
                 const asignacionesResponse = await api.get('/asignaciones/activas');
                 
@@ -725,9 +650,7 @@ const AsignacionPage = () => {
         return asignacionesActivas.find(a => a.producto_id === productoId);
     };
 
-    // Filtro mejorado
     const filteredProductos = productos.filter(producto => {
-        // Filtro por búsqueda
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             const matchesSearch = (
@@ -745,29 +668,18 @@ const AsignacionPage = () => {
         const esPrestamo = asignacionActiva?.es_prestamo === true;
         const esPermanente = asignacionActiva?.es_prestamo === false;
         
-        // Filtro por tipo de visualización
         switch (filters.tipo_visualizacion) {
-            case 'disponibles':
-                return estaDisponible;
-            case 'asignados':
-                return estaAsignado;
-            case 'prestamos':
-                return estaAsignado && esPrestamo;
-            case 'permanentes':
-                return estaAsignado && esPermanente;
-            default:
-                return true;
+            case 'disponibles': return estaDisponible;
+            case 'asignados': return estaAsignado;
+            case 'prestamos': return estaAsignado && esPrestamo;
+            case 'permanentes': return estaAsignado && esPermanente;
+            default: return true;
         }
     });
 
-    const paginatedProductos = filteredProductos.slice(
-        page * rowsPerPage,
-        page * rowsPerPage + rowsPerPage
-    );
-
+    const paginatedProductos = filteredProductos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
     const activeFiltersCount = Object.values(filters).filter(v => v && v !== '' && v !== 'todos').length;
 
-    // Estadísticas
     const prestamosActivos = asignacionesActivas.filter(a => a.es_prestamo === true).length;
     const disponibles = productos.filter(p => p.id_estado_equipo === 1).length;
     const asignados = productos.filter(p => p.id_estado_equipo === 2).length;
@@ -778,7 +690,7 @@ const AsignacionPage = () => {
                 <Toolbar>
                     <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}><HomeIcon /></IconButton>
                     <AssignmentIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones</Typography>
+                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones y Préstamos</Typography>
                     <IconButton color="inherit" onClick={() => fetchData(true)} disabled={refreshing}>
                         {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
                     </IconButton>
@@ -787,7 +699,7 @@ const AsignacionPage = () => {
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones</Typography>
+                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones y Préstamos con Firma Digital</Typography>
                     <Typography sx={{ opacity: 0.9, mb: 3 }}>Asigna productos, registra préstamos temporales y controla devoluciones</Typography>
                     {apiError && (
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
@@ -829,11 +741,11 @@ const AsignacionPage = () => {
                             <FormControl fullWidth size="small">
                                 <InputLabel>Tipo</InputLabel>
                                 <Select value={filters.tipo_visualizacion} onChange={(e) => setFilters({ ...filters, tipo_visualizacion: e.target.value })} label="Tipo">
-                                    <MenuItem value="todos">Todos los productos</MenuItem>
-                                    <MenuItem value="disponibles">📦 Solo disponibles</MenuItem>
+                                    <MenuItem value="todos">Todos</MenuItem>
+                                    <MenuItem value="disponibles">📦 Disponibles</MenuItem>
                                     <MenuItem value="asignados">🔒 Asignados</MenuItem>
-                                    <MenuItem value="prestamos">📋 Préstamos activos</MenuItem>
-                                    <MenuItem value="permanentes">🔐 Asignaciones permanentes</MenuItem>
+                                    <MenuItem value="prestamos">📋 Préstamos</MenuItem>
+                                    <MenuItem value="permanentes">🔐 Permanentes</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
@@ -870,6 +782,7 @@ const AsignacionPage = () => {
                                     const estaDisponible = producto.id_estado_equipo === 1;
                                     const estaAsignado = producto.id_estado_equipo === 2;
                                     const esPrestamo = asignacionActiva?.es_prestamo === true;
+                                    const tieneDocumento = asignacionActiva?.documento_path;
                                     
                                     return (
                                         <TableRow key={producto.id} hover>
@@ -885,10 +798,32 @@ const AsignacionPage = () => {
                                             <TableCell align="center">
                                                 <Stack direction="row" spacing={1} justifyContent="center">
                                                     {estaDisponible ? (
-                                                        <Tooltip title="Asignar / Prestar"><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0 }}>Asignar</Button></Tooltip>
+                                                        <Tooltip title="Asignar / Prestar">
+                                                            <Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button>
+                                                        </Tooltip>
                                                     ) : estaAsignado ? (
-                                                        <Tooltip title="Recibir / Devolver"><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.info, borderRadius: 0 }}>{esPrestamo ? 'Devolver' : 'Recibir'}</Button></Tooltip>
-                                                    ) : (<Tooltip title="No disponible"><Button variant="outlined" size="small" disabled>No disponible</Button></Tooltip>)}
+                                                        <>
+                                                            <Tooltip title="Recibir / Devolver">
+                                                                <Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.info, borderRadius: 0, minWidth: 80 }}>{esPrestamo ? 'Devolver' : 'Recibir'}</Button>
+                                                            </Tooltip>
+                                                            {tieneDocumento && (
+                                                                <Tooltip title="Ver / Descargar Acta">
+                                                                    <IconButton 
+                                                                        size="small" 
+                                                                        onClick={() => handleDescargarActa(asignacionActiva)}
+                                                                        disabled={downloading}
+                                                                        sx={{ color: '#f44336' }}
+                                                                    >
+                                                                        {downloading ? <CircularProgress size={20} /> : <PdfIcon />}
+                                                                    </IconButton>
+                                                                </Tooltip>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <Tooltip title="No disponible">
+                                                            <Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0, minWidth: 80 }}>No disponible</Button>
+                                                        </Tooltip>
+                                                    )}
                                                 </Stack>
                                             </TableCell>
                                         </TableRow>

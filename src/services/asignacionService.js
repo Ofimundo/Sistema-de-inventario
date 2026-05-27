@@ -1,4 +1,4 @@
-// src/services/asignacionService.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
+// src/services/asignacionService.js - VERSIÓN ACTUALIZADA CON DOCUMENTO_PATH
 import api from './api';
 
 // ============================================
@@ -94,7 +94,7 @@ export const asignacionService = {
     },
 
     /**
-     * Crear una nueva asignación (CON PRÉSTAMO)
+     * Crear una nueva asignación (CON PRÉSTAMO Y DOCUMENTO_PATH)
      */
     crearAsignacion: async (data) => {
         try {
@@ -108,7 +108,8 @@ export const asignacionService = {
                 usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema',
                 firma_trabajador: data.firma_trabajador || null,
                 firma_gerente: data.firma_gerente || null,
-                es_prestamo: data.es_prestamo || false
+                es_prestamo: data.es_prestamo || false,
+                documento_path: data.documento_path || null  // NUEVO: ruta del documento
             });
             console.log('✅ Asignación creada:', response.data);
             return response.data;
@@ -119,11 +120,11 @@ export const asignacionService = {
     },
 
     /**
-     * Generar acta de asignación PDF
+     * Generar acta de asignación PDF (CON PRÉSTAMO)
      */
     generarActaAsignacion: async (data) => {
         try {
-            console.log('📤 Generando acta de asignación...');
+            console.log('📤 Generando acta de asignación...', data);
             const response = await api.post('/asignaciones/generar-acta-asignacion', {
                 id_asignacion: data.id_asignacion,
                 colaborador: data.colaborador,
@@ -133,7 +134,8 @@ export const asignacionService = {
                 observaciones: data.observaciones,
                 firma_trabajador: data.firma_trabajador,
                 firma_gerente: data.firma_gerente,
-                usuario_responsable: data.usuario_responsable
+                usuario_responsable: data.usuario_responsable,
+                es_prestamo: data.es_prestamo || false  // NUEVO: para el tipo de acta
             });
             console.log('✅ Acta generada:', response.data);
             return response.data;
@@ -144,11 +146,11 @@ export const asignacionService = {
     },
 
     /**
-     * Generar acta de recepción PDF
+     * Generar acta de recepción PDF (CON PRÉSTAMO)
      */
     generarActaRecepcion: async (data) => {
         try {
-            console.log('📤 Generando acta de recepción...');
+            console.log('📤 Generando acta de recepción...', data);
             const response = await api.post('/asignaciones/generar-acta-recepcion', {
                 id_asignacion: data.id_asignacion,
                 colaborador: data.colaborador,
@@ -160,7 +162,8 @@ export const asignacionService = {
                 condicion_entrega: data.condicion_entrega,
                 firma_trabajador: data.firma_trabajador,
                 firma_gerente: data.firma_gerente,
-                usuario_responsable: data.usuario_responsable
+                usuario_responsable: data.usuario_responsable,
+                es_prestamo: data.es_prestamo || false  // NUEVO: para el tipo de acta
             });
             console.log('✅ Acta generada:', response.data);
             return response.data;
@@ -367,7 +370,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener solo préstamos activos (NUEVO)
+     * Obtener solo préstamos activos
      */
     getPrestamosActivos: async () => {
         try {
@@ -380,6 +383,47 @@ export const asignacionService = {
         } catch (error) {
             console.error('❌ Error en getPrestamosActivos:', error);
             return [];
+        }
+    },
+
+    /**
+     * Descargar acta de asignación por filename
+     */
+    descargarActa: async (filename) => {
+        try {
+            console.log(`📤 Descargando acta: ${filename}`);
+            
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${filename}`;
+            console.log('📥 URL de descarga:', downloadUrl);
+            
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ Acta descargada:', filename);
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Error descargando acta:', error);
+            throw error;
         }
     },
 
@@ -401,7 +445,8 @@ export const asignacionService = {
                 es_prestamo: data.es_prestamo || false,
                 firma_trabajador: data.firma_trabajador,
                 firma_gerente: data.firma_gerente,
-                usuario_responsable: data.usuario_responsable
+                usuario_responsable: data.usuario_responsable,
+                documento_path: data.documento_path || null
             };
             
             return documentoData;
