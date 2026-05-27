@@ -1,4 +1,4 @@
-// src/services/asignacionService.js - VERSIÓN COMPLETAMENTE CORREGIDA
+// src/services/asignacionService.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
 import api from './api';
 
 // ============================================
@@ -24,6 +24,7 @@ const getApiBaseUrl = () => {
         console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
+    return 'http://localhost:5000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -93,11 +94,11 @@ export const asignacionService = {
     },
 
     /**
-     * Crear una nueva asignación
+     * Crear una nueva asignación (CON PRÉSTAMO)
      */
     crearAsignacion: async (data) => {
         try {
-            console.log('📤 Creando asignación...');
+            console.log('📤 Creando asignación...', data);
             const response = await api.post('/asignaciones', {
                 producto_id: data.producto_id,
                 colaborador_id: data.colaborador_id,
@@ -106,7 +107,8 @@ export const asignacionService = {
                 fecha_asignacion: data.fecha_asignacion || new Date().toISOString().split('T')[0],
                 usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema',
                 firma_trabajador: data.firma_trabajador || null,
-                firma_gerente: data.firma_gerente || null
+                firma_gerente: data.firma_gerente || null,
+                es_prestamo: data.es_prestamo || false
             });
             console.log('✅ Asignación creada:', response.data);
             return response.data;
@@ -209,58 +211,56 @@ export const asignacionService = {
     },
 
     /**
-     * ✅ FUNCIÓN CORREGIDA - Descargar documento usando URL absoluta
+     * Descargar documento usando URL absoluta
      */
     descargarDocumento: async (filename) => {
-    try {
-        console.log(`📤 Descargando: ${filename}`);
-        
-        // La URL está correcta
-        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${filename}`;
-        console.log('📥 URL de descarga:', downloadUrl);
-        
-        const token = localStorage.getItem('token');
-        
-        const response = await fetch(downloadUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
+        try {
+            console.log(`📤 Descargando: ${filename}`);
+            
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${filename}`;
+            console.log('📥 URL de descarga:', downloadUrl);
+            
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                console.error(`❌ Error HTTP: ${response.status}`);
+                console.error('Respuesta del servidor:', await response.text());
+                throw new Error(`Error HTTP: ${response.status}`);
             }
-        });
 
-        if (!response.ok) {
-            console.error(`❌ Error HTTP: ${response.status}`);
-            console.error('Respuesta del servidor:', await response.text());
-            throw new Error(`Error HTTP: ${response.status}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ Documento descargado:', filename);
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Error en descargarDocumento:', error);
+            throw error;
         }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-        
-        console.log('✅ Documento descargado:', filename);
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Error en descargarDocumento:', error);
-        throw error;
-    }
-},
+    },
 
     /**
-     * ✅ FUNCIÓN CORREGIDA - Descargar documento por ID usando URL absoluta
+     * Descargar documento por ID usando URL absoluta
      */
     descargarDocumentoById: async (documentoId) => {
         try {
             console.log(`📤 Descargando documento ${documentoId}...`);
             console.log(`🔧 API_BASE_URL: ${API_BASE_URL}`);
             
-            // Construir URL absoluta
             const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar-documento/${documentoId}`;
             console.log('📥 URL de descarga:', downloadUrl);
             
@@ -319,10 +319,11 @@ export const asignacionService = {
             console.log(`📤 Finalizando asignación ${asignacionId}...`);
             const response = await api.put(`/asignaciones/${asignacionId}/finalizar`, {
                 fecha_devolucion: data.fecha_devolucion || new Date().toISOString().split('T')[0],
-                observaciones: data.observaciones || '',
+                motivo_devolucion: data.motivo_devolucion || data.motivo || '',
+                observaciones_devolucion: data.observaciones_devolucion || data.observaciones || '',
                 condicion_entrega: data.condicion_entrega || 'BUENO',
-                firma_trabajador: data.firma_trabajador || null,
-                firma_gerente: data.firma_gerente || null,
+                firma_trabajador_devolucion: data.firma_trabajador || null,
+                firma_gerente_devolucion: data.firma_gerente || null,
                 usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema'
             });
             console.log('✅ Asignación finalizada:', response.data);
@@ -334,7 +335,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener estadísticas de asignaciones
+     * Obtener estadísticas de asignaciones (CON PRÉSTAMOS)
      */
     getEstadisticas: async () => {
         try {
@@ -346,6 +347,8 @@ export const asignacionService = {
                 totalAsignaciones: 0,
                 activas: 0,
                 completadas: 0,
+                prestamosActivos: 0,
+                prestamosVencidos: 0,
                 totalProductosAsignados: 0,
                 totalProductosRecibidos: 0
             };
@@ -355,9 +358,28 @@ export const asignacionService = {
                 totalAsignaciones: 0,
                 activas: 0,
                 completadas: 0,
+                prestamosActivos: 0,
+                prestamosVencidos: 0,
                 totalProductosAsignados: 0,
                 totalProductosRecibidos: 0
             };
+        }
+    },
+
+    /**
+     * Obtener solo préstamos activos (NUEVO)
+     */
+    getPrestamosActivos: async () => {
+        try {
+            console.log('📤 Solicitando préstamos activos...');
+            const response = await api.get('/asignaciones/prestamos');
+            if (response.data && response.data.success) {
+                return response.data.data;
+            }
+            return [];
+        } catch (error) {
+            console.error('❌ Error en getPrestamosActivos:', error);
+            return [];
         }
     },
 
@@ -368,7 +390,6 @@ export const asignacionService = {
         try {
             console.log('📤 Generando documento de asignación...');
             
-            // Crear el documento de asignación
             const documentoData = {
                 id_asignacion: data.id_asignacion || Date.now(),
                 fecha: new Date().toLocaleString('es-CL'),
@@ -377,6 +398,7 @@ export const asignacionService = {
                 fecha_asignacion: data.fecha_asignacion,
                 motivo: data.motivo,
                 observaciones: data.observaciones || 'Sin observaciones',
+                es_prestamo: data.es_prestamo || false,
                 firma_trabajador: data.firma_trabajador,
                 firma_gerente: data.firma_gerente,
                 usuario_responsable: data.usuario_responsable

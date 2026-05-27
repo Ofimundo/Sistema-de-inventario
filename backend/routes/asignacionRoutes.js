@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA CORREGIDA
+// backend/routes/asignacionRoutes.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -437,7 +437,7 @@ function generarActaRecepcion(datos) {
 // ENDPOINTS - EL ORDEN IMPORTA
 // ============================================
 
-// GET - Obtener asignaciones activas
+// GET - Obtener asignaciones activas (CON PRÉSTAMO)
 router.get('/activas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/activas');
@@ -452,6 +452,7 @@ router.get('/activas', async (req, res) => {
                 a.observaciones,
                 a.fecha_asignacion,
                 a.fecha_devolucion,
+                a.es_prestamo,
                 p.nombre as producto_nombre,
                 p.numero_serie,
                 p.marca,
@@ -620,7 +621,7 @@ router.post('/generar-acta-recepcion', async (req, res) => {
     }
 });
 
-// POST - Crear asignación y generar acta
+// POST - Crear asignación y generar acta (CON PRÉSTAMO)
 router.post('/', async (req, res) => {
     let pool;
     let transaction;
@@ -629,8 +630,18 @@ router.post('/', async (req, res) => {
         console.log('📥 POST /api/asignaciones');
         console.log('Body recibido:', req.body);
         
-        const { producto_id, colaborador_id, motivo, observaciones, fecha_asignacion,
-                documento_path, condicion_entrega, firma_trabajador, firma_gerente } = req.body;
+        const { 
+            producto_id, 
+            colaborador_id, 
+            motivo, 
+            observaciones, 
+            fecha_asignacion,
+            documento_path, 
+            condicion_entrega, 
+            firma_trabajador, 
+            firma_gerente,
+            es_prestamo  // NUEVO: campo para préstamo
+        } = req.body;
         
         if (!producto_id || !colaborador_id) {
             return res.status(400).json({ success: false, message: 'producto_id y colaborador_id son requeridos' });
@@ -686,7 +697,7 @@ router.post('/', async (req, res) => {
             const colaborador = colaboradorCheck.recordset[0];
             const fechaAsignacionValue = fecha_asignacion ? new Date(fecha_asignacion) : new Date();
             
-            // Insertar asignación
+            // Insertar asignación (CON es_prestamo)
             const insertAsignacion = await transaction.request()
                 .input('producto_id', sql.Int, productoIdNum)
                 .input('colaborador_id', sql.Int, colaboradorIdNum)
@@ -696,13 +707,14 @@ router.post('/', async (req, res) => {
                 .input('documento_path', sql.NVarChar(500), documento_path || '')
                 .input('observaciones', sql.NVarChar(1000), observaciones || '')
                 .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
+                .input('es_prestamo', sql.Bit, es_prestamo || false)  // NUEVO
                 .query(`
                     INSERT INTO INV.asignaciones (
                         producto_id, colaborador_id, id_estado_equipo, motivo, fecha_asignacion, 
-                        documento_path, observaciones, condicion_entrega
+                        documento_path, observaciones, condicion_entrega, es_prestamo
                     ) VALUES (
                         @producto_id, @colaborador_id, @id_estado_equipo, @motivo, @fecha_asignacion,
-                        @documento_path, @observaciones, @condicion_entrega
+                        @documento_path, @observaciones, @condicion_entrega, @es_prestamo
                     );
                     SELECT SCOPE_IDENTITY() as id;
                 `);
@@ -717,6 +729,7 @@ router.post('/', async (req, res) => {
                 .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
             
             // Generar acta de asignación
+            const tipoAsignacion = es_prestamo ? 'Préstamo' : 'Asignación';
             const documentoData = {
                 id_asignacion: asignacionId,
                 colaborador: {
@@ -738,29 +751,30 @@ router.post('/', async (req, res) => {
                     cantidad: 1
                 }],
                 fecha_asignacion: fechaAsignacionValue,
-                motivo: motivo || 'Asignación de equipo',
+                motivo: motivo || `${tipoAsignacion} de equipo`,
                 observaciones: observaciones || 'Sin observaciones',
                 firma_trabajador: firma_trabajador || colaborador.nombre,
                 firma_gerente: firma_gerente || EMPRESA.representante_legal
             };
             
             const pdfBuffer = await generarActaAsignacion(documentoData);
-            const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
+            const filename = `acta_${es_prestamo ? 'prestamo' : 'asignacion'}_${asignacionId}_${Date.now()}.pdf`;
             const filepath = path.join(DOCS_DIR, filename);
             fs.writeFileSync(filepath, pdfBuffer);
-            console.log(`✅ Acta de asignación guardada: ${filename}`);
+            console.log(`✅ Acta de ${tipoAsignacion} guardada: ${filename}`);
             
             await transaction.commit();
             console.log('✅ Transacción CONFIRMADA');
             
             res.json({
                 success: true,
-                message: `Producto asignado correctamente a ${colaborador.nombre}`,
+                message: `${tipoAsignacion} creada correctamente a ${colaborador.nombre}`,
                 data: {
                     id: asignacionId,
                     producto: { id: producto.id, nombre: producto.nombre, numero_serie: producto.numero_serie },
                     colaborador: { id: colaborador.id, nombre: colaborador.nombre, rut: colaborador.rut, email: colaborador.email, cargo: colaborador.cargo },
-                    documento: { filename: filename, ruta: `/uploads/documentos/${filename}`, tipo: 'ASIGNACION' }
+                    documento: { filename: filename, ruta: `/uploads/documentos/${filename}`, tipo: es_prestamo ? 'PRESTAMO' : 'ASIGNACION' },
+                    es_prestamo: es_prestamo || false
                 }
             });
             
@@ -776,7 +790,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT - Finalizar asignación y generar acta de recepción (SIN COLUMNAS NUEVAS)
+// PUT - Finalizar asignación y generar acta de recepción (CON PRÉSTAMO)
 router.put('/:asignacionId/finalizar', async (req, res) => {
     let pool;
     let transaction;
@@ -811,7 +825,7 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             const asignacionResult = await transaction.request()
                 .input('id', sql.Int, asignacionIdNum)
                 .query(`
-                    SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.motivo, a.observaciones,
+                    SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.motivo, a.observaciones, a.es_prestamo,
                            p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo, p.condicion as producto_condicion,
                            c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
                            c.cargo as colaborador_cargo, c.departamento as colaborador_departamento,
@@ -828,6 +842,7 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             }
             
             const asignacion = asignacionResult.recordset[0];
+            const esPrestamo = asignacion.es_prestamo === true;
             const fechaRecepcionValue = fecha_devolucion ? new Date(fecha_devolucion) : new Date();
             
             // Combinar motivo y observaciones en el campo observaciones existente
@@ -901,7 +916,7 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             
             res.json({
                 success: true,
-                message: 'Asignación finalizada correctamente',
+                message: esPrestamo ? 'Préstamo finalizado correctamente' : 'Asignación finalizada correctamente',
                 data: { 
                     documento: { 
                         filename: filename, 
@@ -923,7 +938,7 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
 });
 
 
-// GET - Obtener historial de asignaciones
+// GET - Obtener historial de asignaciones (CON PRÉSTAMO)
 router.get('/historial', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/historial');
@@ -939,6 +954,7 @@ router.get('/historial', async (req, res) => {
                 a.observaciones,
                 a.fecha_asignacion,
                 a.fecha_devolucion,
+                a.es_prestamo,
                 p.nombre as producto_nombre,
                 p.numero_serie,
                 p.marca,
@@ -961,7 +977,7 @@ router.get('/historial', async (req, res) => {
     }
 });
 
-// GET - Obtener asignación por ID (debe ir al final)
+// GET - Obtener asignación por ID (CON PRÉSTAMO)
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -977,7 +993,7 @@ router.get('/:id', async (req, res) => {
             .input('id', sql.Int, idNum)
             .query(`
                 SELECT a.id, a.producto_id, a.colaborador_id, a.motivo, a.observaciones,
-                       a.fecha_asignacion, a.fecha_devolucion,
+                       a.fecha_asignacion, a.fecha_devolucion, a.es_prestamo,
                        p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
                        c.nombre as colaborador_nombre, c.email as colaborador_email, c.rut as colaborador_rut,
                        c.cargo as colaborador_cargo, c.departamento as colaborador_departamento
