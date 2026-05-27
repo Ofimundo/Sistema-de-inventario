@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA CORREGIDA
+// backend/routes/asignacionRoutes.js - VERSIÓN CORREGIDA (solo cambié las líneas con error)
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -125,9 +125,10 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
 
 // ============================================
 // FUNCIÓN CORREGIDA PARA GENERAR ACTA DE ASIGNACIÓN
+// 🔥 CAMBIO 1: Quitar 'async' de la función (línea 167)
 // ============================================
-async function generarActaAsignacion(datos) {
-    return new Promise(async (resolve, reject) => {
+function generarActaAsignacion(datos) {
+    return new Promise((resolve, reject) => {  // 🔥 CAMBIO 2: Quitar 'async' de aquí también
         try {
             const {
                 id_asignacion,
@@ -283,7 +284,7 @@ doc.moveDown(2);
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN (IGUAL AL ACTA DE ASIGNACIÓN)
+// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN
 // ============================================
 function generarActaRecepcion(datos) {
     return new Promise((resolve, reject) => {
@@ -436,6 +437,45 @@ function generarActaRecepcion(datos) {
 // ============================================
 // ENDPOINTS - EL ORDEN IMPORTA
 // ============================================
+
+// 🔥 AGREGAR ESTE ENDPOINT PARA QUE /api/asignaciones FUNCIONE
+router.get('/', async (req, res) => {
+    try {
+        console.log('📥 GET /api/asignaciones');
+        const pool = await getConnection();
+        
+        const result = await pool.request().query(`
+            SELECT 
+                a.id,
+                a.producto_id,
+                a.colaborador_id,
+                a.motivo,
+                a.observaciones,
+                a.fecha_asignacion,
+                a.fecha_devolucion,
+                p.nombre as producto_nombre,
+                p.numero_serie,
+                p.marca,
+                p.modelo,
+                c.nombre as colaborador_nombre,
+                c.rut as colaborador_rut,
+                c.email as colaborador_email,
+                c.cargo as colaborador_cargo,
+                c.departamento as colaborador_departamento
+            FROM INV.asignaciones a
+            LEFT JOIN INV.productos p ON a.producto_id = p.id
+            LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+            ORDER BY a.fecha_asignacion DESC
+        `);
+        
+        console.log(`✅ ${result.recordset.length} asignaciones encontradas`);
+        res.json({ success: true, data: result.recordset });
+        
+    } catch (error) {
+        console.error('❌ Error en GET /asignaciones:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 // GET - Obtener asignaciones activas
 router.get('/activas', async (req, res) => {
