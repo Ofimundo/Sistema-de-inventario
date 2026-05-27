@@ -65,6 +65,8 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import AsignacionCompletaDialog from '../components/AsignacionCompletaDialog';
+import RecepcionDialog from '../components/RecepcionDialog';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
