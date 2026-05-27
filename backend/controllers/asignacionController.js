@@ -1,9 +1,9 @@
-// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON DOCUMENTO_PATH
+// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS
 const { getConnection, sql } = require('../config/database');
 
 const asignacionController = {
     /**
-     * Crear una nueva asignación (CON PRÉSTAMO Y DOCUMENTO_PATH)
+     * Crear una nueva asignación (CON PRÉSTAMO)
      */
     crearAsignacion: async (req, res) => {
         let pool;
@@ -22,8 +22,7 @@ const asignacionController = {
                 usuario_responsable,
                 firma_trabajador,
                 firma_gerente,
-                es_prestamo,
-                documento_path  // NUEVO: ruta del documento PDF generado
+                es_prestamo  // NUEVO: campo para préstamo
             } = req.body;
             
             // Validaciones
@@ -60,7 +59,7 @@ const asignacionController = {
                     throw new Error(`El producto no está disponible para asignación. Estado actual: ${producto.id_estado_equipo === 2 ? 'ASIGNADO' : 'NO DISPONIBLE'}`);
                 }
                 
-                // 2. Crear la asignación - INCLUIR documento_path
+                // 2. Crear la asignación - INCLUIR id_estado_equipo y es_prestamo
                 const asignacionResult = await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('colaborador_id', sql.Int, colaborador_id)
@@ -71,8 +70,7 @@ const asignacionController = {
                     .input('firma_trabajador', sql.NVarChar, firma_trabajador || null)
                     .input('firma_gerente', sql.NVarChar, firma_gerente || null)
                     .input('usuario_responsable', sql.NVarChar, usuario_responsable || 'Sistema')
-                    .input('es_prestamo', sql.Bit, es_prestamo || false)
-                    .input('documento_path', sql.NVarChar(500), documento_path || null)  // NUEVO
+                    .input('es_prestamo', sql.Bit, es_prestamo || false)  // NUEVO
                     .query(`
                         INSERT INTO INV.asignaciones (
                             producto_id,
@@ -85,7 +83,6 @@ const asignacionController = {
                             firma_gerente,
                             usuario_responsable,
                             es_prestamo,
-                            documento_path,
                             fecha_creacion
                         )
                         OUTPUT INSERTED.*
@@ -100,7 +97,6 @@ const asignacionController = {
                             @firma_gerente,
                             @usuario_responsable,
                             @es_prestamo,
-                            @documento_path,
                             GETDATE()
                         )
                     `);
@@ -156,8 +152,7 @@ const asignacionController = {
                         motivo: nuevaAsignacion.motivo,
                         firma_trabajador: nuevaAsignacion.firma_trabajador,
                         firma_gerente: nuevaAsignacion.firma_gerente,
-                        es_prestamo: nuevaAsignacion.es_prestamo,
-                        documento_path: nuevaAsignacion.documento_path
+                        es_prestamo: nuevaAsignacion.es_prestamo
                     }
                 });
                 
@@ -176,7 +171,7 @@ const asignacionController = {
     },
     
     /**
-     * Obtener asignaciones activas (CON DOCUMENTO_PATH)
+     * Obtener asignaciones activas (CON PRÉSTAMO)
      */
     getAsignacionesActivas: async (req, res) => {
         try {
@@ -198,7 +193,6 @@ const asignacionController = {
                     a.firma_gerente,
                     a.usuario_responsable,
                     a.es_prestamo,
-                    a.documento_path,
                     p.nombre as producto_nombre,
                     p.marca,
                     p.modelo,
@@ -217,10 +211,6 @@ const asignacionController = {
             `);
             
             console.log(`✅ ${result.recordset.length} asignaciones activas encontradas`);
-            
-            // Log para verificar documentos
-            const conDocumento = result.recordset.filter(a => a.documento_path);
-            console.log(`📄 ${conDocumento.length} asignaciones tienen documento asociado`);
             
             res.json({
                 success: true,
@@ -352,7 +342,7 @@ const asignacionController = {
     },
     
     /**
-     * Obtener todas las asignaciones (CON DOCUMENTO_PATH)
+     * Obtener todas las asignaciones (CON PRÉSTAMO)
      */
     getAsignaciones: async (req, res) => {
         try {
@@ -376,7 +366,6 @@ const asignacionController = {
                     a.observaciones_devolucion,
                     a.condicion_entrega,
                     a.es_prestamo,
-                    a.documento_path,
                     p.nombre as producto_nombre,
                     p.marca,
                     p.modelo,
@@ -406,72 +395,6 @@ const asignacionController = {
                 data: []
             });
         }
-    },
-    
-    /**
-     * Obtener asignación por ID (CON DOCUMENTO_PATH)
-     */
-    getAsignacionById: async (req, res) => {
-        try {
-            const { id } = req.params;
-            console.log(`📥 GET /api/asignaciones/${id}`);
-            
-            const idNum = parseInt(id);
-            if (isNaN(idNum)) {
-                return res.status(400).json({ success: false, message: 'ID inválido' });
-            }
-            
-            const pool = await getConnection();
-            
-            const result = await pool.request()
-                .input('id', sql.Int, idNum)
-                .query(`
-                    SELECT 
-                        a.id,
-                        a.producto_id,
-                        a.colaborador_id,
-                        a.id_estado_equipo,
-                    a.motivo,
-                    a.observaciones,
-                    a.fecha_asignacion,
-                    a.fecha_devolucion,
-                    a.firma_trabajador,
-                    a.firma_gerente,
-                    a.usuario_responsable,
-                    a.observaciones_devolucion,
-                    a.condicion_entrega,
-                    a.es_prestamo,
-                    a.documento_path,
-                    p.nombre as producto_nombre,
-                    p.marca,
-                    p.modelo,
-                    p.numero_serie,
-                    c.nombre as colaborador_nombre,
-                    c.rut as colaborador_rut,
-                    c.email as colaborador_email,
-                    c.cargo as colaborador_cargo,
-                    c.departamento as colaborador_departamento
-                FROM INV.asignaciones a
-                LEFT JOIN INV.productos p ON a.producto_id = p.id
-                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                WHERE a.id = @id
-            `);
-        
-        if (result.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'Asignación no encontrada' });
-        }
-        
-        res.json({
-            success: true,
-            data: result.recordset[0]
-        });
-        
-    } catch (error) {
-        console.error('❌ Error en getAsignacionById:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
     }
 };
 

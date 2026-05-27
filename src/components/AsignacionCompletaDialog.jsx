@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN CORREGIDA (CON GENERACIÓN DE ACTA)
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN COMPLETAMENTE CORREGIDA
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -18,8 +18,7 @@ import {
     FormControl,
     RadioGroup,
     FormControlLabel,
-    Radio,
-    Switch
+    Radio
 } from '@mui/material';
 import {
     Assignment as AssignmentIcon,
@@ -31,33 +30,38 @@ import {
     Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
     Clear as ClearIcon,
-    LocalOffer as LocalOfferIcon
 } from '@mui/icons-material';
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA
+// 🔥 URL BASE DINÁMICA - CORREGIDA
 // ============================================
 const getApiBaseUrl = () => {
+    // Para Vite
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         let url = import.meta.env.VITE_API_URL;
+        // Eliminar /api del final si existe para no duplicar
         if (url.endsWith('/api')) {
             url = url.slice(0, -4);
         }
+        console.log('📍 API Base URL (desde VITE):', url);
         return url;
     }
+    // Para Create React App
     if (process.env && process.env.REACT_APP_API_URL) {
         let url = process.env.REACT_APP_API_URL;
         if (url.endsWith('/api')) {
             url = url.slice(0, -4);
         }
+        console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
-    return 'http://localhost:5000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+// Agregar log para verificar la URL
 console.log('🔧 API_BASE_URL final en AsignacionCompletaDialog:', API_BASE_URL);
 
 // Componente de Firma Dibujada (Canvas)
@@ -178,7 +182,9 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height
                 onTouchEnd={stopDrawing}
             />
             <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', gap: 1 }}>
-                <Button size="small" variant="outlined" onClick={clearCanvas} startIcon={<ClearIcon />} sx={{ borderRadius: 0 }}>Limpiar</Button>
+                <Button size="small" variant="outlined" onClick={clearCanvas} startIcon={<ClearIcon />} sx={{ borderRadius: 0 }}>
+                    Limpiar
+                </Button>
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                 Dibuje su firma en el recuadro (soporta mouse y pantalla táctil)
@@ -261,7 +267,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
-    const [esPrestamo, setEsPrestamo] = useState(false);
 
     useEffect(() => {
         if (open && productoSeleccionado) {
@@ -280,7 +285,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             setDocumentoGenerado(null);
             setTipoFirmaTrabajador('texto');
             setTipoFirmaGerente('texto');
-            setEsPrestamo(false);
         }
     }, [open, productoSeleccionado]);
 
@@ -315,89 +319,47 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    const handleDescargarDocumento = async () => {
-        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+    // ✅ FUNCIÓN CORREGIDA PARA DESCARGAR DOCUMENTO - USANDO API_BASE_URL
+    // src/components/AsignacionCompletaDialog.jsx
+const handleDescargarDocumento = async () => {
+    if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+    
+    setDownloading(true);
+    try {
+        const token = localStorage.getItem('token');
+        // ✅ URL FORZADA A RENDER
+        const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
+        console.log('📥 Descargando documento desde:', downloadUrl);
         
-        setDownloading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-            console.log('📥 Descargando documento desde:', downloadUrl);
-            
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
+        const response = await fetch(downloadUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
             }
+        });
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = documentoGenerado.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            console.log('✅ Documento descargado:', documentoGenerado.filename);
-        } catch (error) {
-            console.error('❌ Error descargando documento:', error);
-            alert('Error al descargar el documento.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
         }
-    };
 
-    // 🔥 FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN
-    const generarActa = async (asignacionId) => {
-        try {
-            const actaData = {
-                id_asignacion: asignacionId,
-                colaborador: {
-                    nombre: colaboradorSeleccionado.nombre,
-                    rut: colaboradorSeleccionado.rut || '',
-                    email: colaboradorSeleccionado.email || '',
-                    cargo: colaboradorSeleccionado.cargo || '',
-                    departamento: colaboradorSeleccionado.departamento || '',
-                    nacionalidad: 'chilena',
-                    fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
-                    domicilio: colaboradorSeleccionado.direccion || 'No registrada'
-                },
-                productos: [{
-                    tipo: 'Equipo',
-                    nombre: productoSeleccionado.nombre,
-                    marca: productoSeleccionado.marca || 'N/A',
-                    modelo: productoSeleccionado.modelo || 'N/A',
-                    numero_serie: productoSeleccionado.numero_serie || 'N/A',
-                    condicion: productoSeleccionado.condicion || 'NUEVO',
-                    cantidad: 1
-                }],
-                fecha_asignacion: new Date(),
-                motivo: motivo,
-                observaciones: observaciones,
-                firma_trabajador: getFirmaTrabajadorFinal(),
-                firma_gerente: getFirmaGerenteFinal(),
-                usuario_responsable: localStorage.getItem('user') || 'Sistema',
-                es_prestamo: esPrestamo
-            };
-
-            console.log('📤 Generando acta...', actaData);
-            const response = await api.post('/asignaciones/generar-acta-asignacion', actaData);
-            
-            if (response.data?.success) {
-                console.log('✅ Acta generada:', response.data);
-                return response.data;
-            }
-            throw new Error(response.data?.message || 'Error al generar acta');
-        } catch (error) {
-            console.error('❌ Error generando acta:', error);
-            throw error;
-        }
-    };
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = documentoGenerado.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ Documento descargado:', documentoGenerado.filename);
+    } catch (error) {
+        console.error('❌ Error descargando documento:', error);
+        alert('Error al descargar el documento. Por favor, intente nuevamente.');
+    } finally {
+        setTimeout(() => setDownloading(false), 1000);
+    }
+};
 
     const handleSubmit = async () => {
         if (!colaboradorSeleccionado) {
@@ -436,7 +398,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 }
             }
             
-            // 1. Crear asignación en BD
             const asignacionResponse = await api.post('/asignaciones', {
                 producto_id: productoSeleccionado.id,
                 colaborador_id: colaboradorSeleccionado.id,
@@ -445,27 +406,55 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 fecha_asignacion: new Date().toISOString().split('T')[0],
                 usuario_responsable: usuarioResponsable,
                 firma_trabajador: firmaTrabajador,
-                firma_gerente: firmaGerente,
-                es_prestamo: esPrestamo
+                firma_gerente: firmaGerente
             });
 
             if (asignacionResponse.data?.success) {
-                const asignacionId = asignacionResponse.data.data?.id;
-                const tipoAsignacion = esPrestamo ? 'Préstamo' : 'Asignación';
+                // Generar acta PDF después de la asignación
+                const actaData = {
+                    id_asignacion: asignacionResponse.data.data?.id,
+                    colaborador: {
+                        nombre: colaboradorSeleccionado.nombre,
+                        rut: colaboradorSeleccionado.rut,
+                        email: colaboradorSeleccionado.email,
+                        cargo: colaboradorSeleccionado.cargo,
+                        departamento: colaboradorSeleccionado.departamento,
+                        nacionalidad: 'chilena',
+                        fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
+                        domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
+                        comuna: colaboradorSeleccionado.comuna || '',
+                        ciudad: colaboradorSeleccionado.ciudad || ''
+                    },
+                    productos: [{
+                        tipo: 'Equipo',
+                        nombre: productoSeleccionado.nombre,
+                        marca: productoSeleccionado.marca,
+                        modelo: productoSeleccionado.modelo,
+                        numero_serie: productoSeleccionado.numero_serie,
+                        condicion: productoSeleccionado.condicion || 'NUEVO'
+                    }],
+                    fecha_asignacion: new Date(),
+                    motivo: motivo,
+                    observaciones: observaciones,
+                    firma_trabajador: getFirmaTrabajadorFinal(),
+                    firma_gerente: getFirmaGerenteFinal(),
+                    usuario_responsable: usuarioResponsable
+                };
+
+                const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData);
                 
-                // 2. Generar acta PDF
-                const actaResult = await generarActa(asignacionId);
+                if (actaResponse.data?.success) {
+                    setDocumentoGenerado(actaResponse.data);
+                }
                 
-                setDocumentoGenerado(actaResult);
                 setShowConfirmDialog(true);
                 setSuccess(true);
                 
                 if (onSuccess) {
                     onSuccess({
                         success: true,
-                        message: `✅ ${tipoAsignacion} completada exitosamente`,
-                        documento: actaResult,
-                        es_prestamo: esPrestamo
+                        message: `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}`,
+                        documento: actaResponse.data
                     });
                 }
             } else {
@@ -492,30 +481,39 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         setSuccess(false);
         setShowConfirmDialog(false);
         setDocumentoGenerado(null);
-        setEsPrestamo(false);
         onClose();
     };
 
+    // Ventana de confirmación con documento
     const ConfirmacionDialog = () => (
         <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
-            <DialogTitle sx={{ bgcolor: esPrestamo ? '#F59E0B' : '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
+            <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    ¡{esPrestamo ? 'Préstamo' : 'Asignación'} Exitosa!
+                    ¡Asignación Exitosa!
                 </Typography>
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    El acta de <strong>{esPrestamo ? 'Préstamo' : 'Asignación'}</strong> se ha generado correctamente.
+                    El acta de <strong>Asignación</strong> se ha generado correctamente.
                 </Typography>
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                <Box sx={{ 
+                    mt: 2, 
+                    p: 2, 
+                    bgcolor: '#f5f5f5', 
+                    borderRadius: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1
+                }}>
                     <PdfIcon sx={{ color: '#f44336' }} />
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {documentoGenerado?.filename || `acta_${esPrestamo ? 'prestamo' : 'asignacion'}.pdf`}
+                        {documentoGenerado?.filename || 'acta_asignacion.pdf'}
                     </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                    Se ha {esPrestamo ? 'prestado' : 'asignado'} el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                    Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
                 </Typography>
                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
                     <Button 
@@ -548,17 +546,15 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <CheckCircleIcon sx={{ color: '#4caf50' }} />
-                        <Typography variant="h6">¡{esPrestamo ? 'Préstamo' : 'Asignación'} Exitosa!</Typography>
+                        <Typography variant="h6">¡Asignación Exitosa!</Typography>
                     </Box>
                 </DialogTitle>
                 <DialogContent dividers>
                     <Box textAlign="center" py={2}>
                         <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>
-                            {esPrestamo ? 'Préstamo' : 'Asignación'} completada exitosamente
-                        </Typography>
+                        <Typography variant="h6" gutterBottom>Asignación completada exitosamente</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Se ha {esPrestamo ? 'prestado' : 'asignado'} el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
+                            Se ha asignado el producto <strong>{productoSeleccionado?.nombre}</strong> a <strong>{colaboradorSeleccionado?.nombre}</strong>
                         </Typography>
                         <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0 }}>Cerrar</Button>
                     </Box>
@@ -575,38 +571,71 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <AssignmentIcon sx={{ color: '#0A66C2' }} />
-                        <Typography variant="h6">Asignar / Prestar Producto con Firma Digital</Typography>
+                        <Typography variant="h6">Asignar Producto con Firma Digital</Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         Producto: <strong>{productoSeleccionado.nombre}</strong> | N° Serie: <strong>{productoSeleccionado.numero_serie || 'N/A'}</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Estado actual: <strong style={{ color: productoSeleccionado.id_estado_equipo === 1 ? '#10B981' : '#F59E0B' }}>
+                            {productoSeleccionado.id_estado_equipo === 1 ? 'DISPONIBLE' : productoSeleccionado.id_estado_equipo === 2 ? 'ASIGNADO' : 'NO DISPONIBLE'}
+                        </strong>
                     </Typography>
                 </DialogTitle>
 
                 <DialogContent dividers>
                     <Stack spacing={3}>
-                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Tipo de Asignación</Typography>
-                            <FormControlLabel
-                                control={<Switch checked={esPrestamo} onChange={(e) => setEsPrestamo(e.target.checked)} color="primary" />}
-                                label={<Box><Typography variant="body2">{esPrestamo ? '📋 PRÉSTAMO TEMPORAL' : '🔒 ASIGNACIÓN PERMANENTE'}</Typography>
-                                <Typography variant="caption" color="text.secondary">{esPrestamo ? 'El producto será devuelto en el futuro' : 'El producto queda asignado de forma permanente'}</Typography></Box>}
-                            />
-                        </Paper>
-
-                        <TextField fullWidth placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} size="small" InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon /></InputAdornment> }} />
-
-                        <Paper variant="outlined" sx={{ maxHeight: 250, overflow: 'auto' }}>
+                        {/* Selección de Colaborador */}
+                        <TextField
+                            fullWidth
+                            placeholder="Buscar colaborador por nombre, RUT, email o cargo..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            InputProps={{
+                                startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
+                                endAdornment: searchTerm && (
+                                    <InputAdornment position="end">
+                                        <IconButton size="small" onClick={() => setSearchTerm('')}>
+                                            <CloseIcon fontSize="small" />
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                            size="small"
+                        />
+                        
+                        <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto', border: '1px solid #ddd' }}>
                             {colaboradoresFiltrados.length === 0 ? (
-                                <Box sx={{ p: 3, textAlign: 'center' }}><Typography color="text.secondary">{searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores registrados'}</Typography></Box>
+                                <Box sx={{ p: 3, textAlign: 'center' }}>
+                                    <Typography color="text.secondary">
+                                        {searchTerm ? 'No se encontraron colaboradores' : 'No hay colaboradores activos'}
+                                    </Typography>
+                                </Box>
                             ) : (
                                 colaboradoresFiltrados.map((col) => (
-                                    <Box key={col.id} sx={{ p: 1.5, borderBottom: `1px solid #ddd`, cursor: 'pointer', backgroundColor: colaboradorSeleccionado?.id === col.id ? '#e3f2fd' : 'transparent', '&:hover': { backgroundColor: '#f5f5f5' } }} onClick={() => setColaboradorSeleccionado(col)}>
+                                    <Box
+                                        key={col.id}
+                                        sx={{
+                                            p: 2,
+                                            borderBottom: `1px solid #ddd`,
+                                            cursor: 'pointer',
+                                            backgroundColor: colaboradorSeleccionado?.id === col.id ? '#e3f2fd' : 'transparent',
+                                            '&:hover': { backgroundColor: '#f5f5f5' }
+                                        }}
+                                        onClick={() => setColaboradorSeleccionado(col)}
+                                    >
                                         <Box display="flex" alignItems="center" gap={2}>
-                                            <Avatar sx={{ bgcolor: '#0A66C2', color: 'white' }}>{col.nombre?.charAt(0) || '?'}</Avatar>
+                                            <Avatar sx={{ bgcolor: '#0A66C2', color: 'white' }}>
+                                                {col.nombre?.charAt(0) || '?'}
+                                            </Avatar>
                                             <Box flex={1}>
-                                                <Typography variant="body2" fontWeight={500}>{col.nombre}</Typography>
-                                                <Typography variant="caption" color="text.secondary" display="block">{col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}</Typography>
-                                                <Typography variant="caption" color="text.secondary">{col.email} {col.rut && `• ${col.rut}`}</Typography>
+                                                <Typography variant="subtitle2" fontWeight={500}>{col.nombre}</Typography>
+                                                <Typography variant="caption" color="text.secondary" display="block">
+                                                    {col.cargo || 'Sin cargo'} • {col.departamento || 'Sin departamento'}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {col.email} {col.rut && `• RUT: ${col.rut}`}
+                                                </Typography>
                                             </Box>
                                             {colaboradorSeleccionado?.id === col.id && <CheckCircleIcon sx={{ color: '#4caf50' }} />}
                                         </Box>
@@ -615,54 +644,115 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                             )}
                         </Paper>
 
-                        <TextField fullWidth label="Motivo *" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={esPrestamo ? "Ej: Préstamo para reunión..." : "Ej: Asignación permanente..."} multiline rows={2} size="small" />
-                        <TextField fullWidth type="date" label="Fecha de asignación" value={new Date().toISOString().split('T')[0]} disabled size="small" />
-                        <TextField fullWidth label="Observaciones adicionales" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} multiline rows={2} size="small" />
+                        {/* Motivo y Observaciones */}
+                        <TextField
+                            fullWidth
+                            label="Motivo de asignación *"
+                            value={motivo}
+                            onChange={(e) => setMotivo(e.target.value)}
+                            multiline
+                            rows={2}
+                            placeholder="Ej: Proyecto específico, Reemplazo de equipo, Uso temporal, etc."
+                            required
+                        />
+                        
+                        <TextField
+                            fullWidth
+                            label="Observaciones adicionales"
+                            value={observaciones}
+                            onChange={(e) => setObservaciones(e.target.value)}
+                            multiline
+                            rows={2}
+                            placeholder="Observaciones importantes sobre la transacción..."
+                        />
 
                         {/* Firma del Trabajador */}
                         <Box>
-                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>Firma del Trabajador / Colaborador *</Typography>
+                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                Firma del Trabajador / Colaborador *
+                            </Typography>
                             <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup row value={tipoFirmaTrabajador} onChange={(e) => setTipoFirmaTrabajador(e.target.value)}>
+                                <RadioGroup
+                                    row
+                                    value={tipoFirmaTrabajador}
+                                    onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
+                                >
                                     <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
                                     <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
                                 </RadioGroup>
                             </FormControl>
+                            
                             {tipoFirmaTrabajador === 'texto' ? (
-                                <FirmaTexto label="Firma del Trabajador (Texto)" onFirmaCapturada={setFirmaTrabajadorText} valorInicial={firmaTrabajadorText} required={true} />
+                                <FirmaTexto
+                                    label="Firma del Trabajador (Texto)"
+                                    onFirmaCapturada={setFirmaTrabajadorText}
+                                    valorInicial={firmaTrabajadorText}
+                                    required={true}
+                                />
                             ) : (
-                                <FirmaDibujada label="Firma del Trabajador (Dibujada)" onFirmaGuardada={setFirmaTrabajadorDibujo} valorInicial={firmaTrabajadorDibujo} width={450} height={150} />
+                                <FirmaDibujada
+                                    label="Firma del Trabajador (Dibujada)"
+                                    onFirmaGuardada={setFirmaTrabajadorDibujo}
+                                    valorInicial={firmaTrabajadorDibujo}
+                                    width={450}
+                                    height={150}
+                                />
                             )}
                         </Box>
 
                         {/* Firma del Gerente */}
                         <Box>
-                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>Firma del Gerente General / Autorizante *</Typography>
+                            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+                                Firma del Gerente General / Autorizante *
+                            </Typography>
                             <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                <RadioGroup row value={tipoFirmaGerente} onChange={(e) => setTipoFirmaGerente(e.target.value)}>
+                                <RadioGroup
+                                    row
+                                    value={tipoFirmaGerente}
+                                    onChange={(e) => setTipoFirmaGerente(e.target.value)}
+                                >
                                     <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
                                     <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
                                 </RadioGroup>
                             </FormControl>
+                            
                             {tipoFirmaGerente === 'texto' ? (
-                                <FirmaTexto label="Firma del Gerente (Texto)" onFirmaCapturada={setFirmaGerenteText} valorInicial={firmaGerenteText} required={true} />
+                                <FirmaTexto
+                                    label="Firma del Gerente (Texto)"
+                                    onFirmaCapturada={setFirmaGerenteText}
+                                    valorInicial={firmaGerenteText}
+                                    required={true}
+                                />
                             ) : (
-                                <FirmaDibujada label="Firma del Gerente (Dibujada)" onFirmaGuardada={setFirmaGerenteDibujo} valorInicial={firmaGerenteDibujo} width={450} height={150} />
+                                <FirmaDibujada
+                                    label="Firma del Gerente (Dibujada)"
+                                    onFirmaGuardada={setFirmaGerenteDibujo}
+                                    valorInicial={firmaGerenteDibujo}
+                                    width={450}
+                                    height={150}
+                                />
                             )}
                         </Box>
 
-                        {error && <Alert severity="error">{error}</Alert>}
+                        {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
                         
                         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
                             <Button onClick={handleClose} sx={{ borderRadius: 0 }}>Cancelar</Button>
-                            <Button variant="contained" onClick={handleSubmit} disabled={loading || !colaboradorSeleccionado || !motivo} startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />} sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2' }}>
-                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Confirmar Asignación')}
+                            <Button
+                                variant="contained"
+                                onClick={handleSubmit}
+                                disabled={loading || !colaboradorSeleccionado || !motivo}
+                                startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
+                                sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
+                            >
+                                {loading ? 'Procesando...' : 'Confirmar Asignación'}
                             </Button>
                         </Box>
                     </Stack>
                 </DialogContent>
             </Dialog>
 
+            {/* Ventana de confirmación con documento */}
             <ConfirmacionDialog />
         </>
     );
