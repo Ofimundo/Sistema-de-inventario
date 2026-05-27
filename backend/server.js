@@ -141,6 +141,8 @@ app.use('/api/estados', authenticateToken, estadosRoutes);
 app.use('/api/documentos', authenticateToken, documentoRoutes);
 app.use('/api/usuarios', authenticateToken, usuariosRoutes);
 app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
+// Agregar esta línea con las otras rutas
+app.get('/api/colaboradores/empresas', authenticateToken, colaboradorController.getEmpresas);
 
 // ============================================
 // MANEJO DE ERRORES 404

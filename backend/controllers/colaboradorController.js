@@ -6,10 +6,10 @@ const colaboradorController = {
         try {
             console.log('📥 GET /api/colaboradores');
             
-            const { estado, departamento, search } = req.query;
+            const { estado, departamento, empresa, search } = req.query; // NUEVO: empresa
             const pool = await getConnection();
             
-            // Consulta SIMPLE usando JOIN - IGUAL a la que funciona en SQL
+            // Consulta incluyendo empresa
             let query = `
                 SELECT 
                     c.id,
@@ -19,6 +19,7 @@ const colaboradorController = {
                     c.telefono,
                     c.cargo,
                     c.departamento,
+                    c.empresa,
                     c.estado,
                     c.fecha_ingreso,
                     c.direccion,
@@ -43,6 +44,11 @@ const colaboradorController = {
                 request.input('departamento', sql.NVarChar, departamento);
             }
             
+            if (empresa) { // NUEVO: filtro por empresa
+                conditions.push('c.empresa = @empresa');
+                request.input('empresa', sql.NVarChar, empresa);
+            }
+            
             if (search) {
                 conditions.push('(c.nombre LIKE @search OR c.rut LIKE @search OR c.email LIKE @search)');
                 request.input('search', sql.NVarChar, `%${search}%`);
@@ -52,7 +58,7 @@ const colaboradorController = {
                 query += ' WHERE ' + conditions.join(' AND ');
             }
             
-            query += ' GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento';
+            query += ' GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.empresa, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento';
             query += ' ORDER BY c.nombre';
             
             console.log('📝 Ejecutando consulta SQL...');
@@ -63,7 +69,7 @@ const colaboradorController = {
             // Verificar Adan Moris específicamente
             const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
             if (adan) {
-                console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+                console.log(`🔴 ADAN MORIS: Empresa=${adan.empresa}, Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
             } else {
                 console.log('🔴 No se encontró a Adan Moris en los resultados');
             }
@@ -72,7 +78,7 @@ const colaboradorController = {
             const conAsignaciones = result.recordset.filter(c => c.total_asignaciones > 0);
             console.log(`📊 ${conAsignaciones.length} colaboradores tienen asignaciones`);
             conAsignaciones.slice(0, 10).forEach(col => {
-                console.log(`   ${col.nombre}: Total=${col.total_asignaciones}, Activas=${col.asignaciones_activas}`);
+                console.log(`   ${col.nombre} (${col.empresa || 'Sin empresa'}): Total=${col.total_asignaciones}, Activas=${col.asignaciones_activas}`);
             });
             
             res.json({
@@ -107,6 +113,7 @@ const colaboradorController = {
                         c.telefono,
                         c.cargo,
                         c.departamento,
+                        c.empresa,
                         c.estado,
                         c.fecha_ingreso,
                         c.direccion,
@@ -116,7 +123,7 @@ const colaboradorController = {
                     FROM [INV].[colaboradores] c
                     LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
                     WHERE c.id = @id
-                    GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento
+                    GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.empresa, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento
                 `);
 
             if (result.recordset.length === 0) {
@@ -156,7 +163,7 @@ const colaboradorController = {
             
             colaborador.productos_asignados = productos.recordset;
 
-            console.log(`✅ Colaborador: ${colaborador.nombre}`);
+            console.log(`✅ Colaborador: ${colaborador.nombre} (${colaborador.empresa || 'Sin empresa'})`);
             console.log(`   Total asignaciones: ${colaborador.total_asignaciones}, Activas: ${colaborador.asignaciones_activas}`);
 
             res.json({
@@ -220,7 +227,11 @@ const colaboradorController = {
     createColaborador: async (req, res) => {
         try {
             console.log('📥 POST /api/colaboradores');
-            const { rut, nombre, email, telefono, cargo, departamento, fecha_ingreso, estado, direccion, fecha_nacimiento } = req.body;
+            const { 
+                rut, nombre, email, telefono, cargo, departamento, 
+                fecha_ingreso, estado, direccion, fecha_nacimiento, 
+                empresa  // NUEVO: empresa
+            } = req.body;
 
             if (!rut || !nombre || !email) {
                 return res.status(400).json({
@@ -264,17 +275,18 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
+                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO') // NUEVO: empresa
                 .input('creado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     INSERT INTO [INV].[colaboradores] (
                         rut, nombre, email, telefono, cargo, departamento,
-                        fecha_ingreso, estado, direccion, fecha_nacimiento,
+                        fecha_ingreso, estado, direccion, fecha_nacimiento, empresa,
                         creado_por, fecha_creacion
                     )
                     OUTPUT INSERTED.*
                     VALUES (
                         @rut, @nombre, @email, @telefono, @cargo, @departamento,
-                        @fecha_ingreso, @estado, @direccion, @fecha_nacimiento,
+                        @fecha_ingreso, @estado, @direccion, @fecha_nacimiento, @empresa,
                         @creado_por, GETDATE()
                     )
                 `);
@@ -296,7 +308,11 @@ const colaboradorController = {
     updateColaborador: async (req, res) => {
         try {
             const { id } = req.params;
-            const { rut, nombre, email, telefono, cargo, departamento, fecha_ingreso, estado, direccion, fecha_nacimiento } = req.body;
+            const { 
+                rut, nombre, email, telefono, cargo, departamento, 
+                fecha_ingreso, estado, direccion, fecha_nacimiento,
+                empresa  // NUEVO: empresa
+            } = req.body;
 
             const pool = await getConnection();
 
@@ -351,6 +367,7 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
+                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO') // NUEVO: empresa
                 .input('actualizado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     UPDATE [INV].[colaboradores]
@@ -365,6 +382,7 @@ const colaboradorController = {
                         estado = @estado,
                         direccion = @direccion,
                         fecha_nacimiento = @fecha_nacimiento,
+                        empresa = @empresa,
                         actualizado_por = @actualizado_por,
                         fecha_actualizacion = GETDATE()
                     OUTPUT INSERTED.*
@@ -487,6 +505,41 @@ const colaboradorController = {
             res.status(500).json({
                 success: false,
                 message: error.message
+            });
+        }
+    },
+
+    // NUEVO: Obtener empresas únicas
+    getEmpresas: async (req, res) => {
+        try {
+            const pool = await getConnection();
+            const result = await pool.request()
+                .query(`
+                    SELECT DISTINCT empresa 
+                    FROM [INV].[colaboradores] 
+                    WHERE empresa IS NOT NULL AND empresa != ''
+                    ORDER BY empresa
+                `);
+
+            // Si no hay empresas en la tabla, devolver las opciones por defecto
+            const empresas = result.recordset.map(r => r.empresa);
+            if (empresas.length === 0) {
+                return res.json({
+                    success: true,
+                    data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO']
+                });
+            }
+
+            res.json({
+                success: true,
+                data: empresas
+            });
+        } catch (error) {
+            console.error('❌ Error en getEmpresas:', error);
+            // Devolver opciones por defecto en caso de error
+            res.json({
+                success: true,
+                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO']
             });
         }
     }

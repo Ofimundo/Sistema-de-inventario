@@ -57,7 +57,8 @@ import {
     FilterList as FilterListIcon,
     FilterListOff as FilterListOffIcon,
     AssignmentInd as AssignmentIndIcon,
-    Inventory as InventoryIcon
+    Inventory as InventoryIcon,
+    Business as BusinessIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import colaboradorService from '../services/colaboradorService';
@@ -80,6 +81,25 @@ const colors = {
         disabled: '#9CA3AF'
     },
     border: '#E5E7EB'
+};
+
+// Opciones de empresas
+const OPCIONES_EMPRESA = [
+    { valor: 'GLOBAL', label: 'Global', color: '#8B5CF6', icon: '🌍' },
+    { valor: 'DREAMTEC', label: 'Dreamtec', color: '#EC4899', icon: '✨' },
+    { valor: 'OFIMUNDO', label: 'Ofimundo', color: '#0A66C2', icon: '🏢' }
+];
+
+// Obtener color de empresa
+const getEmpresaColor = (empresa) => {
+    const found = OPCIONES_EMPRESA.find(e => e.valor === empresa);
+    return found ? found.color : '#6B7280';
+};
+
+// Obtener label de empresa
+const getEmpresaLabel = (empresa) => {
+    const found = OPCIONES_EMPRESA.find(e => e.valor === empresa);
+    return found ? found.label : empresa || 'No asignada';
 };
 
 // Styled components
@@ -166,7 +186,7 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
             }}>
                 <Box display="flex" alignItems="center" justifyContent="space-between">
                     <Box display="flex" alignItems="center" gap={2}>
-                        <Avatar sx={{ bgcolor: colors.primary, width: 56, height: 56 }}>
+                        <Avatar sx={{ bgcolor: getEmpresaColor(colaborador.empresa), width: 56, height: 56 }}>
                             {colaborador.nombre?.charAt(0) || 'U'}
                         </Avatar>
                         <Box>
@@ -176,10 +196,22 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                             <Typography variant="body2" color="text.secondary">
                                 {colaborador.rut} • {colaborador.email}
                             </Typography>
-                            <Typography variant="caption" color="primary" sx={{ mt: 0.5, display: 'block' }}>
-                                Total Asignaciones: {colaborador.total_asignaciones || 0} | 
-                                Activas: {colaborador.asignaciones_activas || 0}
-                            </Typography>
+                            <Box display="flex" gap={1} mt={0.5}>
+                                <Chip
+                                    size="small"
+                                    icon={<BusinessIcon />}
+                                    label={getEmpresaLabel(colaborador.empresa)}
+                                    sx={{
+                                        backgroundColor: alpha(getEmpresaColor(colaborador.empresa), 0.1),
+                                        color: getEmpresaColor(colaborador.empresa),
+                                        fontWeight: 500
+                                    }}
+                                />
+                                <Typography variant="caption" color="primary" sx={{ display: 'block' }}>
+                                    Total Asignaciones: {colaborador.total_asignaciones || 0} | 
+                                    Activas: {colaborador.asignaciones_activas || 0}
+                                </Typography>
+                            </Box>
                         </Box>
                     </Box>
                     <IconButton onClick={onRefresh} size="small" title="Actualizar productos" disabled={loading}>
@@ -196,6 +228,18 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                         </Typography>
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Stack spacing={2}>
+                                <Box display="flex" justifyContent="space-between">
+                                    <Typography color="text.secondary">Empresa:</Typography>
+                                    <Chip
+                                        size="small"
+                                        label={getEmpresaLabel(colaborador.empresa)}
+                                        sx={{
+                                            backgroundColor: alpha(getEmpresaColor(colaborador.empresa), 0.1),
+                                            color: getEmpresaColor(colaborador.empresa)
+                                        }}
+                                    />
+                                </Box>
+                                <Divider />
                                 <Box display="flex" justifyContent="space-between">
                                     <Typography color="text.secondary">RUT:</Typography>
                                     <Typography fontWeight={500}>{colaborador.rut}</Typography>
@@ -361,7 +405,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         fecha_ingreso: '',
         estado: 'ACTIVO',
         direccion: '',
-        fecha_nacimiento: ''
+        fecha_nacimiento: '',
+        empresa: ''  // NUEVO CAMPO
     });
 
     const [errores, setErrores] = useState({});
@@ -380,7 +425,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     fecha_ingreso: colaborador.fecha_ingreso?.split('T')[0] || '',
                     estado: colaborador.estado || 'ACTIVO',
                     direccion: colaborador.direccion || '',
-                    fecha_nacimiento: colaborador.fecha_nacimiento?.split('T')[0] || ''
+                    fecha_nacimiento: colaborador.fecha_nacimiento?.split('T')[0] || '',
+                    empresa: colaborador.empresa || 'OFIMUNDO'  // Valor por defecto
                 });
             } else {
                 setFormData({
@@ -393,7 +439,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     fecha_ingreso: '',
                     estado: 'ACTIVO',
                     direccion: '',
-                    fecha_nacimiento: ''
+                    fecha_nacimiento: '',
+                    empresa: 'OFIMUNDO'  // Valor por defecto
                 });
             }
             setErrores({});
@@ -436,6 +483,10 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             nuevosErrores.email = 'Email inválido';
         }
 
+        if (!formData.empresa) {
+            nuevosErrores.empresa = 'Debe seleccionar una empresa';
+        }
+
         setErrores(nuevosErrores);
         return Object.keys(nuevosErrores).length === 0;
     };
@@ -448,7 +499,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         try {
             const dataToSend = {
                 ...formData,
-                rut: formData.rut.replace(/[^0-9kK]/g, '').toUpperCase()
+                rut: formData.rut.replace(/[^0-9kK]/g, '').toUpperCase(),
+                empresa: formData.empresa || 'OFIMUNDO'
             };
 
             let response;
@@ -483,7 +535,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             fecha_ingreso: '',
             estado: 'ACTIVO',
             direccion: '',
-            fecha_nacimiento: ''
+            fecha_nacimiento: '',
+            empresa: 'OFIMUNDO'
         });
         setErrores({});
         setLoading(false);
@@ -500,6 +553,30 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
 
             <DialogContent dividers>
                 <Grid container spacing={2}>
+                    {/* NUEVO CAMPO: Empresa */}
+                    <Grid item xs={12} md={6}>
+                        <FormControl fullWidth size="small" error={!!errores.empresa}>
+                            <InputLabel>Empresa *</InputLabel>
+                            <Select
+                                name="empresa"
+                                value={formData.empresa}
+                                onChange={handleChange}
+                                label="Empresa *"
+                                disabled={loading}
+                            >
+                                {OPCIONES_EMPRESA.map((emp) => (
+                                    <MenuItem key={emp.valor} value={emp.valor}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <span>{emp.icon}</span>
+                                            <Typography>{emp.label}</Typography>
+                                        </Box>
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errores.empresa && <FormHelperText error>{errores.empresa}</FormHelperText>}
+                        </FormControl>
+                    </Grid>
+
                     <Grid item xs={12} md={6}>
                         <TextField
                             fullWidth
@@ -684,6 +761,9 @@ const ConfirmDeleteDialog = ({ open, onClose, colaborador, onConfirm }) => {
                 {colaborador && (
                     <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
                         <Typography variant="body2">
+                            <strong>Empresa:</strong> {getEmpresaLabel(colaborador.empresa)}
+                        </Typography>
+                        <Typography variant="body2">
                             <strong>RUT:</strong> {colaborador.rut}
                         </Typography>
                         <Typography variant="body2">
@@ -735,9 +815,11 @@ const ColaboradoresPage = () => {
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [filters, setFilters] = useState({
         estado: '',
-        departamento: ''
+        departamento: '',
+        empresa: ''  // NUEVO FILTRO POR EMPRESA
     });
     const [departamentos, setDepartamentos] = useState([]);
+    const [empresas, setEmpresas] = useState(OPCIONES_EMPRESA); // Opciones de empresa
     const [stats, setStats] = useState({
         total_colaboradores: 0,
         activos: 0,
@@ -808,17 +890,18 @@ const ColaboradoresPage = () => {
             const filterParams = {};
             if (filters.estado) filterParams.estado = filters.estado;
             if (filters.departamento) filterParams.departamento = filters.departamento;
+            if (filters.empresa) filterParams.empresa = filters.empresa; // NUEVO FILTRO
             if (searchTerm) filterParams.search = searchTerm;
 
             const data = await colaboradorService.getColaboradores(filterParams);
             
-            // Debug: Verificar datos recibidos
             console.log('📊 Datos de colaboradores recibidos:', data);
             if (data && data.length > 0) {
                 const adan = data.find(c => c.nombre === 'Adan Moris');
                 if (adan) {
                     console.log('🔴 ADAN MORIS:', {
                         nombre: adan.nombre,
+                        empresa: adan.empresa,
                         total_asignaciones: adan.total_asignaciones,
                         asignaciones_activas: adan.asignaciones_activas
                     });
@@ -868,13 +951,14 @@ const ColaboradoresPage = () => {
 
     useEffect(() => {
         fetchData();
-    }, [searchTerm, filters.estado, filters.departamento]);
+    }, [searchTerm, filters.estado, filters.departamento, filters.empresa]);
 
     const handleClearFilters = () => {
         setSearchTerm('');
         setFilters({
             estado: '',
-            departamento: ''
+            departamento: '',
+            empresa: ''
         });
     };
 
@@ -965,6 +1049,7 @@ const ColaboradoresPage = () => {
     const filteredColaboradores = colaboradores.filter(col => {
         if (filters.estado && col.estado !== filters.estado) return false;
         if (filters.departamento && col.departamento !== filters.departamento) return false;
+        if (filters.empresa && col.empresa !== filters.empresa) return false;
         return true;
     });
 
@@ -978,6 +1063,12 @@ const ColaboradoresPage = () => {
     // Calcular estadísticas reales
     const totalAsignaciones = colaboradores.reduce((sum, col) => sum + (col.total_asignaciones || 0), 0);
     const totalAsignacionesActivas = colaboradores.reduce((sum, col) => sum + (col.asignaciones_activas || 0), 0);
+
+    // Estadísticas por empresa
+    const statsPorEmpresa = OPCIONES_EMPRESA.map(emp => ({
+        ...emp,
+        cantidad: colaboradores.filter(c => c.empresa === emp.valor).length
+    }));
 
     console.log(`📊 Total de asignaciones en la lista: ${totalAsignaciones}, Activas: ${totalAsignacionesActivas}`);
 
@@ -1040,7 +1131,7 @@ const ColaboradoresPage = () => {
                     </Stack>
                 </Paper>
 
-                {/* Stats Cards */}
+                {/* Stats Cards con empresas */}
                 <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
                     <Grid item xs={6} sm={3}>
                         <StyledCard>
@@ -1092,10 +1183,46 @@ const ColaboradoresPage = () => {
                     </Grid>
                 </Grid>
 
+                {/* Stats por empresa */}
+                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
+                    {statsPorEmpresa.map((emp) => (
+                        <Grid item xs={4} sm={4} md={4} key={emp.valor}>
+                            <Paper
+                                variant="outlined"
+                                sx={{
+                                    p: 2,
+                                    textAlign: 'center',
+                                    borderRadius: 2,
+                                    borderTop: `3px solid ${emp.color}`,
+                                    cursor: 'pointer',
+                                    bgcolor: filters.empresa === emp.valor ? alpha(emp.color, 0.05) : 'transparent'
+                                }}
+                                onClick={() => {
+                                    if (filters.empresa === emp.valor) {
+                                        handleFilterChange('empresa')({ target: { value: '' } });
+                                    } else {
+                                        handleFilterChange('empresa')({ target: { value: emp.valor } });
+                                    }
+                                }}
+                            >
+                                <Typography variant="h6" sx={{ fontSize: '1.5rem' }}>
+                                    {emp.icon}
+                                </Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: emp.color }}>
+                                    {emp.cantidad}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {emp.label}
+                                </Typography>
+                            </Paper>
+                        </Grid>
+                    ))}
+                </Grid>
+
                 {/* Barra de búsqueda y filtros */}
                 <FilterPaper>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={5}>
+                        <Grid item xs={12} md={4}>
                             <TextField
                                 fullWidth
                                 placeholder="Buscar por nombre, RUT o email..."
@@ -1125,7 +1252,7 @@ const ColaboradoresPage = () => {
                                 Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
                             </Button>
                         </Grid>
-                        <Grid item xs={6} md={4}>
+                        <Grid item xs={6} md={5}>
                             <Button
                                 fullWidth
                                 variant="outlined"
@@ -1142,7 +1269,27 @@ const ColaboradoresPage = () => {
                     <Collapse in={showAdvancedFilters}>
                         <Box sx={{ mt: 3 }}>
                             <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
+                                <Grid item xs={12} sm={4}>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Empresa</InputLabel>
+                                        <Select
+                                            value={filters.empresa}
+                                            onChange={handleFilterChange('empresa')}
+                                            label="Empresa"
+                                        >
+                                            <MenuItem value="">Todas</MenuItem>
+                                            {OPCIONES_EMPRESA.map((emp) => (
+                                                <MenuItem key={emp.valor} value={emp.valor}>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <span>{emp.icon}</span>
+                                                        {emp.label}
+                                                    </Box>
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel>Estado</InputLabel>
                                         <Select
@@ -1156,7 +1303,7 @@ const ColaboradoresPage = () => {
                                         </Select>
                                     </FormControl>
                                 </Grid>
-                                <Grid item xs={12} sm={6}>
+                                <Grid item xs={12} sm={4}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel>Departamento</InputLabel>
                                         <Select
@@ -1182,6 +1329,7 @@ const ColaboradoresPage = () => {
                         <TableHead>
                             <TableRow>
                                 <StyledTableCell>Colaborador</StyledTableCell>
+                                <StyledTableCell>Empresa</StyledTableCell>
                                 <StyledTableCell>Contacto</StyledTableCell>
                                 <StyledTableCell>Cargo/Depto</StyledTableCell>
                                 <StyledTableCell align="center">Asignaciones</StyledTableCell>
@@ -1192,14 +1340,14 @@ const ColaboradoresPage = () => {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                                         <CircularProgress />
                                         <Typography sx={{ mt: 2 }}>Cargando colaboradores...</Typography>
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedColaboradores.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                                         <PersonIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
                                         <Typography variant="h6" gutterBottom>
                                             No hay colaboradores
@@ -1218,7 +1366,7 @@ const ColaboradoresPage = () => {
                                     <TableRow key={col.id} hover>
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={1.5}>
-                                                <Avatar sx={{ bgcolor: colors.primary, width: 40, height: 40 }}>
+                                                <Avatar sx={{ bgcolor: getEmpresaColor(col.empresa), width: 40, height: 40 }}>
                                                     {col.nombre?.charAt(0) || 'U'}
                                                 </Avatar>
                                                 <Box>
@@ -1232,6 +1380,18 @@ const ColaboradoresPage = () => {
                                             </Box>
                                         </TableCell>
                                         <TableCell>
+                                            <Chip
+                                                size="small"
+                                                icon={<BusinessIcon />}
+                                                label={getEmpresaLabel(col.empresa)}
+                                                sx={{
+                                                    backgroundColor: alpha(getEmpresaColor(col.empresa), 0.1),
+                                                    color: getEmpresaColor(col.empresa),
+                                                    fontWeight: 500
+                                                }}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
                                             <Typography variant="body2">{col.email}</Typography>
                                             <Typography variant="caption" color="text.secondary">
                                                 {col.telefono || 'Sin teléfono'}
@@ -1243,11 +1403,8 @@ const ColaboradoresPage = () => {
                                                 {col.departamento || 'Sin depto.'}
                                             </Typography>
                                         </TableCell>
-                                        
-                                        {/* COLUMNA DE ASIGNACIONES CORREGIDA - Usando total_asignaciones y asignaciones_activas directamente */}
                                         <TableCell align="center">
                                             <Box sx={{ textAlign: 'center' }}>
-                                                {/* Número grande de asignaciones activas */}
                                                 <Typography 
                                                     variant="h5" 
                                                     sx={{ 
@@ -1261,8 +1418,6 @@ const ColaboradoresPage = () => {
                                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
                                                     de {col.total_asignaciones || 0} totales
                                                 </Typography>
-                                                
-                                                {/* Mostrar un chip si tiene asignaciones activas */}
                                                 {col.asignaciones_activas > 0 && (
                                                     <Chip 
                                                         size="small" 
@@ -1272,8 +1427,6 @@ const ColaboradoresPage = () => {
                                                         sx={{ mt: 0.5, fontSize: '0.65rem', height: '20px' }}
                                                     />
                                                 )}
-                                                
-                                                {/* Si no tiene asignaciones activas pero tiene históricas */}
                                                 {col.total_asignaciones > 0 && col.asignaciones_activas === 0 && (
                                                     <Chip 
                                                         size="small" 
@@ -1284,7 +1437,6 @@ const ColaboradoresPage = () => {
                                                 )}
                                             </Box>
                                         </TableCell>
-                                        
                                         <TableCell>
                                             <Chip
                                                 label={col.estado}

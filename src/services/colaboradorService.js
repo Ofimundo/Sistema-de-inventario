@@ -9,6 +9,7 @@ export const colaboradorService = {
             
             if (filters.estado) params.estado = filters.estado;
             if (filters.departamento) params.departamento = filters.departamento;
+            if (filters.empresa) params.empresa = filters.empresa; // NUEVO: filtro por empresa
             if (filters.search) params.search = filters.search;
             
             console.log('📤 Buscando colaboradores con filtros:', params);
@@ -24,7 +25,7 @@ export const colaboradorService = {
                 // Verificar Adan Moris
                 const adan = colaboradores.find(c => c.nombre === 'Adan Moris');
                 if (adan) {
-                    console.log(`🔴 ADAN MORIS: Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
+                    console.log(`🔴 ADAN MORIS: Empresa=${adan.empresa}, Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
                 }
                 
                 return colaboradores;
@@ -129,7 +130,13 @@ export const colaboradorService = {
                 inactivos: 0,
                 total_departamentos: 0,
                 total_equipos_asignados: 0,
-                equipos_activos: 0
+                equipos_activos: 0,
+                // NUEVO: estadísticas por empresa
+                por_empresa: {
+                    GLOBAL: 0,
+                    DREAMTEC: 0,
+                    OFIMUNDO: 0
+                }
             };
         } catch (error) {
             console.error('❌ Error en getStats:', error);
@@ -139,7 +146,12 @@ export const colaboradorService = {
                 inactivos: 0,
                 total_departamentos: 0,
                 total_equipos_asignados: 0,
-                equipos_activos: 0
+                equipos_activos: 0,
+                por_empresa: {
+                    GLOBAL: 0,
+                    DREAMTEC: 0,
+                    OFIMUNDO: 0
+                }
             };
         }
     },
@@ -156,6 +168,22 @@ export const colaboradorService = {
         } catch (error) {
             console.error('❌ Error en getDepartamentos:', error);
             return [];
+        }
+    },
+    
+    // NUEVO: Obtener empresas únicas
+    getEmpresas: async () => {
+        try {
+            console.log('📤 Obteniendo empresas');
+            const response = await api.get('/colaboradores/empresas');
+            
+            if (response.data && response.data.success) {
+                return response.data.data;
+            }
+            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'];
+        } catch (error) {
+            console.error('❌ Error en getEmpresas:', error);
+            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'];
         }
     },
     
