@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN ACTUALIZADA CON TIPO DE ASIGNACIÓN VISIBLE
+// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CON FILTROS, DESCARGA DE ACTAS Y DETALLES
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -39,6 +39,13 @@ import {
     TableHead,
     TableRow,
     TablePagination,
+    ToggleButton,
+    ToggleButtonGroup,
+    List,
+    ListItem,
+    ListItemText,
+    ListItemIcon,
+    Divider
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -55,7 +62,11 @@ import {
     Receipt as ReceiptIcon,
     Close as CloseIcon,
     CheckCircle as CheckCircleIcon,
-    Visibility as VisibilityIcon
+    Visibility as VisibilityIcon,
+    Download as DownloadIcon,
+    PictureAsPdf as PdfIcon,
+    Description as DescriptionIcon,
+    DateRange as DateRangeIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -121,6 +132,9 @@ const getEstadoColor = (estadoId) => {
     return ESTADO_COLOR[id] || '#6B7280';
 };
 
+// URL BASE para descargas
+const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
+
 // ============================================
 // COMPONENTES STYLED
 // ============================================
@@ -156,6 +170,179 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
     backgroundColor: alpha(colors.primary, 0.02),
     borderBottom: `1px solid ${colors.border}`,
 }));
+
+// ============================================
+// COMPONENTE DE DETALLES
+// ============================================
+const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
+    const [downloading, setDownloading] = useState(false);
+    const [documentoAsignacion, setDocumentoAsignacion] = useState(null);
+    const [documentoRecepcion, setDocumentoRecepcion] = useState(null);
+
+    const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
+
+    const handleDescargarDocumento = async (filename, tipo) => {
+        if (!filename || downloading) return;
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${filename}`;
+            
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error descargando:', error);
+            alert(`Error al descargar el ${tipo}`);
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+            <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}`, bgcolor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1) }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <Avatar sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}>
+                            <AssignmentIcon />
+                        </Avatar>
+                        <Typography variant="h6" fontWeight={600}>
+                            Detalles de {esPrestamo ? 'Préstamo' : 'Asignación'}
+                        </Typography>
+                        {esPrestamo && (
+                            <Chip label="PRÉSTAMO" size="small" sx={{ bgcolor: colors.warning, color: 'white' }} />
+                        )}
+                    </Box>
+                    <IconButton onClick={onClose}>
+                        <CloseIcon />
+                    </IconButton>
+                </Box>
+            </DialogTitle>
+            <DialogContent dividers>
+                <Grid container spacing={2}>
+                    {/* Información del Producto */}
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <InventoryIcon fontSize="small" color="primary" />
+                                Información del Equipo
+                            </Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}><Typography variant="caption">Producto:</Typography><Typography variant="body2">{producto?.nombre || asignacion?.producto_nombre}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">N° Serie:</Typography><Typography variant="body2">{producto?.numero_serie || asignacion?.numero_serie || 'N/A'}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Marca:</Typography><Typography variant="body2">{producto?.marca || asignacion?.marca || '-'}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Modelo:</Typography><Typography variant="body2">{producto?.modelo || asignacion?.modelo || '-'}</Typography></Grid>
+                            </Grid>
+                        </Paper>
+                    </Grid>
+
+                    {/* Información del Colaborador */}
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                <PersonIcon fontSize="small" color="success" />
+                                Información del Colaborador
+                            </Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}><Typography variant="caption">Nombre:</Typography><Typography variant="body2">{asignacion?.colaborador_nombre}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">RUT:</Typography><Typography variant="body2">{asignacion?.colaborador_rut || '-'}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Cargo:</Typography><Typography variant="body2">{asignacion?.colaborador_cargo || '-'}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Departamento:</Typography><Typography variant="body2">{asignacion?.colaborador_departamento || '-'}</Typography></Grid>
+                            </Grid>
+                        </Paper>
+                    </Grid>
+
+                    {/* Detalles de la Asignación/Préstamo */}
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                                Detalles de la Operación
+                            </Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}><Typography variant="caption">ID Asignación:</Typography><Typography variant="body2" fontFamily="monospace">{asignacion?.id}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Fecha Asignación:</Typography><Typography variant="body2">{new Date(asignacion?.fecha_asignacion).toLocaleDateString()}</Typography></Grid>
+                                <Grid item xs={12}><Typography variant="caption">Motivo:</Typography><Typography variant="body2">{asignacion?.motivo || '-'}</Typography></Grid>
+                                <Grid item xs={12}><Typography variant="caption">Observaciones:</Typography><Typography variant="body2">{asignacion?.observaciones || '-'}</Typography></Grid>
+                                {asignacion?.fecha_devolucion && (
+                                    <>
+                                        <Grid item xs={6}><Typography variant="caption">Fecha Devolución:</Typography><Typography variant="body2">{new Date(asignacion.fecha_devolucion).toLocaleDateString()}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="caption">Condición Entrega:</Typography><Typography variant="body2">{asignacion?.condicion_entrega || '-'}</Typography></Grid>
+                                    </>
+                                )}
+                            </Grid>
+                        </Paper>
+                    </Grid>
+
+                    {/* Documentos - Solo para asignaciones normales */}
+                    {!esPrestamo && (
+                        <Grid item xs={12}>
+                            <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
+                                    <DescriptionIcon fontSize="small" color="info" />
+                                    Documentos Asociados
+                                </Typography>
+                                <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<PdfIcon sx={{ color: '#f44336' }} />}
+                                        onClick={() => handleDescargarDocumento(`acta_asignacion_${asignacion?.id}_*.pdf`, "Acta de Asignación")}
+                                        disabled={downloading}
+                                        sx={{ borderRadius: 0 }}
+                                    >
+                                        Acta Asignación
+                                    </Button>
+                                    {asignacion?.fecha_devolucion && (
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={<PdfIcon sx={{ color: '#f44336' }} />}
+                                            onClick={() => handleDescargarDocumento(`acta_recepcion_${asignacion?.id}_*.pdf`, "Acta de Recepción")}
+                                            disabled={downloading}
+                                            sx={{ borderRadius: 0 }}
+                                        >
+                                            Acta Recepción
+                                        </Button>
+                                    )}
+                                </Stack>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                    Nota: Los documentos se generan automáticamente al momento de la operación.
+                                </Typography>
+                            </Paper>
+                        </Grid>
+                    )}
+
+                    {esPrestamo && (
+                        <Grid item xs={12}>
+                            <Alert severity="info" sx={{ borderRadius: 0 }}>
+                                <Typography variant="body2">
+                                    <strong>ℹ️ Préstamo:</strong> Este registro corresponde a un préstamo, por lo tanto no tiene documentos asociados.
+                                </Typography>
+                            </Alert>
+                        </Grid>
+                    )}
+                </Grid>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} sx={{ borderRadius: 0 }}>Cerrar</Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
 
 // ============================================
 // SERVICIOS LOCALES
@@ -205,15 +392,17 @@ const AsignacionPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ bodega_id: '' });
+    const [filters, setFilters] = useState({ bodega_id: '', tipo_estado: 'todos' });
     const [bodegas, setBodegas] = useState([]);
     const [openAsignacion, setOpenAsignacion] = useState(false);
     const [openRecepcion, setOpenRecepcion] = useState(false);
     const [openPrestamo, setOpenPrestamo] = useState(false);
+    const [openDetalles, setOpenDetalles] = useState(false);
     const [productoSeleccionado, setProductoSeleccionado] = useState(null);
     const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [apiError, setApiError] = useState(false);
+    const [downloadingDoc, setDownloadingDoc] = useState(false);
 
     const showSnackbar = (message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
@@ -225,6 +414,52 @@ const AsignacionPage = () => {
 
     const handleGoHome = () => {
         navigate('/dashboard');
+    };
+
+    // Función para descargar documento
+    const handleDescargarDocumento = async (asignacionId, tipo) => {
+        setDownloadingDoc(true);
+        try {
+            const token = localStorage.getItem('token');
+            // Buscar el documento por tipo
+            const filename = tipo === 'asignacion' 
+                ? `acta_asignacion_${asignacionId}_*.pdf`
+                : `acta_recepcion_${asignacionId}_*.pdf`;
+            
+            // Intentar descargar
+            const response = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacionId}/${tipo}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.filename) {
+                    const downloadResponse = await fetch(`${API_BASE_URL}/api/asignaciones/descargar/${data.filename}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const blob = await downloadResponse.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = data.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    showSnackbar(`Documento descargado correctamente`, 'success');
+                } else {
+                    showSnackbar(`No se encontró el documento`, 'warning');
+                }
+            } else {
+                showSnackbar(`No se pudo descargar el documento`, 'warning');
+            }
+        } catch (error) {
+            console.error('Error descargando documento:', error);
+            showSnackbar(`Error al descargar el documento`, 'error');
+        } finally {
+            setTimeout(() => setDownloadingDoc(false), 1000);
+        }
     };
 
     const fetchData = async (showRefresh = false) => {
@@ -240,8 +475,6 @@ const AsignacionPage = () => {
             console.log('📤 Cargando productos...');
             const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
             
-            console.log('📦 Productos recibidos:', productosData?.length || 0);
-            
             let todosLosProductos = [];
             if (productosData && Array.isArray(productosData)) {
                 todosLosProductos = productosData;
@@ -249,31 +482,16 @@ const AsignacionPage = () => {
                 todosLosProductos = productosData.data;
             }
             
-            // Depuración
-            if (todosLosProductos.length > 0) {
-                console.log('🔍 Primeros 3 productos:');
-                todosLosProductos.slice(0, 3).forEach(p => {
-                    console.log(`   - ${p.nombre}: estado = ${p.estado}, id_estado_equipo = ${p.id_estado_equipo}`);
-                });
-            }
-            
-            // Procesar productos - asegurar que id_estado_equipo sea número
             const productosProcesados = todosLosProductos.map(p => ({
                 ...p,
                 id_estado_equipo: Number(p.id_estado_equipo) || 1,
             }));
             
-            // Filtrar productos dados de baja (estado 6)
             const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
             setProductos(productosFiltrados);
             
-            console.log(`📊 Productos cargados: ${productosFiltrados.length} total`);
-            console.log(`   📊 Disponibles (estado 1): ${productosFiltrados.filter(p => p.id_estado_equipo === 1).length}`);
-            console.log(`   📊 Asignados (estado 2): ${productosFiltrados.filter(p => p.id_estado_equipo === 2).length}`);
-            
             // Cargar asignaciones activas
             try {
-                console.log('📤 Cargando asignaciones activas...');
                 const asignacionesResponse = await api.get('/asignaciones/activas');
                 
                 let asignaciones = [];
@@ -287,9 +505,6 @@ const AsignacionPage = () => {
                 
                 const activas = asignaciones.filter(a => !a.fecha_devolucion);
                 setAsignacionesActivas(activas);
-                console.log(`✅ ${activas.length} asignaciones activas encontradas`);
-                console.log(`   📊 Préstamos activos: ${activas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length}`);
-                console.log(`   📊 Asignaciones activas: ${activas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length}`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
                 setAsignacionesActivas([]);
@@ -299,7 +514,6 @@ const AsignacionPage = () => {
             try {
                 const bodegasData = await productosServiceLocal.getBodegas();
                 setBodegas(bodegasData || []);
-                console.log(`✅ ${bodegasData?.length || 0} bodegas cargadas`);
             } catch (err) {
                 console.error('Error cargando bodegas:', err);
                 setBodegas([]);
@@ -322,13 +536,6 @@ const AsignacionPage = () => {
     }, [searchTerm, filters.bodega_id]);
 
     const handleAsignar = (producto) => {
-        console.log('🔍 Asignar producto:', {
-            id: producto.id,
-            nombre: producto.nombre,
-            id_estado_equipo: producto.id_estado_equipo,
-            estado: getEstadoTexto(producto.id_estado_equipo)
-        });
-        
         if (producto.id_estado_equipo !== 1) {
             showSnackbar(`Este producto no está disponible para asignación. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning');
             return;
@@ -338,13 +545,6 @@ const AsignacionPage = () => {
     };
 
     const handlePrestamo = (producto) => {
-        console.log('🔍 Préstamo producto:', {
-            id: producto.id,
-            nombre: producto.nombre,
-            id_estado_equipo: producto.id_estado_equipo,
-            estado: getEstadoTexto(producto.id_estado_equipo)
-        });
-        
         if (producto.id_estado_equipo !== 1) {
             showSnackbar(`Este producto no está disponible para préstamo. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning');
             return;
@@ -356,13 +556,6 @@ const AsignacionPage = () => {
     const handleRecibir = (producto) => {
         const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
         
-        console.log('🔍 Recibir producto:', {
-            id: producto.id,
-            nombre: producto.nombre,
-            id_estado_equipo: producto.id_estado_equipo,
-            asignacionActiva: asignacionActiva ? `Encontrada (ID: ${asignacionActiva.id}, es_prestamo: ${asignacionActiva.es_prestamo})` : 'No encontrada'
-        });
-        
         if (!asignacionActiva) {
             showSnackbar('No se encontró una asignación activa para este producto', 'error');
             return;
@@ -371,6 +564,17 @@ const AsignacionPage = () => {
         setProductoSeleccionado(producto);
         setAsignacionSeleccionada(asignacionActiva);
         setOpenRecepcion(true);
+    };
+
+    const handleVerDetalles = (producto) => {
+        const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
+        if (asignacionActiva) {
+            setAsignacionSeleccionada(asignacionActiva);
+            setProductoSeleccionado(producto);
+            setOpenDetalles(true);
+        } else {
+            showSnackbar('No hay información de asignación para este producto', 'info');
+        }
     };
 
     const handleAsignacionSuccess = (result) => {
@@ -393,7 +597,7 @@ const AsignacionPage = () => {
 
     const handleClearFilters = () => {
         setSearchTerm('');
-        setFilters({ bodega_id: '' });
+        setFilters({ bodega_id: '', tipo_estado: 'todos' });
     };
 
     const handleChangePage = (event, newPage) => {
@@ -405,21 +609,45 @@ const AsignacionPage = () => {
         setPage(0);
     };
 
+    const handleTipoEstadoChange = (event, newValue) => {
+        if (newValue !== null) {
+            setFilters({ ...filters, tipo_estado: newValue });
+            setPage(0);
+        }
+    };
+
     const getAsignacionActiva = (productoId) => {
         return asignacionesActivas.find(a => a.producto_id === productoId);
     };
 
+    // Filtrar productos por tipo de estado seleccionado
     const filteredProductos = productos.filter(producto => {
+        // Filtro de búsqueda
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            return (
+            const matchesSearch = (
                 producto.nombre?.toLowerCase().includes(term) ||
                 producto.marca?.toLowerCase().includes(term) ||
                 producto.numero_serie?.toLowerCase().includes(term) ||
                 (producto.modelo && producto.modelo.toLowerCase().includes(term))
             );
+            if (!matchesSearch) return false;
         }
-        return true;
+        
+        // Filtro por tipo de estado (todos, disponibles, asignados, prestamos)
+        const asignacionActiva = getAsignacionActiva(producto.id);
+        const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
+        
+        switch (filters.tipo_estado) {
+            case 'disponibles':
+                return producto.id_estado_equipo === 1;
+            case 'asignados':
+                return producto.id_estado_equipo === 2 && !esPrestamo;
+            case 'prestamos':
+                return producto.id_estado_equipo === 2 && esPrestamo;
+            default:
+                return true;
+        }
     });
 
     const paginatedProductos = filteredProductos.slice(
@@ -427,7 +655,13 @@ const AsignacionPage = () => {
         page * rowsPerPage + rowsPerPage
     );
 
-    const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length;
+    const activeFiltersCount = (filters.bodega_id ? 1 : 0) + (filters.tipo_estado !== 'todos' ? 1 : 0) + (searchTerm ? 1 : 0);
+
+    // Estadísticas
+    const totalDisponibles = productos.filter(p => p.id_estado_equipo === 1).length;
+    const totalAsignados = productos.filter(p => p.id_estado_equipo === 2).length;
+    const totalPrestamos = asignacionesActivas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length;
+    const totalAsignacionesNormales = asignacionesActivas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length;
 
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
@@ -466,58 +700,58 @@ const AsignacionPage = () => {
 
                 {/* Stats Cards */}
                 <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <StyledCard>
-                            <CardContent>
-                                <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 48, height: 48, mb: 1 }}>
-                                    <AssignmentIcon />
-                                </Avatar>
-                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : asignacionesActivas.length}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Asignaciones Activas</Typography>
-                                {!loading && (
-                                    <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                                        <Chip 
-                                            label={`Préstamos: ${asignacionesActivas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length}`} 
-                                            size="small" 
-                                            sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, fontSize: '0.7rem' }}
-                                        />
-                                        <Chip 
-                                            label={`Asignaciones: ${asignacionesActivas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length}`} 
-                                            size="small" 
-                                            sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, fontSize: '0.7rem' }}
-                                        />
-                                    </Stack>
-                                )}
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                    
-                    <Grid item xs={12} sm={6} md={4}>
+                    <Grid item xs={12} sm={6} md={3}>
                         <StyledCard>
                             <CardContent>
                                 <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 48, height: 48, mb: 1 }}>
                                     <CheckCircleIcon />
                                 </Avatar>
                                 <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : productos.filter(p => p.id_estado_equipo === 1).length}
+                                    {loading ? <CircularProgress size={24} /> : totalDisponibles}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Productos Disponibles</Typography>
                             </CardContent>
                         </StyledCard>
                     </Grid>
                     
-                    <Grid item xs={12} sm={6} md={4}>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <StyledCard>
+                            <CardContent>
+                                <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 48, height: 48, mb: 1 }}>
+                                    <AssignmentIcon />
+                                </Avatar>
+                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                                    {loading ? <CircularProgress size={24} /> : totalAsignacionesNormales}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Asignaciones Activas</Typography>
+                            </CardContent>
+                        </StyledCard>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={3}>
                         <StyledCard>
                             <CardContent>
                                 <Avatar sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, width: 48, height: 48, mb: 1 }}>
+                                    <PersonIcon />
+                                </Avatar>
+                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                                    {loading ? <CircularProgress size={24} /> : totalPrestamos}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Préstamos Activos</Typography>
+                            </CardContent>
+                        </StyledCard>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={3}>
+                        <StyledCard>
+                            <CardContent>
+                                <Avatar sx={{ bgcolor: alpha(colors.error, 0.1), color: colors.error, width: 48, height: 48, mb: 1 }}>
                                     <InventoryIcon />
                                 </Avatar>
                                 <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : productos.filter(p => p.id_estado_equipo === 2).length}
+                                    {loading ? <CircularProgress size={24} /> : totalAsignados}
                                 </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Productos Asignados</Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Total Asignados</Typography>
                             </CardContent>
                         </StyledCard>
                     </Grid>
@@ -526,7 +760,7 @@ const AsignacionPage = () => {
                 {/* Filtros */}
                 <FilterPaper>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12} md={4}>
                             <TextField
                                 fullWidth
                                 placeholder="Buscar por nombre, marca, modelo o número de serie..."
@@ -554,8 +788,34 @@ const AsignacionPage = () => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={6} md={3}>
-                            <Button fullWidth variant="outlined" color="error" startIcon={<FilterListOffIcon />} onClick={handleClearFilters} disabled={!searchTerm && activeFiltersCount === 0} sx={{ borderRadius: 0 }}>
+                        <Grid item xs={12} md={3}>
+                            <ToggleButtonGroup
+                                value={filters.tipo_estado}
+                                exclusive
+                                onChange={handleTipoEstadoChange}
+                                size="small"
+                                fullWidth
+                                sx={{ height: 40 }}
+                            >
+                                <ToggleButton value="todos" sx={{ borderRadius: 0, textTransform: 'none' }}>
+                                    Todos
+                                </ToggleButton>
+                                <ToggleButton value="disponibles" sx={{ borderRadius: 0, textTransform: 'none' }}>
+                                    <CheckCircleIcon sx={{ fontSize: 16, mr: 0.5, color: colors.success }} />
+                                    Disponibles
+                                </ToggleButton>
+                                <ToggleButton value="asignados" sx={{ borderRadius: 0, textTransform: 'none' }}>
+                                    <AssignmentIcon sx={{ fontSize: 16, mr: 0.5, color: colors.primary }} />
+                                    Asignados
+                                </ToggleButton>
+                                <ToggleButton value="prestamos" sx={{ borderRadius: 0, textTransform: 'none' }}>
+                                    <PersonIcon sx={{ fontSize: 16, mr: 0.5, color: colors.warning }} />
+                                    Préstamos
+                                </ToggleButton>
+                            </ToggleButtonGroup>
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <Button fullWidth variant="outlined" color="error" startIcon={<FilterListOffIcon />} onClick={handleClearFilters} disabled={activeFiltersCount === 0} sx={{ borderRadius: 0 }}>
                                 Limpiar filtros
                             </Button>
                         </Grid>
@@ -672,7 +932,7 @@ const AsignacionPage = () => {
                                                 )}
                                             </TableCell>
                                             <TableCell align="center">
-                                                <Stack direction="row" spacing={1} justifyContent="center">
+                                                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
                                                     {estaDisponible ? (
                                                         <>
                                                             <Tooltip title="Asignar producto (con documento)">
@@ -681,7 +941,7 @@ const AsignacionPage = () => {
                                                                     size="small"
                                                                     startIcon={<AssignmentIcon />}
                                                                     onClick={() => handleAsignar(producto)}
-                                                                    sx={{ bgcolor: colors.primary, borderRadius: 0 }}
+                                                                    sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}
                                                                 >
                                                                     Asignar
                                                                 </Button>
@@ -692,24 +952,60 @@ const AsignacionPage = () => {
                                                                     size="small"
                                                                     startIcon={<PersonIcon />}
                                                                     onClick={() => handlePrestamo(producto)}
-                                                                    sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning }}
+                                                                    sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}
                                                                 >
                                                                     Préstamo
                                                                 </Button>
                                                             </Tooltip>
                                                         </>
                                                     ) : estaAsignado ? (
-                                                        <Tooltip title={`Recibir ${esPrestamo ? 'préstamo' : 'producto'} (devolución)`}>
-                                                            <Button
-                                                                variant="contained"
-                                                                size="small"
-                                                                startIcon={<ReceiptIcon />}
-                                                                onClick={() => handleRecibir(producto)}
-                                                                sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0 }}
-                                                            >
-                                                                Recibir
-                                                            </Button>
-                                                        </Tooltip>
+                                                        <>
+                                                            <Tooltip title={`Recibir ${esPrestamo ? 'préstamo' : 'producto'} (devolución)`}>
+                                                                <Button
+                                                                    variant="contained"
+                                                                    size="small"
+                                                                    startIcon={<ReceiptIcon />}
+                                                                    onClick={() => handleRecibir(producto)}
+                                                                    sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}
+                                                                >
+                                                                    Recibir
+                                                                </Button>
+                                                            </Tooltip>
+                                                            {!esPrestamo && (
+                                                                <>
+                                                                    <Tooltip title="Descargar Acta de Asignación">
+                                                                        <IconButton 
+                                                                            size="small" 
+                                                                            onClick={() => handleDescargarDocumento(asignacionActiva.id, 'asignacion')}
+                                                                            disabled={downloadingDoc}
+                                                                            sx={{ color: '#f44336' }}
+                                                                        >
+                                                                            <PdfIcon fontSize="small" />
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip title="Ver detalles">
+                                                                        <IconButton 
+                                                                            size="small" 
+                                                                            onClick={() => handleVerDetalles(producto)} 
+                                                                            sx={{ color: colors.info }}
+                                                                        >
+                                                                            <VisibilityIcon fontSize="small" />
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                </>
+                                                            )}
+                                                            {esPrestamo && (
+                                                                <Tooltip title="Ver detalles del préstamo">
+                                                                    <IconButton 
+                                                                        size="small" 
+                                                                        onClick={() => handleVerDetalles(producto)} 
+                                                                        sx={{ color: colors.warning }}
+                                                                    >
+                                                                        <VisibilityIcon fontSize="small" />
+                                                                    </IconButton>
+                                                                </Tooltip>
+                                                            )}
+                                                        </>
                                                     ) : (
                                                         <Tooltip title="Producto no disponible para asignación">
                                                             <Button
@@ -720,19 +1016,6 @@ const AsignacionPage = () => {
                                                             >
                                                                 No disponible
                                                             </Button>
-                                                        </Tooltip>
-                                                    )}
-                                                    {asignacionActiva && (
-                                                        <Tooltip title="Ver detalles">
-                                                            <IconButton 
-                                                                size="small" 
-                                                                onClick={() => {
-                                                                    setAsignacionSeleccionada(asignacionActiva);
-                                                                }} 
-                                                                sx={{ color: esPrestamo ? colors.warning : colors.info }}
-                                                            >
-                                                                <VisibilityIcon fontSize="small" />
-                                                            </IconButton>
                                                         </Tooltip>
                                                     )}
                                                 </Stack>
@@ -776,6 +1059,13 @@ const AsignacionPage = () => {
                     onClose={() => setOpenPrestamo(false)} 
                     productoSeleccionado={productoSeleccionado} 
                     onSuccess={handlePrestamoSuccess} 
+                />
+
+                <DetallesDialog 
+                    open={openDetalles} 
+                    onClose={() => setOpenDetalles(false)} 
+                    asignacion={asignacionSeleccionada} 
+                    producto={productoSeleccionado} 
                 />
 
                 <Snackbar 

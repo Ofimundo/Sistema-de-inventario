@@ -1,4 +1,4 @@
-// src/components/RecepcionDialog.jsx - VERSIÓN ACTUALIZADA CON SOPORTE PARA PRÉSTAMOS
+// src/components/RecepcionDialog.jsx - VERSIÓN ACTUALIZADA CON MEJORAS EN DESCARGA DE DOCUMENTOS
 /* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
@@ -38,6 +38,7 @@ import {
     Warning as WarningIcon
 } from '@mui/icons-material';
 import api from '../services/api';
+import { asignacionService } from '../services/asignacionService';
 
 // ✅ URL BASE CORREGIDA - FORZADA A PRODUCCIÓN
 const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
@@ -265,43 +266,20 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         return firmaGerenteText;
     };
 
-    // ✅ FUNCIÓN DE DESCARGA CORREGIDA
+    // Función para descargar el acta de recepción usando el servicio mejorado
     const handleDescargarDocumento = async () => {
-        if (documentoGenerado && documentoGenerado.filename && !downloading) {
-            setDownloading(true);
-            try {
-                const token = localStorage.getItem('token');
-                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${documentoGenerado.filename}`;
-                console.log('📥 Descargando documento desde:', downloadUrl);
-                
-                const response = await fetch(downloadUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Error HTTP: ${response.status}`);
-                }
-
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = documentoGenerado.filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-                
-                console.log('✅ Documento descargado:', documentoGenerado.filename);
-            } catch (error) {
-                console.error('❌ Error descargando documento:', error);
-                alert('Error al descargar el documento. Por favor, intente nuevamente.');
-            } finally {
-                setTimeout(() => setDownloading(false), 1000);
-            }
+        if (!asignacion?.id || downloading) return;
+        
+        setDownloading(true);
+        try {
+            console.log('📥 Descargando acta de recepción para asignación:', asignacion.id);
+            await asignacionService.descargarActaRecepcion(asignacion.id);
+            console.log('✅ Acta de recepción descargada correctamente');
+        } catch (error) {
+            console.error('❌ Error descargando acta:', error);
+            alert('Error al descargar el acta de recepción. Por favor, intente nuevamente.');
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
         }
     };
 
@@ -346,9 +324,9 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             console.log('📥 Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                // Solo guardar documento si NO es préstamo y existe
-                if (!esPrestamo && response.data.data?.documento) {
-                    setDocumentoGenerado(response.data.data.documento);
+                // Solo guardar documento si NO es préstamo
+                if (!esPrestamo) {
+                    setDocumentoGenerado({ filename: `acta_recepcion_${asignacion.id}.pdf` });
                 }
                 setShowConfirmDialog(true);
                 setSuccess(true);
@@ -356,12 +334,12 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                 if (onSuccess) {
                     const mensaje = esPrestamo 
                         ? 'Devolución de préstamo registrada exitosamente (sin documento)'
-                        : 'Producto recibido correctamente';
+                        : 'Devolución registrada exitosamente. El acta de recepción se ha generado.';
                     
                     onSuccess({
                         success: true,
                         message: mensaje,
-                        documento: response.data.data?.documento,
+                        documento: !esPrestamo ? { filename: `acta_recepcion_${asignacion.id}.pdf` } : null,
                         es_prestamo: esPrestamo
                     });
                 }
@@ -456,12 +434,12 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    ¡Recepción Exitosa!
+                    ¡Devolución Exitosa!
                 </Typography>
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    El <strong>Acta de Recepción</strong> se ha generado correctamente.
+                    La devolución se ha registrado correctamente y el <strong>Acta de Recepción</strong> se ha generado.
                 </Typography>
                 
                 <Paper variant="outlined" sx={{ p: 2, mt: 2, textAlign: 'left', bgcolor: '#f9f9f9' }}>
@@ -494,7 +472,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                 }}>
                     <PdfIcon sx={{ color: '#f44336' }} />
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {documentoGenerado?.filename || 'acta_recepcion.pdf'}
+                        acta_recepcion_{asignacion?.id}.pdf
                     </Typography>
                 </Box>
                 
@@ -528,23 +506,29 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         </Dialog>
     );
 
+    // Ventana simple de éxito para asignaciones (sin diálogo de confirmación complejo)
     if (success && !showConfirmDialog && !esPrestamo) {
         return (
             <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
                     <Box display="flex" alignItems="center" gap={1}>
                         <CheckCircleIcon sx={{ color: '#4caf50' }} />
-                        <Typography variant="h6">¡Recepción Exitosa!</Typography>
+                        <Typography variant="h6">¡Devolución Exitosa!</Typography>
                     </Box>
                 </DialogTitle>
                 <DialogContent dividers>
                     <Box textAlign="center" py={2}>
                         <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>Producto recibido correctamente</Typography>
+                        <Typography variant="h6" gutterBottom>Devolución registrada correctamente</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Se ha recibido el producto <strong>{producto?.nombre}</strong>
+                            Se ha registrado la devolución del producto <strong>{producto?.nombre}</strong>
                         </Typography>
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0 }}>Cerrar</Button>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            El acta de recepción se ha generado y puede descargarla desde el botón de descarga.
+                        </Typography>
+                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: '#0A66C2' }}>
+                            Cerrar
+                        </Button>
                     </Box>
                 </DialogContent>
             </Dialog>
@@ -578,6 +562,8 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             </Dialog>
         );
     }
+
+    if (!producto || !asignacion) return null;
 
     return (
         <>
@@ -665,7 +651,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
 
                         <Divider sx={{ my: 1 }} />
 
-                        {/* PUNTO 4 - MOTIVO DE LA DEVOLUCIÓN */}
+                        {/* MOTIVO DE LA DEVOLUCIÓN */}
                         <Box>
                             <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
                                 <WarningIcon fontSize="small" sx={{ color: '#F59E0B' }} />
@@ -687,7 +673,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                             />
                         </Box>
 
-                        {/* PUNTO 5 - OBSERVACIONES */}
+                        {/* OBSERVACIONES */}
                         <Box>
                             <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
                                 <DescriptionIcon fontSize="small" sx={{ color: '#3B82F6' }} />
@@ -821,7 +807,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
                                 sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2', '&:hover': { bgcolor: esPrestamo ? '#d97706' : '#0050a0' } }}
                             >
-                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Devolución' : 'Confirmar Recepción')}
+                                {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Devolución' : 'Confirmar Devolución')}
                             </Button>
                         </Box>
                     </Stack>

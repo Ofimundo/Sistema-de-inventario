@@ -1,5 +1,10 @@
-// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS COMPLETO
+// backend/controllers/asignacionController.js - VERSIÓN ACTUALIZADA CON SOPORTE COMPLETO PARA PRÉSTAMOS Y DOCUMENTOS
 const { getConnection, sql } = require('../config/database');
+const path = require('path');
+const fs = require('fs');
+
+// Directorio donde se guardan los documentos generados
+const DOCS_DIR = path.join(__dirname, '../uploads/documentos');
 
 const asignacionController = {
     /**
@@ -22,7 +27,7 @@ const asignacionController = {
                 usuario_responsable,
                 firma_trabajador,
                 firma_gerente,
-                es_prestamo  // NUEVO: campo para préstamo
+                es_prestamo
             } = req.body;
             
             // Validaciones
@@ -70,7 +75,7 @@ const asignacionController = {
                     .input('firma_trabajador', sql.NVarChar, firma_trabajador || null)
                     .input('firma_gerente', sql.NVarChar, firma_gerente || null)
                     .input('usuario_responsable', sql.NVarChar, usuario_responsable || 'Sistema')
-                    .input('es_prestamo', sql.Bit, es_prestamo || false)  // NUEVO
+                    .input('es_prestamo', sql.Bit, es_prestamo || false)
                     .query(`
                         INSERT INTO INV.asignaciones (
                             producto_id,
@@ -139,7 +144,7 @@ const asignacionController = {
                 
                 await transaction.commit();
                 
-                console.log(`✅ ${tipoAsignacion} creada exitosamente`);
+                console.log(`✅ ${tipoAsignacion} creada exitosamente con ID: ${nuevaAsignacion.id}`);
                 
                 res.json({
                     success: true,
@@ -285,6 +290,40 @@ const asignacionController = {
     },
     
     /**
+     * Buscar documento por asignación ID y tipo
+     */
+    buscarDocumentoPorAsignacion: async (req, res) => {
+        try {
+            const { asignacionId, tipo } = req.params;
+            console.log(`📥 GET /api/asignaciones/buscar-documento/${asignacionId}/${tipo}`);
+            
+            // Buscar en el directorio de documentos
+            if (!fs.existsSync(DOCS_DIR)) {
+                return res.json({ success: false, message: 'No se encontró el documento', filename: null });
+            }
+            
+            const files = fs.readdirSync(DOCS_DIR);
+            const pattern = tipo === 'asignacion' 
+                ? `acta_asignacion_${asignacionId}` 
+                : `acta_recepcion_${asignacionId}`;
+            
+            const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
+            
+            if (foundFile) {
+                res.json({
+                    success: true,
+                    data: { filename: foundFile }
+                });
+            } else {
+                res.json({ success: false, message: 'Documento no encontrado', filename: null });
+            }
+        } catch (error) {
+            console.error('❌ Error en buscarDocumentoPorAsignacion:', error);
+            res.status(500).json({ success: false, message: error.message, filename: null });
+        }
+    },
+    
+    /**
      * Obtener historial de préstamos
      */
     getHistorialPrestamos: async (req, res) => {
@@ -419,9 +458,17 @@ const asignacionController = {
         
         try {
             const { id } = req.params;
-            const { fecha_devolucion, observaciones_devolucion, condicion_entrega, firma_trabajador_devolucion, firma_gerente_devolucion } = req.body;
+            const { 
+                fecha_devolucion, 
+                motivo_devolucion,
+                observaciones_devolucion, 
+                condicion_entrega, 
+                firma_trabajador_devolucion, 
+                firma_gerente_devolucion 
+            } = req.body;
             
             console.log(`📥 PUT /api/asignaciones/${id}/finalizar`);
+            console.log('Body recibido:', req.body);
             
             if (!id) {
                 return res.status(400).json({ success: false, message: 'ID de asignación requerido' });
@@ -436,7 +483,7 @@ const asignacionController = {
                 const asignacionResult = await transaction.request()
                     .input('id', sql.Int, id)
                     .query(`
-                        SELECT producto_id, colaborador_id, es_prestamo 
+                        SELECT producto_id, colaborador_id, es_prestamo, motivo, observaciones
                         FROM INV.asignaciones 
                         WHERE id = @id AND fecha_devolucion IS NULL
                     `);
@@ -446,13 +493,19 @@ const asignacionController = {
                 }
                 
                 const asignacion = asignacionResult.recordset[0];
-                const esPrestamo = asignacion.es_prestamo === true;
+                const esPrestamo = asignacion.es_prestamo === true || asignacion.es_prestamo === 1;
+                
+                // Combinar observaciones
+                const observacionesCombinadas = `[MOTIVO DEVOLUCIÓN]: ${motivo_devolucion || (esPrestamo ? 'Devolución de préstamo' : 'No especificado')}
+[OBSERVACIONES]: ${observaciones_devolucion || 'Sin observaciones'}
+[CONDICIÓN]: ${condicion_entrega || 'BUENO'}
+[FECHA RECEPCIÓN]: ${new Date().toLocaleString()}`;
                 
                 // 2. Actualizar la asignación con la devolución
                 await transaction.request()
                     .input('id', sql.Int, id)
                     .input('fecha_devolucion', sql.DateTime, fecha_devolucion || new Date())
-                    .input('observaciones_devolucion', sql.NVarChar, observaciones_devolucion || '')
+                    .input('observaciones', sql.NVarChar, observacionesCombinadas)
                     .input('condicion_entrega', sql.NVarChar, condicion_entrega || 'BUENO')
                     .input('firma_trabajador_devolucion', sql.NVarChar, firma_trabajador_devolucion || null)
                     .input('firma_gerente_devolucion', sql.NVarChar, firma_gerente_devolucion || null)
@@ -460,7 +513,7 @@ const asignacionController = {
                         UPDATE INV.asignaciones 
                         SET 
                             fecha_devolucion = @fecha_devolucion,
-                            observaciones_devolucion = @observaciones_devolucion,
+                            observaciones = @observaciones,
                             condicion_entrega = @condicion_entrega,
                             firma_trabajador_devolucion = @firma_trabajador_devolucion,
                             firma_gerente_devolucion = @firma_gerente_devolucion
@@ -484,7 +537,7 @@ const asignacionController = {
                 await transaction.request()
                     .input('producto_id', sql.Int, asignacion.producto_id)
                     .input('accion', sql.NVarChar, tipoOperacion)
-                    .input('detalles', sql.NVarChar, `${esPrestamo ? 'Devolución de préstamo' : 'Devolución de producto'}. Condición: ${condicion_entrega}. Observaciones: ${observaciones_devolucion || 'Ninguna'}`)
+                    .input('detalles', sql.NVarChar, `${esPrestamo ? 'Devolución de préstamo' : 'Devolución de producto'}. Motivo: ${motivo_devolucion || 'No especificado'}. Condición: ${condicion_entrega || 'BUENO'}. Observaciones: ${observaciones_devolucion || 'Ninguna'}`)
                     .input('fecha_hora', sql.DateTime, new Date())
                     .query(`
                         INSERT INTO INV.historial (
@@ -507,7 +560,11 @@ const asignacionController = {
                 
                 res.json({
                     success: true,
-                    message: esPrestamo ? 'Devolución de préstamo registrada exitosamente' : 'Devolución registrada exitosamente'
+                    message: esPrestamo ? 'Devolución de préstamo registrada exitosamente' : 'Devolución registrada exitosamente',
+                    data: {
+                        es_prestamo: esPrestamo,
+                        documento: !esPrestamo ? { filename: `acta_recepcion_${id}.pdf` } : null
+                    }
                 });
                 
             } catch (error) {

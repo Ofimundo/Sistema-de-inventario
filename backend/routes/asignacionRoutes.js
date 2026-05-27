@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN ACTUALIZADA CON PRÉSTAMOS COMPLETO
+// backend/routes/asignacionRoutes.js - VERSIÓN ACTUALIZADA CON BUSCADOR DE DOCUMENTOS
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -612,6 +612,39 @@ router.get('/prestamos/historial', async (req, res) => {
     } catch (error) {
         console.error('❌ Error en GET /prestamos/historial:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
+    }
+});
+
+// GET - Buscar documento por asignación ID y tipo (NUEVO ENDPOINT)
+router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
+    try {
+        const { asignacionId, tipo } = req.params;
+        console.log(`📥 GET /api/asignaciones/buscar-documento/${asignacionId}/${tipo}`);
+        
+        if (!fs.existsSync(DOCS_DIR)) {
+            return res.json({ success: false, message: 'Directorio de documentos no encontrado', filename: null });
+        }
+        
+        const files = fs.readdirSync(DOCS_DIR);
+        const pattern = tipo === 'asignacion' 
+            ? `acta_asignacion_${asignacionId}` 
+            : `acta_recepcion_${asignacionId}`;
+        
+        const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
+        
+        if (foundFile) {
+            console.log(`✅ Documento encontrado: ${foundFile}`);
+            res.json({
+                success: true,
+                data: { filename: foundFile }
+            });
+        } else {
+            console.log(`⚠️ Documento no encontrado para ${pattern}`);
+            res.json({ success: false, message: 'Documento no encontrado', filename: null });
+        }
+    } catch (error) {
+        console.error('❌ Error en GET /buscar-documento:', error);
+        res.status(500).json({ success: false, message: error.message, filename: null });
     }
 });
 

@@ -1,4 +1,4 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN ACTUALIZADA CON SOPORTE PARA PRÉSTAMOS
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN ACTUALIZADA CON MEJORAS EN DESCARGA DE DOCUMENTOS
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
@@ -18,7 +18,8 @@ import {
     FormControl,
     RadioGroup,
     FormControlLabel,
-    Radio
+    Radio,
+    Chip
 } from '@mui/material';
 import {
     Assignment as AssignmentIcon,
@@ -33,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
+import { asignacionService } from '../services/asignacionService';
 
 // ============================================
 // 🔥 URL BASE DINÁMICA - CORREGIDA
@@ -57,6 +59,8 @@ const getApiBaseUrl = () => {
         console.log('📍 API Base URL (desde CRA):', url);
         return url;
     }
+    // URL por defecto
+    return 'https://sistema-inventario-backend-p3xg.onrender.com';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -267,6 +271,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
+    const [asignacionId, setAsignacionId] = useState(null);
 
     useEffect(() => {
         if (open && productoSeleccionado) {
@@ -283,6 +288,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             setSuccess(false);
             setShowConfirmDialog(false);
             setDocumentoGenerado(null);
+            setAsignacionId(null);
             setTipoFirmaTrabajador('texto');
             setTipoFirmaGerente('texto');
         }
@@ -319,40 +325,18 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
+    // Función mejorada para descargar el acta usando el servicio
     const handleDescargarDocumento = async () => {
-        if (!documentoGenerado || !documentoGenerado.filename || downloading) return;
+        if (!asignacionId || downloading) return;
         
         setDownloading(true);
         try {
-            const token = localStorage.getItem('token');
-            const downloadUrl = `https://sistema-inventario-backend-p3xg.onrender.com/api/asignaciones/descargar/${documentoGenerado.filename}`;
-            console.log('📥 Descargando documento desde:', downloadUrl);
-            
-            const response = await fetch(downloadUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
-            }
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = documentoGenerado.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            
-            console.log('✅ Documento descargado:', documentoGenerado.filename);
+            console.log('📥 Descargando acta de asignación para:', asignacionId);
+            await asignacionService.descargarActaAsignacion(asignacionId);
+            console.log('✅ Acta de asignación descargada correctamente');
         } catch (error) {
-            console.error('❌ Error descargando documento:', error);
-            alert('Error al descargar el documento. Por favor, intente nuevamente.');
+            console.error('❌ Error descargando acta:', error);
+            alert('Error al descargar el acta de asignación. Por favor, intente nuevamente.');
         } finally {
             setTimeout(() => setDownloading(false), 1000);
         }
@@ -412,7 +396,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             });
 
             if (asignacionResponse.data?.success || asignacionResponse.data?.id) {
-                const asignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
+                const newAsignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
+                setAsignacionId(newAsignacionId);
                 
                 let documentoData = null;
                 
@@ -420,7 +405,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 if (!esPrestamo) {
                     try {
                         const actaData = {
-                            id_asignacion: asignacionId,
+                            id_asignacion: newAsignacionId,
                             colaborador: {
                                 nombre: colaboradorSeleccionado.nombre,
                                 rut: colaboradorSeleccionado.rut,
@@ -446,7 +431,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                             observaciones: observaciones,
                             firma_trabajador: getFirmaTrabajadorFinal(),
                             firma_gerente: getFirmaGerenteFinal(),
-                            usuario_responsable: usuarioResponsable
+                            usuario_responsable: usuarioResponsable,
+                            es_prestamo: false
                         };
 
                         const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData);
@@ -466,13 +452,14 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 if (onSuccess) {
                     const mensaje = esPrestamo 
                         ? `✅ Préstamo registrado exitosamente para ${productoSeleccionado.nombre} (sin documento)` 
-                        : `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}`;
+                        : `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}. El acta se ha generado.`;
                     
                     onSuccess({
                         success: true,
                         message: mensaje,
                         documento: documentoData,
-                        es_prestamo: esPrestamo
+                        es_prestamo: esPrestamo,
+                        asignacion_id: newAsignacionId
                     });
                 }
             } else {
@@ -499,6 +486,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         setSuccess(false);
         setShowConfirmDialog(false);
         setDocumentoGenerado(null);
+        setAsignacionId(null);
         onClose();
     };
 
@@ -519,7 +507,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                     }
                 </Typography>
                 
-                {!esPrestamo && documentoGenerado && (
+                {!esPrestamo && (
                     <Box sx={{ 
                         mt: 2, 
                         p: 2, 
@@ -532,7 +520,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                     }}>
                         <PdfIcon sx={{ color: '#f44336' }} />
                         <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                            {documentoGenerado?.filename || 'acta_asignacion.pdf'}
+                            acta_asignacion_{asignacionId}.pdf
                         </Typography>
                     </Box>
                 )}
@@ -553,7 +541,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 )}
                 
                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
-                    {!esPrestamo && documentoGenerado && (
+                    {!esPrestamo && (
                         <Button 
                             variant="contained" 
                             startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
@@ -605,7 +593,14 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                                 Nota: Este préstamo no requiere documento formal.
                             </Typography>
                         )}
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0 }}>Cerrar</Button>
+                        {!esPrestamo && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                El acta de asignación se ha generado y puede descargarla desde el botón correspondiente.
+                            </Typography>
+                        )}
+                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2' }}>
+                            Cerrar
+                        </Button>
                     </Box>
                 </DialogContent>
             </Dialog>
@@ -618,26 +613,28 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         <>
             <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
                 <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        {esPrestamo ? (
-                            <PersonIcon sx={{ color: '#F59E0B' }} />
-                        ) : (
-                            <AssignmentIcon sx={{ color: '#0A66C2' }} />
-                        )}
-                        <Typography variant="h6">
-                            {esPrestamo ? 'Registrar Préstamo de Producto' : 'Asignar Producto con Firma Digital'}
-                        </Typography>
-                        {esPrestamo && (
-                            <Chip 
-                                label="SIN DOCUMENTO" 
-                                size="small" 
-                                sx={{ 
-                                    bgcolor: '#F59E0B', 
-                                    color: 'white',
-                                    fontWeight: 500
-                                }} 
-                            />
-                        )}
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                        <Box display="flex" alignItems="center" gap={1}>
+                            {esPrestamo ? (
+                                <PersonIcon sx={{ color: '#F59E0B' }} />
+                            ) : (
+                                <AssignmentIcon sx={{ color: '#0A66C2' }} />
+                            )}
+                            <Typography variant="h6">
+                                {esPrestamo ? 'Registrar Préstamo de Producto' : 'Asignar Producto con Firma Digital'}
+                            </Typography>
+                            {esPrestamo && (
+                                <Chip 
+                                    label="SIN DOCUMENTO" 
+                                    size="small" 
+                                    sx={{ 
+                                        bgcolor: '#F59E0B', 
+                                        color: 'white',
+                                        fontWeight: 500
+                                    }} 
+                                />
+                            )}
+                        </Box>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         Producto: <strong>{productoSeleccionado.nombre}</strong> | N° Serie: <strong>{productoSeleccionado.numero_serie || 'N/A'}</strong>
