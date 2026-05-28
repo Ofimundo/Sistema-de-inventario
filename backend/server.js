@@ -1,4 +1,4 @@
-// backend/server.js - VERSIÓN COMPLETA CORREGIDA
+// backend/server.js - VERSIÓN COMPLETA CORREGIDA (RUTA PRODUCTOS EN PLURAL)
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -19,7 +19,6 @@ const corsOptions = {
         'http://127.0.0.1:5500',
         'https://main.d23vw4mszg17gc.amplifyapp.com',
         'https://*.amplifyapp.com',
-        'https://sistema-inventario-backend-p3xg.onrender.com',
         'https://sistema-inventario-backend-p3xg.onrender.com'
     ],
     credentials: true,
@@ -107,7 +106,7 @@ app.get('/api', (req, res) => {
 // IMPORTAR RUTAS
 // ============================================
 const authRoutes = require('./routes/authRoutes');
-const productoRoutes = require('./routes/productoRoutes');
+const productosRoutes = require('./routes/productoRoutes');  // ← Renombrado a productosRoutes (plural)
 const bodegaRoutes = require('./routes/bodegaRoutes');
 const historialRoutes = require('./routes/historialRoutes');
 const asignacionRoutes = require('./routes/asignacionRoutes');
@@ -117,6 +116,7 @@ const documentoRoutes = require('./routes/documentoRoutes');
 const usuariosRoutes = require('./routes/usuarios');
 const colaboradorRoutes = require('./routes/colaboradorRoutes');
 const colaboradorController = require('./controllers/colaboradorController');
+
 // ============================================
 // RUTAS DE AUTENTICACIÓN (públicas - SIN authenticateToken)
 // ============================================
@@ -133,7 +133,7 @@ const { authenticateToken } = require('./middleware/auth');
 console.log('📌 Configurando rutas protegidas...');
 
 app.use('/api/asignaciones', authenticateToken, asignacionRoutes);
-app.use('/api/productos', authenticateToken, productoRoutes);
+app.use('/api/productos', authenticateToken, productosRoutes);      // ← AHORA EN PLURAL /api/productos
 app.use('/api/bodegas', authenticateToken, bodegaRoutes);
 app.use('/api/historial', authenticateToken, historialRoutes);
 app.use('/api/export', authenticateToken, exportRoutes);
@@ -141,7 +141,8 @@ app.use('/api/estados', authenticateToken, estadosRoutes);
 app.use('/api/documentos', authenticateToken, documentoRoutes);
 app.use('/api/usuarios', authenticateToken, usuariosRoutes);
 app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
-// Agregar esta línea con las otras rutas
+
+// Ruta adicional para empresas
 app.get('/api/colaboradores/empresas', authenticateToken, colaboradorController.getEmpresas);
 
 // ============================================
@@ -176,6 +177,11 @@ getConnection().then(() => {
         console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
         console.log(`📡 Local: http://localhost:${PORT}`);
         console.log(`📍 CORS habilitado para múltiples orígenes`);
+        console.log(`📌 Endpoints disponibles:`);
+        console.log(`   - /api/productos (productos)`);
+        console.log(`   - /api/bodegas (bodegas)`);
+        console.log(`   - /api/colaboradores (colaboradores)`);
+        console.log(`   - /api/asignaciones (asignaciones)`);
         console.log('=================================\n');
     });
 }).catch(err => {
