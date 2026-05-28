@@ -1,5 +1,5 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CON FILTROS, DESCARGA DE ACTAS Y DETALLES
-import React, { useState, useEffect } from 'react';
+// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CON ACTUALIZACIÓN AUTOMÁTICA CORREGIDA
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Paper,
@@ -421,12 +421,10 @@ const AsignacionPage = () => {
         setDownloadingDoc(true);
         try {
             const token = localStorage.getItem('token');
-            // Buscar el documento por tipo
             const filename = tipo === 'asignacion' 
                 ? `acta_asignacion_${asignacionId}_*.pdf`
                 : `acta_recepcion_${asignacionId}_*.pdf`;
             
-            // Intentar descargar
             const response = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacionId}/${tipo}`, {
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -462,7 +460,8 @@ const AsignacionPage = () => {
         }
     };
 
-    const fetchData = async (showRefresh = false) => {
+    // Función principal para cargar datos - CORREGIDA PARA ACTUALIZACIÓN AUTOMÁTICA
+    const fetchData = useCallback(async (showRefresh = false) => {
         if (showRefresh) setRefreshing(true);
         else setLoading(true);
         
@@ -505,6 +504,7 @@ const AsignacionPage = () => {
                 
                 const activas = asignaciones.filter(a => !a.fecha_devolucion);
                 setAsignacionesActivas(activas);
+                console.log(`✅ ${activas.length} asignaciones activas encontradas`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
                 setAsignacionesActivas([]);
@@ -529,11 +529,17 @@ const AsignacionPage = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [searchTerm, filters.bodega_id]);
 
     useEffect(() => {
         fetchData();
-    }, [searchTerm, filters.bodega_id]);
+    }, [fetchData]);
+
+    // Función de refresco después de operaciones
+    const refreshData = async () => {
+        console.log('🔄 Refrescando datos después de operación...');
+        await fetchData(true);
+    };
 
     const handleAsignar = (producto) => {
         if (producto.id_estado_equipo !== 1) {
@@ -577,22 +583,30 @@ const AsignacionPage = () => {
         }
     };
 
-    const handleAsignacionSuccess = (result) => {
+    // Handlers con refresco automático CORREGIDOS
+    const handleAsignacionSuccess = async (result) => {
+        console.log('✅ Asignación exitosa, refrescando datos...');
         showSnackbar(result.message || 'Asignación completada exitosamente', 'success');
         setOpenAsignacion(false);
-        fetchData(true);
+        setProductoSeleccionado(null);
+        await refreshData();
     };
 
-    const handlePrestamoSuccess = (result) => {
+    const handlePrestamoSuccess = async (result) => {
+        console.log('✅ Préstamo exitoso, refrescando datos...');
         showSnackbar(result.message || 'Préstamo registrado exitosamente', 'success');
         setOpenPrestamo(false);
-        fetchData(true);
+        setProductoSeleccionado(null);
+        await refreshData();
     };
 
-    const handleRecepcionSuccess = (result) => {
+    const handleRecepcionSuccess = async (result) => {
+        console.log('✅ Recepción exitosa, refrescando datos...');
         showSnackbar(result.message || 'Recepción completada exitosamente', 'success');
         setOpenRecepcion(false);
-        fetchData(true);
+        setProductoSeleccionado(null);
+        setAsignacionSeleccionada(null);
+        await refreshData();
     };
 
     const handleClearFilters = () => {
@@ -622,7 +636,6 @@ const AsignacionPage = () => {
 
     // Filtrar productos por tipo de estado seleccionado
     const filteredProductos = productos.filter(producto => {
-        // Filtro de búsqueda
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             const matchesSearch = (
@@ -634,7 +647,6 @@ const AsignacionPage = () => {
             if (!matchesSearch) return false;
         }
         
-        // Filtro por tipo de estado (todos, disponibles, asignados, prestamos)
         const asignacionActiva = getAsignacionActiva(producto.id);
         const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
         
@@ -657,7 +669,6 @@ const AsignacionPage = () => {
 
     const activeFiltersCount = (filters.bodega_id ? 1 : 0) + (filters.tipo_estado !== 'todos' ? 1 : 0) + (searchTerm ? 1 : 0);
 
-    // Estadísticas
     const totalDisponibles = productos.filter(p => p.id_estado_equipo === 1).length;
     const totalAsignados = productos.filter(p => p.id_estado_equipo === 2).length;
     const totalPrestamos = asignacionesActivas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length;
@@ -674,7 +685,7 @@ const AsignacionPage = () => {
                     <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
                         Gestión de Asignaciones con Firma Digital
                     </Typography>
-                    <IconButton color="inherit" onClick={() => fetchData(true)} disabled={refreshing}>
+                    <IconButton color="inherit" onClick={() => refreshData()} disabled={refreshing}>
                         {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
                     </IconButton>
                 </Toolbar>
@@ -691,7 +702,7 @@ const AsignacionPage = () => {
                     </Typography>
                     {apiError && (
                         <Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={
-                            <Button color="inherit" size="small" onClick={() => fetchData(true)} sx={{ borderRadius: 0 }}>REINTENTAR</Button>
+                            <Button color="inherit" size="small" onClick={() => refreshData()} sx={{ borderRadius: 0 }}>REINTENTAR</Button>
                         }>
                             No se pudo conectar con el servidor. Verifica tu conexión.
                         </Alert>
