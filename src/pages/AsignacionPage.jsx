@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (SIN PANTALLA EN BLANCO)
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA CON ACTUALIZACIÓN ESPECÍFICA PARA PRÉSTAMOS
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
@@ -172,6 +172,8 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
     const [downloading, setDownloading] = useState(false);
 
     const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
+
+    if (!open || !producto || !asignacion) return null;
 
     const handleDescargarDocumento = async (filename, tipo) => {
         if (!filename || downloading) return;
@@ -442,7 +444,6 @@ const AsignacionPage = () => {
 
     // Función principal para cargar datos
     const fetchData = useCallback(async (showRefresh = false) => {
-        // No ocultar la tabla durante el refresco para evitar pantalla en blanco
         if (showRefresh) {
             setRefreshing(true);
         } else {
@@ -491,7 +492,6 @@ const AsignacionPage = () => {
                 console.log(`✅ ${activas.length} asignaciones activas encontradas`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
-                // Mantener datos anteriores en caso de error
             }
             
             // Cargar bodegas
@@ -516,7 +516,8 @@ const AsignacionPage = () => {
         fetchData();
     }, [fetchData]);
 
-    // Función de refresco - NO muestra loading para evitar pantalla en blanco
+
+    // Función de refresco completa (para asignaciones normales)
     const refreshData = async () => {
         console.log('🔄 Refrescando datos después de operación...');
         setRefreshing(true);
@@ -524,7 +525,6 @@ const AsignacionPage = () => {
             const filterParams = {};
             if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
             
-            // Cargar productos en segundo plano
             const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
             
             let todosLosProductos = [];
@@ -542,7 +542,6 @@ const AsignacionPage = () => {
             const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
             setProductos(productosFiltrados);
             
-            // Cargar asignaciones activas
             const asignacionesResponse = await api.get('/asignaciones/activas');
             let asignaciones = [];
             if (asignacionesResponse.data) {
@@ -604,7 +603,7 @@ const AsignacionPage = () => {
         }
     };
 
-    // Handlers - Cierran diálogos y refrescan datos
+    // Handlers con estrategias diferenciadas
     const handleAsignacionSuccess = () => {
         showSnackbar('Asignación completada exitosamente', 'success');
         setOpenAsignacion(false);
@@ -612,6 +611,7 @@ const AsignacionPage = () => {
         refreshData();
     };
 
+    // Para préstamos: recargar datos completos desde el servidor para evitar inconsistencias
     const handlePrestamoSuccess = () => {
         showSnackbar('Préstamo registrado exitosamente', 'success');
         setOpenPrestamo(false);
@@ -818,8 +818,7 @@ const AsignacionPage = () => {
                         <Grid item xs={12} md={3}>
                             <ToggleButtonGroup
                                 value={filters.tipo_estado}
-                                exclusive
-                                onChange={handleTipoEstadoChange}
+                                exclusive                                onChange={handleTipoEstadoChange}
                                 size="small"
                                 fullWidth
                                 sx={{ height: 40 }}

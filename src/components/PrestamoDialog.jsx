@@ -61,6 +61,8 @@ const PrestamoDialog = ({ open, onClose, productoSeleccionado, onSuccess }) => {
         }
     }, [open]);
 
+    if (!productoSeleccionado) return null;
+
     const fetchColaboradores = async () => {
         setLoading(true);
         try {
