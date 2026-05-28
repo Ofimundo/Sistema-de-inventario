@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA CON ACTUALIZACIÓN ESPECÍFICA PARA PRÉSTAMOS
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (SIN REFRESH PARA PRÉSTAMOS)
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
@@ -516,6 +516,26 @@ const AsignacionPage = () => {
         fetchData();
     }, [fetchData]);
 
+    // Función para actualizar SOLO las asignaciones (para préstamos)
+    const actualizarSoloAsignaciones = async () => {
+        console.log('🔄 Actualizando solo asignaciones después de préstamo...');
+        try {
+            const asignacionesResponse = await api.get('/asignaciones/activas');
+            let asignaciones = [];
+            if (asignacionesResponse.data) {
+                if (asignacionesResponse.data.success && Array.isArray(asignacionesResponse.data.data)) {
+                    asignaciones = asignacionesResponse.data.data;
+                } else if (Array.isArray(asignacionesResponse.data)) {
+                    asignaciones = asignacionesResponse.data;
+                }
+            }
+            const activas = asignaciones.filter(a => !a.fecha_devolucion);
+            setAsignacionesActivas(activas);
+            console.log('✅ Asignaciones actualizadas correctamente');
+        } catch (error) {
+            console.error('Error actualizando asignaciones:', error);
+        }
+    };
 
     // Función de refresco completa (para asignaciones normales)
     const refreshData = async () => {
@@ -611,12 +631,25 @@ const AsignacionPage = () => {
         refreshData();
     };
 
-    // Para préstamos: recargar datos completos desde el servidor para evitar inconsistencias
+    // ✅ PRÉSTAMO: Solo actualizar asignaciones, NO recargar productos
     const handlePrestamoSuccess = () => {
+        console.log('✅ Préstamo exitoso - Actualizando solo asignaciones');
         showSnackbar('Préstamo registrado exitosamente', 'success');
         setOpenPrestamo(false);
+        
+        // Actualizar el estado local del producto prestado
+        if (productoSeleccionado) {
+            setProductos(prev => prev.map(p => {
+                if (p.id === productoSeleccionado.id) {
+                    return { ...p, id_estado_equipo: 2 };
+                }
+                return p;
+            }));
+        }
+        
+        // Actualizar solo las asignaciones (NO productos)
+        actualizarSoloAsignaciones();
         setProductoSeleccionado(null);
-        refreshData();
     };
 
     const handleRecepcionSuccess = () => {
@@ -818,7 +851,8 @@ const AsignacionPage = () => {
                         <Grid item xs={12} md={3}>
                             <ToggleButtonGroup
                                 value={filters.tipo_estado}
-                                exclusive                                onChange={handleTipoEstadoChange}
+                                exclusive
+                                onChange={handleTipoEstadoChange}
                                 size="small"
                                 fullWidth
                                 sx={{ height: 40 }}
