@@ -1,5 +1,5 @@
-// src/pages/ColaboradoresPage.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/ColaboradoresPage.jsx - VERSIÓN CON FILTROS MEJORADOS
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Paper,
@@ -40,8 +40,13 @@ import {
     TableHead,
     TableRow,
     TablePagination,
-    Badge,
-    Collapse
+    Collapse,
+    FormControlLabel,
+    Switch,
+    Radio,
+    RadioGroup,
+    FormLabel,
+    Badge
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -58,7 +63,10 @@ import {
     FilterListOff as FilterListOffIcon,
     AssignmentInd as AssignmentIndIcon,
     Inventory as InventoryIcon,
-    Business as BusinessIcon
+    Business as BusinessIcon,
+    SortByAlpha as SortByAlphaIcon,
+    Clear as ClearIcon,
+    FilterAlt as FilterAltIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import colaboradorService from '../services/colaboradorService';
@@ -154,6 +162,113 @@ const GradientButton = styled(Button)(({ theme }) => ({
         boxShadow: `0 10px 20px ${alpha(colors.primary, 0.3)}`,
     },
 }));
+
+// Componente de filtros avanzados
+const AdvancedFilters = ({ filters, onFilterChange, onClearFilters, departamentos, activeFiltersCount }) => {
+    return (
+        <Box sx={{ mt: 3 }}>
+            <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Empresa</InputLabel>
+                        <Select
+                            value={filters.empresa}
+                            onChange={(e) => onFilterChange('empresa', e.target.value)}
+                            label="Empresa"
+                        >
+                            <MenuItem value="">Todas</MenuItem>
+                            {OPCIONES_EMPRESA.map((emp) => (
+                                <MenuItem key={emp.valor} value={emp.valor}>
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <span>{emp.icon}</span>
+                                        {emp.label}
+                                    </Box>
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Estado</InputLabel>
+                        <Select
+                            value={filters.estado}
+                            onChange={(e) => onFilterChange('estado', e.target.value)}
+                            label="Estado"
+                        >
+                            <MenuItem value="">Todos</MenuItem>
+                            <MenuItem value="ACTIVO">Activos</MenuItem>
+                            <MenuItem value="INACTIVO">Inactivos</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Departamento</InputLabel>
+                        <Select
+                            value={filters.departamento}
+                            onChange={(e) => onFilterChange('departamento', e.target.value)}
+                            label="Departamento"
+                        >
+                            <MenuItem value="">Todos</MenuItem>
+                            {departamentos.map((depto) => (
+                                <MenuItem key={depto} value={depto}>{depto}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Asignaciones</InputLabel>
+                        <Select
+                            value={filters.asignaciones}
+                            onChange={(e) => onFilterChange('asignaciones', e.target.value)}
+                            label="Asignaciones"
+                        >
+                            <MenuItem value="">Todos</MenuItem>
+                            <MenuItem value="con_asignaciones">Con productos asignados</MenuItem>
+                            <MenuItem value="sin_asignaciones">Sin productos asignados</MenuItem>
+                            <MenuItem value="con_historial">Con historial de asignaciones</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Ordenar por</InputLabel>
+                        <Select
+                            value={filters.ordenarPor}
+                            onChange={(e) => onFilterChange('ordenarPor', e.target.value)}
+                            label="Ordenar por"
+                        >
+                            <MenuItem value="nombre_asc">Nombre (A-Z)</MenuItem>
+                            <MenuItem value="nombre_desc">Nombre (Z-A)</MenuItem>
+                            <MenuItem value="empresa_asc">Empresa (A-Z)</MenuItem>
+                            <MenuItem value="empresa_desc">Empresa (Z-A)</MenuItem>
+                            <MenuItem value="asignaciones_desc">Más asignaciones</MenuItem>
+                            <MenuItem value="asignaciones_asc">Menos asignaciones</MenuItem>
+                            <MenuItem value="fecha_ingreso_desc">Más recientes</MenuItem>
+                            <MenuItem value="fecha_ingreso_asc">Más antiguos</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Grid>
+            </Grid>
+            
+            {activeFiltersCount > 0 && (
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<ClearIcon />}
+                        onClick={onClearFilters}
+                    >
+                        Limpiar todos los filtros ({activeFiltersCount})
+                    </Button>
+                </Box>
+            )}
+        </Box>
+    );
+};
 
 // Diálogo de detalle de colaborador
 const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], onRefresh, loading }) => {
@@ -406,11 +521,12 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         estado: 'ACTIVO',
         direccion: '',
         fecha_nacimiento: '',
-        empresa: ''  // NUEVO CAMPO
+        empresa: 'OFIMUNDO'
     });
 
     const [errores, setErrores] = useState({});
     const [loading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
         if (open) {
@@ -426,7 +542,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     estado: colaborador.estado || 'ACTIVO',
                     direccion: colaborador.direccion || '',
                     fecha_nacimiento: colaborador.fecha_nacimiento?.split('T')[0] || '',
-                    empresa: colaborador.empresa || 'OFIMUNDO'  // Valor por defecto
+                    empresa: colaborador.empresa || 'OFIMUNDO'
                 });
             } else {
                 setFormData({
@@ -440,10 +556,11 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     estado: 'ACTIVO',
                     direccion: '',
                     fecha_nacimiento: '',
-                    empresa: 'OFIMUNDO'  // Valor por defecto
+                    empresa: 'OFIMUNDO'
                 });
             }
             setErrores({});
+            setErrorMessage('');
         }
     }, [colaborador, open]);
 
@@ -462,6 +579,8 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         if (errores[name]) {
             setErrores({ ...errores, [name]: null });
         }
+        
+        if (errorMessage) setErrorMessage('');
     };
 
     const validarFormulario = () => {
@@ -495,6 +614,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         if (!validarFormulario()) return;
 
         setLoading(true);
+        setErrorMessage('');
 
         try {
             const dataToSend = {
@@ -511,14 +631,16 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             }
 
             if (response && response.success) {
-                onSave(response.data);
+                if (onSave) {
+                    onSave(response.data);
+                }
                 handleClose();
             } else {
                 throw new Error(response?.message || 'Error al guardar');
             }
         } catch (error) {
             console.error('❌ Error:', error);
-            alert(error.message || 'Error al procesar la solicitud');
+            setErrorMessage(error.message || 'Error al procesar la solicitud');
         } finally {
             setLoading(false);
         }
@@ -539,6 +661,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             empresa: 'OFIMUNDO'
         });
         setErrores({});
+        setErrorMessage('');
         setLoading(false);
         onClose();
     };
@@ -552,8 +675,13 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             </DialogTitle>
 
             <DialogContent dividers>
+                {errorMessage && (
+                    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErrorMessage('')}>
+                        {errorMessage}
+                    </Alert>
+                )}
+                
                 <Grid container spacing={2}>
-                    {/* NUEVO CAMPO: Empresa */}
                     <Grid item xs={12} md={6}>
                         <FormControl fullWidth size="small" error={!!errores.empresa}>
                             <InputLabel>Empresa *</InputLabel>
@@ -807,6 +935,7 @@ const ColaboradoresPage = () => {
 
     // Estados
     const [colaboradores, setColaboradores] = useState([]);
+    const [filteredColaboradores, setFilteredColaboradores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [page, setPage] = useState(0);
@@ -816,10 +945,11 @@ const ColaboradoresPage = () => {
     const [filters, setFilters] = useState({
         estado: '',
         departamento: '',
-        empresa: ''  // NUEVO FILTRO POR EMPRESA
+        empresa: '',
+        asignaciones: '',
+        ordenarPor: 'nombre_asc'
     });
     const [departamentos, setDepartamentos] = useState([]);
-    const [empresas, setEmpresas] = useState(OPCIONES_EMPRESA); // Opciones de empresa
     const [stats, setStats] = useState({
         total_colaboradores: 0,
         activos: 0,
@@ -840,9 +970,9 @@ const ColaboradoresPage = () => {
     // UI
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    const showSnackbar = (message, severity = 'success') => {
+    const showSnackbar = useCallback((message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
-    };
+    }, []);
 
     const handleCloseSnackbar = () => {
         setSnackbar({ ...snackbar, open: false });
@@ -852,34 +982,92 @@ const ColaboradoresPage = () => {
         navigate('/dashboard');
     };
 
-    // Cargar datos iniciales
-    useEffect(() => {
-        fetchInitialData();
+    // Función para ordenar colaboradores
+    const sortColaboradores = useCallback((colaboradoresList, ordenarPor) => {
+        const sorted = [...colaboradoresList];
+        
+        switch (ordenarPor) {
+            case 'nombre_asc':
+                return sorted.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+            case 'nombre_desc':
+                return sorted.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || ''));
+            case 'empresa_asc':
+                return sorted.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
+            case 'empresa_desc':
+                return sorted.sort((a, b) => (b.empresa || '').localeCompare(a.empresa || ''));
+            case 'asignaciones_desc':
+                return sorted.sort((a, b) => (b.asignaciones_activas || 0) - (a.asignaciones_activas || 0));
+            case 'asignaciones_asc':
+                return sorted.sort((a, b) => (a.asignaciones_activas || 0) - (b.asignaciones_activas || 0));
+            case 'fecha_ingreso_desc':
+                return sorted.sort((a, b) => new Date(b.fecha_ingreso) - new Date(a.fecha_ingreso));
+            case 'fecha_ingreso_asc':
+                return sorted.sort((a, b) => new Date(a.fecha_ingreso) - new Date(b.fecha_ingreso));
+            default:
+                return sorted;
+        }
     }, []);
 
-    const fetchInitialData = async () => {
-        try {
-            const [departamentosData, statsData] = await Promise.all([
-                colaboradorService.getDepartamentos(),
-                colaboradorService.getStats()
-            ]);
+    // Función para filtrar colaboradores localmente
+    const applyFilters = useCallback(() => {
+        let result = [...colaboradores];
 
-            setDepartamentos(departamentosData || []);
-            setStats(statsData || {
-                total_colaboradores: 0,
-                activos: 0,
-                inactivos: 0,
-                total_departamentos: 0,
-                total_equipos_asignados: 0
-            });
-
-            await fetchData();
-        } catch (error) {
-            console.error('Error cargando datos iniciales:', error);
+        // Filtrar por búsqueda
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            result = result.filter(col => 
+                col.nombre?.toLowerCase().includes(term) ||
+                col.rut?.toLowerCase().includes(term) ||
+                col.email?.toLowerCase().includes(term)
+            );
         }
-    };
 
-    const fetchData = async (showRefresh = false) => {
+        // Filtrar por empresa
+        if (filters.empresa) {
+            result = result.filter(col => col.empresa === filters.empresa);
+        }
+
+        // Filtrar por estado
+        if (filters.estado) {
+            result = result.filter(col => col.estado === filters.estado);
+        }
+
+        // Filtrar por departamento
+        if (filters.departamento) {
+            result = result.filter(col => col.departamento === filters.departamento);
+        }
+
+        // Filtrar por asignaciones
+        if (filters.asignaciones) {
+            switch (filters.asignaciones) {
+                case 'con_asignaciones':
+                    result = result.filter(col => (col.asignaciones_activas || 0) > 0);
+                    break;
+                case 'sin_asignaciones':
+                    result = result.filter(col => (col.asignaciones_activas || 0) === 0);
+                    break;
+                case 'con_historial':
+                    result = result.filter(col => (col.total_asignaciones || 0) > 0);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        // Ordenar
+        result = sortColaboradores(result, filters.ordenarPor);
+
+        setFilteredColaboradores(result);
+        setPage(0);
+    }, [colaboradores, searchTerm, filters, sortColaboradores]);
+
+    // Aplicar filtros cuando cambian las dependencias
+    useEffect(() => {
+        applyFilters();
+    }, [applyFilters]);
+
+    // Función para cargar datos
+    const fetchData = useCallback(async (showRefresh = false) => {
         if (showRefresh) {
             setRefreshing(true);
         } else {
@@ -887,28 +1075,22 @@ const ColaboradoresPage = () => {
         }
 
         try {
-            const filterParams = {};
-            if (filters.estado) filterParams.estado = filters.estado;
-            if (filters.departamento) filterParams.departamento = filters.departamento;
-            if (filters.empresa) filterParams.empresa = filters.empresa; // NUEVO FILTRO
-            if (searchTerm) filterParams.search = searchTerm;
-
-            const data = await colaboradorService.getColaboradores(filterParams);
-            
-            console.log('📊 Datos de colaboradores recibidos:', data);
-            if (data && data.length > 0) {
-                const adan = data.find(c => c.nombre === 'Adan Moris');
-                if (adan) {
-                    console.log('🔴 ADAN MORIS:', {
-                        nombre: adan.nombre,
-                        empresa: adan.empresa,
-                        total_asignaciones: adan.total_asignaciones,
-                        asignaciones_activas: adan.asignaciones_activas
-                    });
-                }
-            }
-            
+            const data = await colaboradorService.getColaboradores();
+            console.log('📊 Datos de colaboradores recibidos:', data?.length || 0);
             setColaboradores(data || []);
+            
+            // Calcular stats reales
+            const activos = data?.filter(c => c.estado === 'ACTIVO').length || 0;
+            const inactivos = data?.filter(c => c.estado === 'INACTIVO').length || 0;
+            const departamentosUnicos = [...new Set(data?.map(c => c.departamento).filter(Boolean))];
+            
+            setStats({
+                total_colaboradores: data?.length || 0,
+                activos: activos,
+                inactivos: inactivos,
+                total_departamentos: departamentosUnicos.length,
+                total_equipos_asignados: data?.reduce((sum, col) => sum + (col.asignaciones_activas || 0), 0) || 0
+            });
 
             if (showRefresh) {
                 showSnackbar('Datos actualizados', 'success');
@@ -920,15 +1102,26 @@ const ColaboradoresPage = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [showSnackbar]);
 
-    // Función para cargar productos asignados a un colaborador
-    const loadProductosAsignados = async (colaboradorId) => {
+    // Función para cargar datos iniciales
+    const fetchInitialData = useCallback(async () => {
+        try {
+            const colaboradoresData = await colaboradorService.getColaboradores();
+            const departamentosUnicos = [...new Set(colaboradoresData?.map(c => c.departamento).filter(Boolean))];
+            setDepartamentos(departamentosUnicos);
+        } catch (error) {
+            console.error('Error cargando datos iniciales:', error);
+        }
+    }, []);
+
+    // Función para cargar productos asignados
+    const loadProductosAsignados = useCallback(async (colaboradorId) => {
         setLoadingProductos(true);
         try {
             console.log(`📥 Cargando productos asignados para colaborador ID: ${colaboradorId}`);
             const productos = await colaboradorService.getProductosAsignados(colaboradorId);
-            console.log(`✅ Productos asignados encontrados: ${productos.length}`, productos);
+            console.log(`✅ Productos asignados encontrados: ${productos?.length || 0}`);
             setProductosAsignados(productos || []);
             return productos;
         } catch (error) {
@@ -939,46 +1132,54 @@ const ColaboradoresPage = () => {
         } finally {
             setLoadingProductos(false);
         }
-    };
+    }, [showSnackbar]);
 
-    // Función para refrescar los productos asignados
-    const refreshProductosAsignados = async () => {
+    // Función para refrescar productos asignados
+    const refreshProductosAsignados = useCallback(async () => {
         if (selectedColaboradorDetail) {
             console.log('🔄 Refrescando productos asignados...');
             await loadProductosAsignados(selectedColaboradorDetail.id);
         }
-    };
+    }, [selectedColaboradorDetail, loadProductosAsignados]);
 
+    // Efectos
     useEffect(() => {
-        fetchData();
-    }, [searchTerm, filters.estado, filters.departamento, filters.empresa]);
+        const loadData = async () => {
+            await fetchInitialData();
+            await fetchData();
+        };
+        loadData();
+    }, []); // Solo se ejecuta una vez al montar
 
-    const handleClearFilters = () => {
+    const handleClearFilters = useCallback(() => {
         setSearchTerm('');
         setFilters({
             estado: '',
             departamento: '',
-            empresa: ''
+            empresa: '',
+            asignaciones: '',
+            ordenarPor: 'nombre_asc'
         });
-    };
+        setShowAdvancedFilters(false);
+    }, []);
 
-    const handleFilterChange = (field) => (event) => {
-        setFilters(prev => ({ ...prev, [field]: event.target.value }));
-    };
+    const handleFilterChange = useCallback((field, value) => {
+        setFilters(prev => ({ ...prev, [field]: value }));
+    }, []);
 
-    const handleOpenForm = (colaborador = null) => {
+    const handleOpenForm = useCallback((colaborador = null) => {
         setSelectedColaborador(colaborador);
         setOpenForm(true);
-    };
+    }, []);
 
-    const handleCloseForm = () => {
+    const handleCloseForm = useCallback(() => {
         setSelectedColaborador(null);
         setOpenForm(false);
         fetchData();
         fetchInitialData();
-    };
+    }, [fetchData, fetchInitialData]);
 
-    const handleOpenDetail = async (colaborador) => {
+    const handleOpenDetail = useCallback(async (colaborador) => {
         try {
             console.log('🔍 Abriendo detalle para colaborador:', colaborador.id, colaborador.nombre);
             setSelectedColaboradorDetail(colaborador);
@@ -991,15 +1192,15 @@ const ColaboradoresPage = () => {
             setSelectedColaboradorDetail(colaborador);
             setOpenDetail(true);
         }
-    };
+    }, [loadProductosAsignados, showSnackbar]);
 
-    const handleCloseDetail = () => {
+    const handleCloseDetail = useCallback(() => {
         setSelectedColaboradorDetail(null);
         setProductosAsignados([]);
         setOpenDetail(false);
-    };
+    }, []);
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!selectedColaborador) return;
 
         if (selectedColaborador.asignaciones_activas > 0) {
@@ -1015,26 +1216,29 @@ const ColaboradoresPage = () => {
         } catch (error) {
             console.error('Error eliminando:', error);
             showSnackbar(error.message || 'Error al eliminar', 'error');
+        } finally {
+            setSelectedColaborador(null);
         }
-    };
+    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
 
-    const handleSave = async (colaboradorData) => {
-        handleCloseForm();
+    const handleSave = useCallback(async (colaboradorData) => {
+        setOpenForm(false);
+        setSelectedColaborador(null);
         showSnackbar(
             selectedColaborador ? 'Colaborador actualizado' : 'Colaborador creado',
             'success'
         );
         await fetchData();
         await fetchInitialData();
-    };
+    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
 
-    const handleRefresh = () => {
+    const handleRefresh = useCallback(() => {
         fetchData(true);
         fetchInitialData();
         if (selectedColaboradorDetail) {
             loadProductosAsignados(selectedColaboradorDetail.id);
         }
-    };
+    }, [fetchData, fetchInitialData, selectedColaboradorDetail, loadProductosAsignados]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -1045,32 +1249,20 @@ const ColaboradoresPage = () => {
         setPage(0);
     };
 
-    // Filtrado local
-    const filteredColaboradores = colaboradores.filter(col => {
-        if (filters.estado && col.estado !== filters.estado) return false;
-        if (filters.departamento && col.departamento !== filters.departamento) return false;
-        if (filters.empresa && col.empresa !== filters.empresa) return false;
-        return true;
-    });
-
     const paginatedColaboradores = filteredColaboradores.slice(
         page * rowsPerPage,
         page * rowsPerPage + rowsPerPage
     );
 
-    const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length;
-
-    // Calcular estadísticas reales
-    const totalAsignaciones = colaboradores.reduce((sum, col) => sum + (col.total_asignaciones || 0), 0);
-    const totalAsignacionesActivas = colaboradores.reduce((sum, col) => sum + (col.asignaciones_activas || 0), 0);
+    const activeFiltersCount = Object.entries(filters).filter(([key, value]) => 
+        value && value !== '' && key !== 'ordenarPor'
+    ).length + (searchTerm ? 1 : 0);
 
     // Estadísticas por empresa
     const statsPorEmpresa = OPCIONES_EMPRESA.map(emp => ({
         ...emp,
         cantidad: colaboradores.filter(c => c.empresa === emp.valor).length
     }));
-
-    console.log(`📊 Total de asignaciones en la lista: ${totalAsignaciones}, Activas: ${totalAsignacionesActivas}`);
 
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
@@ -1137,7 +1329,7 @@ const ColaboradoresPage = () => {
                         <StyledCard>
                             <CardContent>
                                 <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary }}>
-                                    {loading ? <CircularProgress size={24} /> : colaboradores.length}
+                                    {loading ? <CircularProgress size={24} /> : stats.total_colaboradores}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Total Colaboradores
@@ -1173,7 +1365,7 @@ const ColaboradoresPage = () => {
                         <StyledCard>
                             <CardContent>
                                 <Typography variant="h4" sx={{ fontWeight: 700, color: colors.info }}>
-                                    {loading ? <CircularProgress size={24} /> : totalAsignacionesActivas}
+                                    {loading ? <CircularProgress size={24} /> : stats.total_equipos_asignados}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Equipos Asignados
@@ -1183,8 +1375,35 @@ const ColaboradoresPage = () => {
                     </Grid>
                 </Grid>
 
-                {/* Stats por empresa */}
+                {/* Stats por empresa - FILTRO RÁPIDO */}
                 <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
+                    <Grid item xs={4} sm={4} md={4}>
+                        <Paper
+                            variant="outlined"
+                            sx={{
+                                p: 2,
+                                textAlign: 'center',
+                                borderRadius: 2,
+                                borderTop: `3px solid ${colors.info}`,
+                                cursor: 'pointer',
+                                bgcolor: !filters.empresa ? alpha(colors.info, 0.05) : 'transparent'
+                            }}
+                            onClick={() => handleFilterChange('empresa', '')}
+                        >
+                            <Typography variant="h6" sx={{ fontSize: '1.5rem' }}>
+                                📊
+                            </Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.info }}>
+                                {colaboradores.length}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Todos
+                            </Typography>
+                            {!filters.empresa && (
+                                <Chip size="small" label="Activo" color="info" sx={{ mt: 1 }} />
+                            )}
+                        </Paper>
+                    </Grid>
                     {statsPorEmpresa.map((emp) => (
                         <Grid item xs={4} sm={4} md={4} key={emp.valor}>
                             <Paper
@@ -1199,9 +1418,9 @@ const ColaboradoresPage = () => {
                                 }}
                                 onClick={() => {
                                     if (filters.empresa === emp.valor) {
-                                        handleFilterChange('empresa')({ target: { value: '' } });
+                                        handleFilterChange('empresa', '');
                                     } else {
-                                        handleFilterChange('empresa')({ target: { value: emp.valor } });
+                                        handleFilterChange('empresa', emp.valor);
                                     }
                                 }}
                             >
@@ -1214,6 +1433,9 @@ const ColaboradoresPage = () => {
                                 <Typography variant="body2" color="text.secondary">
                                     {emp.label}
                                 </Typography>
+                                {filters.empresa === emp.valor && (
+                                    <Chip size="small" label="Filtro activo" color="primary" sx={{ mt: 1 }} />
+                                )}
                             </Paper>
                         </Grid>
                     ))}
@@ -1222,7 +1444,7 @@ const ColaboradoresPage = () => {
                 {/* Barra de búsqueda y filtros */}
                 <FilterPaper>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={4}>
+                        <Grid item xs={12} md={5}>
                             <TextField
                                 fullWidth
                                 placeholder="Buscar por nombre, RUT o email..."
@@ -1245,21 +1467,21 @@ const ColaboradoresPage = () => {
                             <Button
                                 fullWidth
                                 variant={showAdvancedFilters ? "contained" : "outlined"}
-                                startIcon={showAdvancedFilters ? <FilterListOffIcon /> : <FilterListIcon />}
+                                startIcon={showAdvancedFilters ? <FilterListOffIcon /> : <FilterAltIcon />}
                                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                                 color={showAdvancedFilters ? "primary" : "inherit"}
                             >
                                 Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
                             </Button>
                         </Grid>
-                        <Grid item xs={6} md={5}>
+                        <Grid item xs={6} md={4}>
                             <Button
                                 fullWidth
                                 variant="outlined"
                                 color="error"
                                 startIcon={<FilterListOffIcon />}
                                 onClick={handleClearFilters}
-                                disabled={!searchTerm && activeFiltersCount === 0}
+                                disabled={activeFiltersCount === 0}
                             >
                                 Limpiar filtros
                             </Button>
@@ -1267,61 +1489,78 @@ const ColaboradoresPage = () => {
                     </Grid>
 
                     <Collapse in={showAdvancedFilters}>
-                        <Box sx={{ mt: 3 }}>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={4}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Empresa</InputLabel>
-                                        <Select
-                                            value={filters.empresa}
-                                            onChange={handleFilterChange('empresa')}
-                                            label="Empresa"
-                                        >
-                                            <MenuItem value="">Todas</MenuItem>
-                                            {OPCIONES_EMPRESA.map((emp) => (
-                                                <MenuItem key={emp.valor} value={emp.valor}>
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        <span>{emp.icon}</span>
-                                                        {emp.label}
-                                                    </Box>
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Estado</InputLabel>
-                                        <Select
-                                            value={filters.estado}
-                                            onChange={handleFilterChange('estado')}
-                                            label="Estado"
-                                        >
-                                            <MenuItem value="">Todos</MenuItem>
-                                            <MenuItem value="ACTIVO">Activos</MenuItem>
-                                            <MenuItem value="INACTIVO">Inactivos</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Departamento</InputLabel>
-                                        <Select
-                                            value={filters.departamento}
-                                            onChange={handleFilterChange('departamento')}
-                                            label="Departamento"
-                                        >
-                                            <MenuItem value="">Todos</MenuItem>
-                                            {departamentos.map((depto) => (
-                                                <MenuItem key={depto} value={depto}>{depto}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                            </Grid>
-                        </Box>
+                        <AdvancedFilters
+                            filters={filters}
+                            onFilterChange={handleFilterChange}
+                            onClearFilters={handleClearFilters}
+                            departamentos={departamentos}
+                            activeFiltersCount={activeFiltersCount}
+                        />
                     </Collapse>
                 </FilterPaper>
+
+                {/* Información de filtros activos */}
+                {activeFiltersCount > 0 && (
+                    <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Filtros activos:
+                        </Typography>
+                        {searchTerm && (
+                            <Chip
+                                size="small"
+                                label={`Búsqueda: ${searchTerm}`}
+                                onDelete={() => setSearchTerm('')}
+                                variant="outlined"
+                            />
+                        )}
+                        {filters.empresa && (
+                            <Chip
+                                size="small"
+                                label={`Empresa: ${getEmpresaLabel(filters.empresa)}`}
+                                onDelete={() => handleFilterChange('empresa', '')}
+                                variant="outlined"
+                            />
+                        )}
+                        {filters.estado && (
+                            <Chip
+                                size="small"
+                                label={`Estado: ${filters.estado}`}
+                                onDelete={() => handleFilterChange('estado', '')}
+                                variant="outlined"
+                            />
+                        )}
+                        {filters.departamento && (
+                            <Chip
+                                size="small"
+                                label={`Departamento: ${filters.departamento}`}
+                                onDelete={() => handleFilterChange('departamento', '')}
+                                variant="outlined"
+                            />
+                        )}
+                        {filters.asignaciones && (
+                            <Chip
+                                size="small"
+                                label={`Asignaciones: ${filters.asignaciones === 'con_asignaciones' ? 'Con productos asignados' : filters.asignaciones === 'sin_asignaciones' ? 'Sin productos asignados' : 'Con historial'}`}
+                                onDelete={() => handleFilterChange('asignaciones', '')}
+                                variant="outlined"
+                            />
+                        )}
+                        <Chip
+                            size="small"
+                            icon={<SortByAlphaIcon />}
+                            label={`Orden: ${filters.ordenarPor === 'nombre_asc' ? 'Nombre A-Z' : filters.ordenarPor === 'nombre_desc' ? 'Nombre Z-A' : filters.ordenarPor === 'empresa_asc' ? 'Empresa A-Z' : filters.ordenarPor === 'empresa_desc' ? 'Empresa Z-A' : filters.ordenarPor === 'asignaciones_desc' ? 'Más asignaciones' : filters.ordenarPor === 'asignaciones_asc' ? 'Menos asignaciones' : 'Más recientes'}`}
+                            variant="outlined"
+                        />
+                    </Box>
+                )}
+
+                {/* Resultados encontrados */}
+                <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                        Mostrando {paginatedColaboradores.length} de {filteredColaboradores.length} colaboradores
+                        {filteredColaboradores.length !== colaboradores.length && ` (filtrados de ${colaboradores.length} totales)`}
+                    </Typography>
+                </Box>
 
                 {/* Tabla de colaboradores */}
                 <StyledTableContainer>
@@ -1352,13 +1591,28 @@ const ColaboradoresPage = () => {
                                         <Typography variant="h6" gutterBottom>
                                             No hay colaboradores
                                         </Typography>
-                                        <Button
-                                            variant="contained"
-                                            startIcon={<AddIcon />}
-                                            onClick={() => handleOpenForm()}
-                                        >
-                                            Crear Colaborador
-                                        </Button>
+                                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            {activeFiltersCount > 0 ? 'Intenta con otros filtros' : 'Comienza creando un nuevo colaborador'}
+                                        </Typography>
+                                        {activeFiltersCount > 0 ? (
+                                            <Button
+                                                variant="outlined"
+                                                startIcon={<FilterListOffIcon />}
+                                                onClick={handleClearFilters}
+                                                sx={{ mt: 1 }}
+                                            >
+                                                Limpiar filtros
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                variant="contained"
+                                                startIcon={<AddIcon />}
+                                                onClick={() => handleOpenForm()}
+                                                sx={{ mt: 1 }}
+                                            >
+                                                Crear Colaborador
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ) : (

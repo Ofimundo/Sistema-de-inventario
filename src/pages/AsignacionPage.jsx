@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN CON RECARGA DE PÁGINA PARA PRÉSTAMOS
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (SIN RECARGA DE PÁGINA)
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
@@ -442,7 +442,7 @@ const AsignacionPage = () => {
         }
     };
 
-    // Función principal para cargar datos
+    // Función para cargar datos
     const fetchData = useCallback(async (showRefresh = false) => {
         if (showRefresh) {
             setRefreshing(true);
@@ -516,8 +516,8 @@ const AsignacionPage = () => {
         fetchData();
     }, [fetchData]);
 
-    // Función de refresco completa (para asignaciones normales)
-    const refreshData = async () => {
+    // Función de refresco completa (sin recargar la página)
+    const refreshData = useCallback(async () => {
         console.log('🔄 Refrescando datos después de operación...');
         setRefreshing(true);
         try {
@@ -553,12 +553,15 @@ const AsignacionPage = () => {
             const activas = asignaciones.filter(a => !a.fecha_devolucion);
             setAsignacionesActivas(activas);
             
+            console.log('✅ Datos actualizados correctamente');
+            
         } catch (error) {
             console.error('Error refrescando datos:', error);
+            showSnackbar('Error al actualizar los datos', 'error');
         } finally {
             setRefreshing(false);
         }
-    };
+    }, [searchTerm, filters.bodega_id]);
 
     const handleAsignar = (producto) => {
         if (producto.id_estado_equipo !== 1) {
@@ -602,34 +605,31 @@ const AsignacionPage = () => {
         }
     };
 
-    // Handlers
-    const handleAsignacionSuccess = () => {
+    // Handlers con refreshData en lugar de recargar página
+    const handleAsignacionSuccess = useCallback(() => {
         showSnackbar('Asignación completada exitosamente', 'success');
         setOpenAsignacion(false);
         setProductoSeleccionado(null);
         refreshData();
-    };
+    }, [refreshData]);
 
-    // ✅ PRÉSTAMO: Recargar la página después de 1.5 segundos
-    const handlePrestamoSuccess = () => {
+    // ✅ PRÉSTAMO: Usar refreshData en lugar de recargar la página
+    const handlePrestamoSuccess = useCallback(() => {
         console.log('✅ Préstamo exitoso');
         showSnackbar('Préstamo registrado exitosamente', 'success');
         setOpenPrestamo(false);
         setProductoSeleccionado(null);
-        
-        // Recargar la página después de 1.5 segundos
-        setTimeout(() => {
-            window.location.reload();
-        }, 1500);
-    };
+        // Usar refreshData en lugar de recargar la página
+        refreshData();
+    }, [refreshData]);
 
-    const handleRecepcionSuccess = () => {
+    const handleRecepcionSuccess = useCallback(() => {
         showSnackbar('Recepción completada exitosamente', 'success');
         setOpenRecepcion(false);
         setProductoSeleccionado(null);
         setAsignacionSeleccionada(null);
         refreshData();
-    };
+    }, [refreshData]);
 
     const handleClearFilters = () => {
         setSearchTerm('');

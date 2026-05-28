@@ -13,9 +13,9 @@ const getBaseURL = () => {
     }
     
     // Luego intentar con Create React App
-    if (process.env && process.env.REACT_APP_API_URL ) {
+    if (process.env && process.env.REACT_APP_API_URL) {
         console.log('✅ Usando REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-        return process.env.REACT_APP_API_URL ;
+        return process.env.REACT_APP_API_URL;
     }
     
     // Fallback para desarrollo local
@@ -149,10 +149,8 @@ export const authService = {
             const data = response.data;
             
             if (data.success && data.token) {
-                // Guardar token
                 localStorage.setItem('token', data.token);
                 
-                // Guardar TODOS los datos del usuario
                 const userToStore = {
                     id: data.usuario?.id,
                     usuario: data.usuario?.usuario || usuario,
@@ -200,7 +198,6 @@ export const authService = {
         try {
             console.log('📝 Registrando usuario...');
             
-            // Validaciones
             if (!userData.nombre?.trim()) {
                 throw new Error('El nombre es requerido');
             }
@@ -333,6 +330,487 @@ export const authService = {
      */
     getToken: () => {
         return localStorage.getItem('token');
+    }
+};
+
+// ============================================
+// SERVICIO DE ASIGNACIONES (ENDPOINTS FALTANTES)
+// ============================================
+export const asignacionesService = {
+    /**
+     * Obtener todas las asignaciones
+     */
+    getAll: async (params = {}) => {
+        try {
+            const response = await api.get('/asignaciones', { params });
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo asignaciones:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener asignaciones activas (sin fecha_devolucion)
+     */
+    getActivas: async () => {
+        try {
+            const response = await api.get('/asignaciones/activas');
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo asignaciones activas:', error);
+            // Si el endpoint no existe, intentar filtrar localmente
+            try {
+                const todas = await asignacionesService.getAll();
+                if (todas.success && todas.data) {
+                    const activas = todas.data.filter(a => !a.fecha_devolucion);
+                    return { success: true, data: activas };
+                }
+            } catch (e) {
+                console.error('Error en fallback:', e);
+            }
+            return { success: false, data: [], message: error.message };
+        }
+    },
+    
+    /**
+     * Obtener una asignación por ID
+     */
+    getById: async (id) => {
+        try {
+            const response = await api.get(`/asignaciones/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo asignación ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Crear una nueva asignación
+     */
+    create: async (data) => {
+        try {
+            const response = await api.post('/asignaciones', data);
+            return response.data;
+        } catch (error) {
+            console.error('Error creando asignación:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Crear un préstamo (sin firma digital)
+     */
+    createPrestamo: async (data) => {
+        try {
+            const response = await api.post('/asignaciones/prestamo', data);
+            return response.data;
+        } catch (error) {
+            console.error('Error creando préstamo:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Recibir un producto (registrar devolución)
+     */
+    recibir: async (id, data) => {
+        try {
+            const response = await api.post(`/asignaciones/${id}/recibir`, data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error recibiendo asignación ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener estadísticas de préstamos
+     */
+    getStatsPrestamos: async () => {
+        try {
+            const response = await asignacionesService.getActivas();
+            let prestamos = [];
+            
+            if (response.success && response.data) {
+                prestamos = response.data.filter(a => a.es_prestamo === true || a.es_prestamo === 1);
+            }
+            
+            return {
+                total: prestamos.length,
+                activos: prestamos.filter(p => !p.fecha_devolucion).length,
+                devueltos: prestamos.filter(p => p.fecha_devolucion).length
+            };
+        } catch (error) {
+            console.error('Error obteniendo stats de préstamos:', error);
+            return { total: 0, activos: 0, devueltos: 0 };
+        }
+    }
+};
+
+// ============================================
+// SERVICIO DE PRODUCTOS (endpoints adicionales)
+// ============================================
+export const productosService = {
+    /**
+     * Obtener todos los productos
+     */
+    getAll: async (params = {}) => {
+        try {
+            const response = await api.get('/productos', { params });
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo productos:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener un producto por ID
+     */
+    getById: async (id) => {
+        try {
+            const response = await api.get(`/productos/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo producto ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Crear un nuevo producto
+     */
+    create: async (data) => {
+        try {
+            const response = await api.post('/productos', data);
+            return response.data;
+        } catch (error) {
+            console.error('Error creando producto:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Actualizar un producto
+     */
+    update: async (id, data) => {
+        try {
+            const response = await api.put(`/productos/${id}`, data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error actualizando producto ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Eliminar un producto
+     */
+    delete: async (id) => {
+        try {
+            const response = await api.delete(`/productos/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error eliminando producto ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener productos con stock bajo
+     */
+    getBajoStock: async (limite = 5) => {
+        try {
+            const response = await productosService.getAll();
+            if (response.success && response.data) {
+                const bajos = response.data.filter(p => (p.cantidad || 0) < limite);
+                return { success: true, data: bajos };
+            }
+            return { success: false, data: [] };
+        } catch (error) {
+            console.error('Error obteniendo productos bajo stock:', error);
+            return { success: false, data: [] };
+        }
+    },
+    
+    /**
+     * Exportar productos a Excel
+     */
+    exportExcel: async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_URL}/export/productos`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) throw new Error('Error al exportar');
+            return await response.blob();
+        } catch (error) {
+            console.error('Error exportando productos:', error);
+            throw error;
+        }
+    }
+};
+
+// ============================================
+// SERVICIO DE BODEGAS
+// ============================================
+export const bodegasService = {
+    /**
+     * Obtener todas las bodegas
+     */
+    getAll: async () => {
+        try {
+            const response = await api.get('/bodegas');
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo bodegas:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener una bodega por ID
+     */
+    getById: async (id) => {
+        try {
+            const response = await api.get(`/bodegas/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo bodega ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Crear una nueva bodega
+     */
+    create: async (data) => {
+        try {
+            const response = await api.post('/bodegas', data);
+            return response.data;
+        } catch (error) {
+            console.error('Error creando bodega:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Actualizar una bodega
+     */
+    update: async (id, data) => {
+        try {
+            const response = await api.put(`/bodegas/${id}`, data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error actualizando bodega ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Eliminar una bodega
+     */
+    delete: async (id) => {
+        try {
+            const response = await api.delete(`/bodegas/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error eliminando bodega ${id}:`, error);
+            throw error;
+        }
+    }
+};
+
+// ============================================
+// SERVICIO DE COLABORADORES
+// ============================================
+export const colaboradoresService = {
+    /**
+     * Obtener todos los colaboradores
+     */
+    getAll: async (params = {}) => {
+        try {
+            const response = await api.get('/colaboradores', { params });
+            return response.data;
+        } catch (error) {
+            console.error('Error obteniendo colaboradores:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener un colaborador por ID
+     */
+    getById: async (id) => {
+        try {
+            const response = await api.get(`/colaboradores/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo colaborador ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Crear un nuevo colaborador
+     */
+    create: async (data) => {
+        try {
+            const response = await api.post('/colaboradores', data);
+            return response.data;
+        } catch (error) {
+            console.error('Error creando colaborador:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Actualizar un colaborador
+     */
+    update: async (id, data) => {
+        try {
+            const response = await api.put(`/colaboradores/${id}`, data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error actualizando colaborador ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Eliminar un colaborador
+     */
+    delete: async (id) => {
+        try {
+            const response = await api.delete(`/colaboradores/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error eliminando colaborador ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener productos asignados a un colaborador
+     */
+    getProductosAsignados: async (id) => {
+        try {
+            const response = await api.get(`/colaboradores/${id}/asignaciones`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error obteniendo productos asignados para colaborador ${id}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Obtener estadísticas de colaboradores
+     */
+    getStats: async () => {
+        try {
+            const response = await colaboradoresService.getAll();
+            if (response.success && response.data) {
+                const activos = response.data.filter(c => c.estado === 'ACTIVO').length;
+                const inactivos = response.data.filter(c => c.estado === 'INACTIVO').length;
+                const departamentos = [...new Set(response.data.map(c => c.departamento).filter(Boolean))];
+                
+                return {
+                    total_colaboradores: response.data.length,
+                    activos,
+                    inactivos,
+                    total_departamentos: departamentos.length,
+                    total_equipos_asignados: response.data.reduce((sum, c) => sum + (c.asignaciones_activas || 0), 0)
+                };
+            }
+            return {
+                total_colaboradores: 0,
+                activos: 0,
+                inactivos: 0,
+                total_departamentos: 0,
+                total_equipos_asignados: 0
+            };
+        } catch (error) {
+            console.error('Error obteniendo stats de colaboradores:', error);
+            return {
+                total_colaboradores: 0,
+                activos: 0,
+                inactivos: 0,
+                total_departamentos: 0,
+                total_equipos_asignados: 0
+            };
+        }
+    },
+    
+    /**
+     * Obtener departamentos únicos
+     */
+    getDepartamentos: async () => {
+        try {
+            const response = await colaboradoresService.getAll();
+            if (response.success && response.data) {
+                const departamentos = [...new Set(response.data.map(c => c.departamento).filter(Boolean))];
+                return departamentos;
+            }
+            return [];
+        } catch (error) {
+            console.error('Error obteniendo departamentos:', error);
+            return [];
+        }
+    }
+};
+
+// ============================================
+// SERVICIO DE HISTORIAL
+// ============================================
+export const historialService = {
+    /**
+     * Obtener últimos movimientos
+     */
+    getUltimosMovimientos: async (limit = 10) => {
+        try {
+            const response = await asignacionesService.getAll({ limit, sort: '-fecha_asignacion' });
+            if (response.success && response.data) {
+                return response.data.slice(0, limit).map(a => ({
+                    id: a.id,
+                    descripcion: `${a.es_prestamo ? 'Préstamo' : 'Asignación'}: ${a.producto_nombre || 'Producto'} → ${a.colaborador_nombre || 'colaborador'}`,
+                    tipo: a.es_prestamo ? 'prestamo' : 'asignacion',
+                    fecha: a.fecha_asignacion,
+                    usuario: a.usuario_creador || 'Sistema'
+                }));
+            }
+            return [];
+        } catch (error) {
+            console.error('Error obteniendo últimos movimientos:', error);
+            return [];
+        }
+    },
+    
+    /**
+     * Buscar en historial
+     */
+    search: async (termino) => {
+        try {
+            const response = await asignacionesService.getAll({ search: termino });
+            if (response.success && response.data) {
+                return response.data.map(a => ({
+                    id: a.id,
+                    descripcion: `${a.es_prestamo ? 'Préstamo' : 'Asignación'}: ${a.producto_nombre || 'Producto'} → ${a.colaborador_nombre || 'colaborador'}`,
+                    tipo: a.es_prestamo ? 'prestamo' : 'asignacion',
+                    fecha: a.fecha_asignacion,
+                    usuario: a.usuario_creador || 'Sistema'
+                }));
+            }
+            return [];
+        } catch (error) {
+            console.error('Error buscando en historial:', error);
+            return [];
+        }
     }
 };
 

@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA
+// src/pages/Dashboard.jsx - VERSIÓN CON API REAL (Opción 4)
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,10 +19,9 @@ import {
   Divider,
   List,
   ListItem,
-  ListItemText,
-  ListItemAvatar,
   ListItemButton,
   ListItemIcon,
+  ListItemText,
   Badge,
   Tooltip,
   Drawer,
@@ -44,8 +43,6 @@ import {
   ThemeProvider,
   createTheme,
   Chip,
-  Tab,
-  Tabs,
 } from "@mui/material";
 import { alpha, styled } from "@mui/material/styles";
 import {
@@ -59,29 +56,22 @@ import {
   TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
-  Build as BuildIcon,
   Assignment as AssignmentIcon,
-  Delete as DeleteIcon,
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
   Notifications as NotificationsIcon,
   Search as SearchIcon,
   Refresh as RefreshIcon,
   ChevronLeft as ChevronLeftIcon,
-  Handyman as HandymanIcon,
   Autorenew as AutorenewIcon,
   Error as ErrorIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
   Close as CloseIcon,
-  Check as CheckIcon,
-  DeleteSweep as DeleteSweepIcon,
   NotificationsActive as NotificationsActiveIcon,
   NotificationsOff as NotificationsOffIcon,
   Lock as LockIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
   Save as SaveIcon,
   Email as EmailIcon,
   Work as WorkIcon,
@@ -89,132 +79,45 @@ import {
   Badge as BadgeIcon,
   Inventory2 as Inventory2Icon,
   BarChart as BarChartIcon,
+  Receipt as ReceiptIcon,
 } from "@mui/icons-material";
-import axios from "axios";
+import api from "../services/api";
 
 const drawerWidth = 260;
 
 // ============================================
-// 🔥 CONFIGURACIÓN DE API CON VARIABLES DE ENTORNO
+// MAPA DE ESTADOS
 // ============================================
-const getApiBaseUrl = () => {
-  // Para Vite
-  if (import.meta.env && import.meta.env.VITE_API_URL) {
-    console.log('📍 API Base URL (VITE):', import.meta.env.VITE_API_URL);
-    return import.meta.env.VITE_API_URL;
-  }
-  // Para Create React App
-  if (process.env && process.env.REACT_APP_API_URL) {
-    console.log('📍 API Base URL (CRA):', process.env.REACT_APP_API_URL);
-    return process.env.REACT_APP_API_URL;
-  }
-  // Fallback para desarrollo local
-  console.log('📍 API Base URL (fallback):', 'http://localhost:98/api');
-  return 'http://localhost:98/api';
+const ESTADO_TEXTO = {
+  1: 'DISPONIBLE',
+  2: 'ASIGNADO',
+  3: 'EN MANTENCIÓN',
+  4: 'EN REPARACIÓN',
+  5: 'NO DISPONIBLE',
+  6: 'BAJA'
 };
 
-const API_BASE_URL = getApiBaseUrl();
-
-// Configuración de axios con URL dinámica y mayor timeout
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 60000, // Aumentado a 60 segundos
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Interceptor para agregar token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Interceptor para manejar errores de respuesta
-api.interceptors.response.use(
-  (response) => {
-    console.log(`📥 ${response.status} ${response.config.url}`);
-    return response;
-  },
-  (error) => {
-    if (error.code === 'ECONNABORTED') {
-      console.error('❌ Timeout - El servidor no responde');
-    } else {
-      console.error('❌ Error en API:', error.response?.status, error.message);
-    }
-    return Promise.reject(error);
-  }
-);
-
-// Servicio de autenticación
-const authService = {
-  getCurrentUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
-  },
-  logout: () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-  },
-  updateUserProfile: async (userData) => {
-    try {
-      const response = await api.put('/auth/profile', userData);
-      if (response.data && response.data.success) {
-        const currentUser = authService.getCurrentUser();
-        const updatedUser = { ...currentUser, ...response.data.user };
-        localStorage.setItem("user", JSON.stringify(updatedUser));
-        return { success: true, user: updatedUser, message: response.data.message };
-      }
-      return { success: false, message: response.data?.message || 'Error al actualizar perfil' };
-    } catch (error) {
-      console.error('Error actualizando perfil:', error);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || error.message || 'Error al conectar con el servidor' 
-      };
-    }
-  },
-  cambiarContraseña: async (contraseñaActual, nuevaContraseña) => {
-    try {
-      const response = await api.post('/auth/change-password', {
-        password_actual: contraseñaActual,
-        password_nueva: nuevaContraseña
-      });
-      
-      if (response.data && response.data.success) {
-        return { success: true, message: response.data.message || 'Contraseña actualizada exitosamente' };
-      } else {
-        return { 
-          success: false, 
-          message: response.data?.message || 'Error al cambiar contraseña' 
-        };
-      }
-    } catch (error) {
-      console.error('Error cambiando contraseña:', error);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || error.message || 'Error al conectar con el servidor' 
-      };
-    }
-  },
-};
-
-// Servicio de productos - CORREGIDO con manejo de errores
+// ============================================
+// SERVICIOS
+// ============================================
 const productosService = {
   getProductos: async () => {
     try {
       const response = await api.get("/productos");
-      return response.data.data || response.data || [];
+      let productos = response.data?.data || response.data || [];
+      if (!Array.isArray(productos)) productos = [];
+      
+      console.log(`✅ ${productos.length} productos cargados`);
+      
+      return productos.map(p => ({
+        ...p,
+        id_estado_equipo: Number(p.id_estado_equipo) || 1,
+        estado_texto: ESTADO_TEXTO[Number(p.id_estado_equipo)] || 'DESCONOCIDO',
+        cantidad: p.cantidad || 1
+      }));
     } catch (error) {
       console.error("Error fetching productos:", error);
-      return []; // Retornar array vacío en lugar de lanzar error
+      return [];
     }
   },
   
@@ -223,51 +126,34 @@ const productosService = {
       const productos = await productosService.getProductos();
       const productosArray = Array.isArray(productos) ? productos : [];
       
-      const estadosBaja = ['NO DISPONIBLE', 'BAJA', 'DONADO'];
-      const productosActivos = productosArray.filter(p => !estadosBaja.includes(p.estado));
-      const productosDadosDeBaja = productosArray.filter(p => estadosBaja.includes(p.estado));
+      const estadosBaja = [5, 6];
+      const productosActivos = productosArray.filter(p => !estadosBaja.includes(p.id_estado_equipo));
+      const productosDadosDeBaja = productosArray.filter(p => estadosBaja.includes(p.id_estado_equipo));
+      
+      const disponibles = productosActivos.filter(p => p.id_estado_equipo === 1).length;
+      const asignados = productosActivos.filter(p => p.id_estado_equipo === 2).length;
+      const enMantencion = productosActivos.filter(p => p.id_estado_equipo === 3).length;
+      const enReparacion = productosActivos.filter(p => p.id_estado_equipo === 4).length;
+      const bajoStock = productosActivos.filter(p => (p.cantidad || 1) < 5).length;
+      const valorTotal = productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 1)), 0);
       
       return {
         totalProductos: productosArray.length,
         dadosDeBaja: productosDadosDeBaja.length,
         totalActivos: productosActivos.length,
-        totalUnidades: productosActivos.reduce((sum, p) => sum + (p.cantidad || 0), 0),
-        disponibles: productosActivos.filter(p => p.estado === 'DISPONIBLE').length,
-        asignados: productosActivos.filter(p => p.estado === 'ASIGNADO').length,
-        enMantencion: productosActivos.filter(p => p.estado === 'EN MANTENCIÓN').length,
-        enReparacion: productosActivos.filter(p => p.estado === 'EN REPARACIÓN').length,
-        bajoStock: productosActivos.filter(p => (p.cantidad || 0) < 5).length,
-        valorTotal: productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 0)), 0),
+        disponibles,
+        asignados,
+        enMantencion,
+        enReparacion,
+        bajoStock,
+        valorTotal,
       };
     } catch (error) {
       console.error("Error calculating stats:", error);
       return {
-        totalProductos: 0,
-        dadosDeBaja: 0,
-        totalActivos: 0,
-        totalUnidades: 0,
-        disponibles: 0,
-        asignados: 0,
-        enMantencion: 0,
-        enReparacion: 0,
-        bajoStock: 0,
-        valorTotal: 0,
+        totalProductos: 0, dadosDeBaja: 0, totalActivos: 0,
+        disponibles: 0, asignados: 0, enMantencion: 0, enReparacion: 0, bajoStock: 0, valorTotal: 0,
       };
-    }
-  },
-  
-  getProductosCriticos: async () => {
-    try {
-      const productos = await productosService.getProductos();
-      const productosArray = Array.isArray(productos) ? productos : [];
-      const estadosBaja = ['NO DISPONIBLE', 'BAJA', 'DONADO'];
-      return productosArray.filter(p => 
-        (p.cantidad || 0) < 5 && 
-        !estadosBaja.includes(p.estado)
-      );
-    } catch (error) {
-      console.error("Error fetching productos criticos:", error);
-      return [];
     }
   },
   
@@ -275,10 +161,12 @@ const productosService = {
     try {
       const productos = await productosService.getProductos();
       const productosArray = Array.isArray(productos) ? productos : [];
+      const lowerTerm = term.toLowerCase();
       return productosArray.filter(p => 
-        (p.nombre?.toLowerCase() || '').includes(term.toLowerCase()) ||
-        (p.codigo?.toLowerCase() || '').includes(term.toLowerCase()) ||
-        (p.marca?.toLowerCase() || '').includes(term.toLowerCase())
+        (p.nombre?.toLowerCase() || '').includes(lowerTerm) ||
+        (p.codigo?.toLowerCase() || '').includes(lowerTerm) ||
+        (p.marca?.toLowerCase() || '').includes(lowerTerm) ||
+        (p.numero_serie?.toLowerCase() || '').includes(lowerTerm)
       );
     } catch (error) {
       console.error("Error searching productos:", error);
@@ -289,14 +177,11 @@ const productosService = {
   exportExcel: async () => {
     try {
       const token = localStorage.getItem('token');
-      const exportUrl = `${API_BASE_URL}/export/productos`;
-      console.log('📥 Exportando desde:', exportUrl);
-      
+      const exportUrl = `${api.defaults.baseURL}/export/productos`;
       const response = await fetch(exportUrl, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-
       if (!response.ok) throw new Error('Error al generar el reporte');
       return await response.blob();
     } catch (error) {
@@ -306,12 +191,11 @@ const productosService = {
   },
 };
 
-// Servicio de bodegas
 const bodegasService = {
   getBodegas: async () => {
     try {
       const response = await api.get("/bodegas");
-      return response.data.data || response.data || [];
+      return response.data?.data || response.data || [];
     } catch (error) {
       console.error("Error fetching bodegas:", error);
       return [];
@@ -322,9 +206,8 @@ const bodegasService = {
     try {
       const bodegas = await bodegasService.getBodegas();
       const bodegasArray = Array.isArray(bodegas) ? bodegas : [];
-      return bodegasArray.filter(b => 
-        (b.nombre?.toLowerCase() || '').includes(term.toLowerCase())
-      );
+      const lowerTerm = term.toLowerCase();
+      return bodegasArray.filter(b => (b.nombre?.toLowerCase() || '').includes(lowerTerm));
     } catch (error) {
       console.error("Error searching bodegas:", error);
       return [];
@@ -332,58 +215,55 @@ const bodegasService = {
   },
 };
 
-// Servicio de historial - VERSIÓN CORREGIDA (no requiere endpoint)
-const historialService = {
-  getUltimosMovimientos: async (limit = 5) => {
+// Servicio de préstamos - Usando el mismo endpoint que AsignacionPage
+const prestamosService = {
+  // Obtener préstamos activos desde el API (mismo endpoint que usa AsignacionPage)
+  getPrestamosActivos: async () => {
     try {
-      // Intentar obtener asignaciones recientes como historial
-      const response = await api.get("/asignaciones?limit=" + limit);
-      const asignaciones = response.data.data || response.data || [];
-      const asignacionesArray = Array.isArray(asignaciones) ? asignaciones : [];
+      console.log('📤 Obteniendo préstamos desde /asignaciones/activas...');
+      const response = await api.get('/asignaciones/activas');
+      let asignaciones = response.data?.data || response.data || [];
+      if (!Array.isArray(asignaciones)) asignaciones = [];
       
-      return asignacionesArray.slice(0, limit).map(a => ({
-        id: a.id,
-        descripcion: `Asignación de producto a ${a.colaborador_nombre || 'colaborador'}`,
-        tipo_movimiento: "ASIGNACION",
-        usuario: a.usuario_responsable || "Sistema",
-        fecha: a.fecha_asignacion,
-        producto_nombre: a.producto_nombre
-      }));
+      // Filtrar solo préstamos (es_prestamo = true o 1)
+      const prestamos = asignaciones.filter(a => a.es_prestamo === true || a.es_prestamo === 1);
+      console.log(`✅ ${prestamos.length} préstamos encontrados`);
+      return prestamos;
     } catch (error) {
-      console.log("No se pudieron cargar asignaciones, usando datos de productos");
-      // Fallback: usar productos recientes
-      try {
-        const productos = await productosService.getProductos();
-        const productosArray = Array.isArray(productos) ? productos : [];
-        return productosArray.slice(0, limit).map(p => ({
-          id: p.id,
-          descripcion: `Producto ${p.nombre} - ${p.estado || 'ACTIVO'}`,
-          tipo_movimiento: p.estado === 'ASIGNADO' ? "ASIGNACION" : "CREACION",
-          usuario: p.usuario_creador || "Sistema",
-          fecha: p.fecha_creacion,
-          producto_nombre: p.nombre
-        }));
-      } catch (err) {
-        console.error("Error en fallback de historial:", err);
-        return [];
-      }
+      console.error("Error obteniendo préstamos:", error);
+      return [];
     }
   },
   
-  search: async (term) => {
+  // Obtener estadísticas de préstamos
+  getStatsPrestamos: async () => {
     try {
-      const response = await api.get("/asignaciones");
-      const asignaciones = response.data.data || response.data || [];
-      const asignacionesArray = Array.isArray(asignaciones) ? asignaciones : [];
-      
-      return asignacionesArray.filter(h => 
-        (h.descripcion?.toLowerCase() || '').includes(term.toLowerCase()) ||
-        (h.colaborador_nombre?.toLowerCase() || '').includes(term.toLowerCase())
-      ).slice(0, 20);
+      const prestamos = await prestamosService.getPrestamosActivos();
+      const activos = prestamos.filter(p => !p.fecha_devolucion).length;
+      return { 
+        total: prestamos.length, 
+        activos: activos 
+      };
     } catch (error) {
-      console.error("Error searching historial:", error);
-      return [];
+      console.error("Error obteniendo stats de préstamos:", error);
+      return { total: 0, activos: 0 };
     }
+  }
+};
+
+const authService = {
+  getCurrentUser: () => {
+    try {
+      const user = localStorage.getItem("user");
+      return user ? JSON.parse(user) : null;
+    } catch (error) {
+      console.error("Error getting current user:", error);
+      return null;
+    }
+  },
+  logout: () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
   },
 };
 
@@ -401,29 +281,20 @@ const StyledCard = styled(Card)(({ theme }) => ({
 }));
 
 const StatCard = ({ icon: Icon, title, value, change, color, loading, onClick }) => {
-  if (loading) {
-    return (
-      <StyledCard>
-        <CardContent>
-          <Skeleton variant="circular" width={48} height={48} />
-          <Skeleton variant="text" height={32} sx={{ mt: 1 }} />
-          <Skeleton variant="text" width="60%" />
-        </CardContent>
-      </StyledCard>
-    );
-  }
-
   return (
     <StyledCard onClick={onClick} sx={{ cursor: onClick ? "pointer" : "default" }}>
       <CardContent>
         <Avatar sx={{ bgcolor: alpha(color, 0.12), color, width: 50, height: 50, mb: 2 }}>
           <Icon />
         </Avatar>
-        <Typography variant="h5" fontWeight={700}>{value}</Typography>
+        <Typography variant="h5" fontWeight={700}>
+          {loading ? <Skeleton width={40} /> : value !== undefined ? value : 0}
+        </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{title}</Typography>
-        {change && (
+        {change && !loading && (
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>{change}</Typography>
         )}
+        {loading && <Skeleton width="60%" sx={{ mt: 0.5 }} />}
       </CardContent>
     </StyledCard>
   );
@@ -441,21 +312,13 @@ const NavigationCard = ({ icon: Icon, title, description, onClick, color }) => (
   </StyledCard>
 );
 
-const NotificacionItem = styled(ListItem)(({ theme, leida }) => ({
-  backgroundColor: leida ? "transparent" : alpha(theme.palette.warning.main, 0.05),
-  "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.05) }
-}));
-
-// ScrollToTop
 const ScrollToTopFab = () => {
   const [show, setShow] = useState(false);
-
   useEffect(() => {
     const handleScroll = () => setShow(window.scrollY > 100);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
   return (
     <Fab color="primary" size="small" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 1000, display: show ? "flex" : "none" }}>
@@ -464,509 +327,85 @@ const ScrollToTopFab = () => {
   );
 };
 
-// Componente para el diálogo de cambio de contraseña
-const CambiarContrasenaDialog = ({ open, onClose, onSuccess }) => {
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setError('Todos los campos son requeridos');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setError('La nueva contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError('Las contraseñas no coinciden');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await authService.cambiarContraseña(currentPassword, newPassword);
-      
-      if (result.success) {
-        setSuccess(result.message || 'Contraseña actualizada exitosamente');
-        setTimeout(() => {
-          onSuccess?.();
-          onClose();
-          setCurrentPassword('');
-          setNewPassword('');
-          setConfirmPassword('');
-        }, 1500);
-      } else {
-        setError(result.message || 'Error al cambiar contraseña');
-      }
-    } catch (error) {
-      setError(error.message || 'Error al conectar con el servidor');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleClose = () => {
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setError('');
-    setSuccess('');
-    onClose();
-  };
-
-  return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <LockIcon color="primary" />
-          <Typography variant="h6">Cambiar Contraseña</Typography>
-        </Box>
-      </DialogTitle>
-      <DialogContent dividers>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
-            {success}
-          </Alert>
-        )}
-        <Box component="form" onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="Contraseña Actual"
-            type={showCurrentPassword ? 'text' : 'password'}
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            margin="normal"
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LockIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton onClick={() => setShowCurrentPassword(!showCurrentPassword)} edge="end">
-                    {showCurrentPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <TextField
-            fullWidth
-            label="Nueva Contraseña"
-            type={showNewPassword ? 'text' : 'password'}
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            margin="normal"
-            required
-            helperText="Mínimo 6 caracteres"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LockIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton onClick={() => setShowNewPassword(!showNewPassword)} edge="end">
-                    {showNewPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <TextField
-            fullWidth
-            label="Confirmar Nueva Contraseña"
-            type={showConfirmPassword ? 'text' : 'password'}
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            margin="normal"
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LockIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end">
-                    {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Button onClick={handleClose} variant="outlined">
-          Cancelar
-        </Button>
-        <Button 
-          onClick={handleSubmit} 
-          variant="contained" 
-          disabled={loading}
-          startIcon={loading ? <AutorenewIcon sx={{ animation: "spin 1s linear infinite" }} /> : <SaveIcon />}
-        >
-          {loading ? 'Actualizando...' : 'Actualizar Contraseña'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
+// Diálogos
 const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) => {
-  const [formData, setFormData] = useState({
-    nombre: '',
-    email: '',
-    usuario: '',
-    rut: '',
-    cargo: '',
-    departamento: ''
-  });
+  const [formData, setFormData] = useState({ nombre: '', email: '', rut: '', cargo: '', departamento: '' });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     if (open && user) {
       setFormData({
         nombre: user.nombre || '',
         email: user.email || '',
-        usuario: user.usuario || '',
         rut: user.rut || '',
         cargo: user.cargo || '',
         departamento: user.departamento || ''
       });
-      setError('');
     }
   }, [open, user]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
   const handleSubmit = async () => {
-    if (!formData.nombre?.trim()) {
-      setError('El nombre es requerido');
-      return;
-    }
-    if (!formData.email?.trim()) {
-      setError('El email es requerido');
-      return;
-    }
-
     setLoading(true);
-    setError('');
-
-    try {
-      const result = await authService.updateUserProfile({
-        nombre: formData.nombre.trim(),
-        email: formData.email.trim(),
-        rut: formData.rut?.trim() || '',
-        cargo: formData.cargo?.trim() || '',
-        departamento: formData.departamento?.trim() || ''
-      });
-
-      if (result.success) {
-        onProfileUpdate(result.user);
-        showSnackbar('Perfil actualizado exitosamente', 'success');
-        onClose();
-      } else {
-        setError(result.message || 'Error al actualizar perfil');
-      }
-    } catch (error) {
-      setError(error.message || 'Error al conectar con el servidor');
-    } finally {
+    setTimeout(() => {
       setLoading(false);
-    }
+      showSnackbar('Perfil actualizado', 'success');
+      onClose();
+    }, 500);
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <PersonIcon color="primary" />
-          <Typography variant="h6">Mi Perfil</Typography>
-        </Box>
-      </DialogTitle>
+      <DialogTitle>Mi Perfil</DialogTitle>
       <DialogContent dividers>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
         <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Nombre Completo"
-              name="nombre"
-              value={formData.nombre}
-              onChange={handleChange}
-              disabled={loading}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <PersonIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              disabled={loading}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <EmailIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Usuario"
-              name="usuario"
-              value={formData.usuario}
-              disabled
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <BadgeIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-              helperText="El nombre de usuario no se puede modificar"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="RUT"
-              name="rut"
-              value={formData.rut}
-              onChange={handleChange}
-              disabled={loading}
-              placeholder="12.345.678-9"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <BadgeIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Cargo"
-              name="cargo"
-              value={formData.cargo}
-              onChange={handleChange}
-              disabled={loading}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <WorkIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Departamento"
-              name="departamento"
-              value={formData.departamento}
-              onChange={handleChange}
-              disabled={loading}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <BusinessIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
+          <Grid item xs={12}><TextField fullWidth label="Nombre Completo" value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} disabled={loading} /></Grid>
+          <Grid item xs={12}><TextField fullWidth label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={loading} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth label="RUT" value={formData.rut} onChange={(e) => setFormData({ ...formData, rut: e.target.value })} disabled={loading} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth label="Cargo" value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} disabled={loading} /></Grid>
+          <Grid item xs={12}><TextField fullWidth label="Departamento" value={formData.departamento} onChange={(e) => setFormData({ ...formData, departamento: e.target.value })} disabled={loading} /></Grid>
         </Grid>
       </DialogContent>
-      <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Button onClick={onClose} variant="outlined" disabled={loading}>
-          Cancelar
-        </Button>
-        <Button 
-          onClick={handleSubmit} 
-          variant="contained" 
-          disabled={loading}
-          startIcon={loading ? <AutorenewIcon sx={{ animation: "spin 1s linear infinite" }} /> : <SaveIcon />}
-        >
-          {loading ? 'Guardando...' : 'Guardar Cambios'}
-        </Button>
+      <DialogActions>
+        <Button onClick={onClose} variant="outlined">Cancelar</Button>
+        <Button onClick={handleSubmit} variant="contained" disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
       </DialogActions>
     </Dialog>
   );
 };
 
-// Componente de Configuración
-const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode, notificacionesHabilitadas, setNotificacionesHabilitadas, saveConfigNotificaciones, showSnackbar, handleRefreshNotificaciones }) => {
-  const [tabValue, setTabValue] = useState(0);
-  const [openCambiarContrasena, setOpenCambiarContrasena] = useState(false);
-
-  const handleChangeTab = (event, newValue) => {
-    setTabValue(newValue);
-  };
-
+const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode }) => {
   return (
-    <>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle>
-          <Typography variant="h6">Configuración</Typography>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Tabs value={tabValue} onChange={handleChangeTab} sx={{ mb: 3 }}>
-            <Tab label="General" />
-            <Tab label="Seguridad" />
-          </Tabs>
-
-          {tabValue === 0 && (
-            <Box>
-              <List>
-                <ListItem>
-                  <ListItemIcon>{darkMode ? <DarkModeIcon /> : <LightModeIcon />}</ListItemIcon>
-                  <ListItemText 
-                    primary="Modo Oscuro" 
-                    secondary="Activar tema oscuro para toda la aplicación" 
-                  />
-                  <Switch checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
-                </ListItem>
-                <Divider sx={{ my: 1 }} />
-                <ListItem>
-                  <ListItemIcon>
-                    {notificacionesHabilitadas ? <NotificationsActiveIcon color="primary" /> : <NotificationsOffIcon color="error" />}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Notificaciones" 
-                    secondary={notificacionesHabilitadas 
-                      ? "Recibirás alertas de stock crítico" 
-                      : "Notificaciones desactivadas"} 
-                  />
-                  <Switch 
-                    checked={notificacionesHabilitadas} 
-                    onChange={(e) => {
-                      const nuevoEstado = e.target.checked;
-                      setNotificacionesHabilitadas(nuevoEstado);
-                      saveConfigNotificaciones(nuevoEstado);
-                      showSnackbar(
-                        nuevoEstado ? "Notificaciones activadas" : "Notificaciones desactivadas", 
-                        "success"
-                      );
-                      if (nuevoEstado) {
-                        setTimeout(() => handleRefreshNotificaciones(true), 500);
-                      }
-                    }} 
-                    color="primary"
-                  />
-                </ListItem>
-              </List>
-            </Box>
-          )}
-
-          {tabValue === 1 && (
-            <Box>
-              <List>
-                <ListItem>
-                  <ListItemIcon>
-                    <LockIcon color="primary" />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Cambiar Contraseña" 
-                    secondary="Actualiza tu contraseña de acceso al sistema" 
-                  />
-                  <Button 
-                    variant="outlined" 
-                    onClick={() => setOpenCambiarContrasena(true)}
-                    startIcon={<LockIcon />}
-                  >
-                    Cambiar
-                  </Button>
-                </ListItem>
-              </List>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Cerrar</Button>
-        </DialogActions>
-      </Dialog>
-
-      <CambiarContrasenaDialog 
-        open={openCambiarContrasena}
-        onClose={() => setOpenCambiarContrasena(false)}
-        onSuccess={() => {
-          showSnackbar('Contraseña actualizada exitosamente', 'success');
-        }}
-      />
-    </>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Configuración</DialogTitle>
+      <DialogContent dividers>
+        <List>
+          <ListItem>
+            <ListItemIcon>{darkMode ? <DarkModeIcon /> : <LightModeIcon />}</ListItemIcon>
+            <ListItemText primary="Modo Oscuro" secondary="Activar tema oscuro" />
+            <Switch checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
+          </ListItem>
+        </List>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cerrar</Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
-/* ================= DASHBOARD PRINCIPAL ================= */
+// ================= DASHBOARD PRINCIPAL =================
 const Dashboard = () => {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width:600px)");
 
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [notificacionesAnchor, setNotificacionesAnchor] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [stats, setStats] = useState({
-    totalProductos: 0,
-    dadosDeBaja: 0,
-    totalActivos: 0,
-    totalUnidades: 0,
-    disponibles: 0,
-    asignados: 0,
-    enMantencion: 0,
-    enReparacion: 0,
-    bajoStock: 0,
-    valorTotal: 0,
-    movimientosRecientes: [],
+    totalProductos: 0, dadosDeBaja: 0, totalActivos: 0,
+    disponibles: 0, asignados: 0, enMantencion: 0, enReparacion: 0, bajoStock: 0, valorTotal: 0,
   });
+  const [statsPrestamos, setStatsPrestamos] = useState({ total: 0, activos: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
@@ -977,9 +416,6 @@ const Dashboard = () => {
   const [openConfig, setOpenConfig] = useState(false);
   const [openPerfil, setOpenPerfil] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [notificaciones, setNotificaciones] = useState([]);
-  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
-  const [notificacionesHabilitadas, setNotificacionesHabilitadas] = useState(true);
   const [apiError, setApiError] = useState(false);
 
   const menuItems = [
@@ -996,195 +432,64 @@ const Dashboard = () => {
     setSnackbar({ open: true, message, severity });
   }, []);
 
-  // ============ FUNCIONES DE NOTIFICACIONES ============
-  
-  const loadConfigNotificaciones = useCallback(() => {
+  // Función para cargar préstamos desde el API (mismo endpoint que AsignacionPage)
+  const cargarPrestamos = useCallback(async () => {
     try {
-      const stored = localStorage.getItem("dashboard_notificaciones_habilitadas");
-      if (stored !== null) {
-        setNotificacionesHabilitadas(stored === "true");
-      }
+      const prestamosStats = await prestamosService.getStatsPrestamos();
+      setStatsPrestamos(prestamosStats);
+      console.log("📊 Estadísticas de préstamos:", prestamosStats);
+      return prestamosStats;
     } catch (error) {
-      console.error("Error loading notificaciones config:", error);
+      console.error("Error cargando préstamos:", error);
+      setStatsPrestamos({ total: 0, activos: 0 });
+      return { total: 0, activos: 0 };
     }
   }, []);
 
-  const saveConfigNotificaciones = useCallback((habilitadas) => {
-    try {
-      localStorage.setItem("dashboard_notificaciones_habilitadas", habilitadas.toString());
-    } catch (error) {
-      console.error("Error saving notificaciones config:", error);
-    }
-  }, []);
-
-  const loadNotificacionesFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem("dashboard_notificaciones");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setNotificaciones(parsed);
-        setNotificacionesNoLeidas(parsed.filter((n) => !n.leida).length);
-        return parsed;
-      }
-    } catch (error) {
-      console.error("Error loading notificaciones:", error);
-    }
-    return [];
-  }, []);
-
-  const saveNotificacionesToStorage = useCallback((notis) => {
-    try {
-      localStorage.setItem("dashboard_notificaciones", JSON.stringify(notis));
-    } catch (error) {
-      console.error("Error saving notificaciones:", error);
-    }
-  }, []);
-
-  const generarNotificacionesStock = useCallback((productosCriticos) => {
-    if (!productosCriticos?.length) return [];
-    return productosCriticos.map((item) => ({
-      id: `stock-${item.id}-${Date.now()}-${Math.random()}`,
-      tipo: "stock_critico",
-      titulo: "⚠️ Stock Crítico",
-      mensaje: `${item.nombre} tiene solo ${item.cantidad || 0} unidades disponibles`,
-      fecha: new Date().toISOString(),
-      leida: false,
-      producto_id: item.id,
-      icono: "warning",
-      prioridad: "alta",
-    }));
-  }, []);
-
-  const handleMarcarComoLeida = useCallback((id) => {
-    setNotificaciones((prev) => {
-      const nuevas = prev.map((n) => (n.id === id ? { ...n, leida: true } : n));
-      saveNotificacionesToStorage(nuevas);
-      return nuevas;
-    });
-    setNotificacionesNoLeidas((prev) => Math.max(0, prev - 1));
-    showSnackbar("Notificación marcada como leída", "success");
-  }, [saveNotificacionesToStorage, showSnackbar]);
-
-  const handleMarcarTodasLeidas = useCallback(() => {
-    setNotificaciones((prev) => {
-      const nuevas = prev.map((n) => ({ ...n, leida: true }));
-      saveNotificacionesToStorage(nuevas);
-      return nuevas;
-    });
-    setNotificacionesNoLeidas(0);
-    showSnackbar("Todas las notificaciones marcadas como leídas", "success");
-  }, [saveNotificacionesToStorage, showSnackbar]);
-
-  const handleEliminarNotificacion = useCallback((id) => {
-    setNotificaciones((prev) => {
-      const nuevas = prev.filter((n) => n.id !== id);
-      const noLeidasRestantes = nuevas.filter((n) => !n.leida).length;
-      setNotificacionesNoLeidas(noLeidasRestantes);
-      saveNotificacionesToStorage(nuevas);
-      return nuevas;
-    });
-    showSnackbar("Notificación eliminada", "success");
-  }, [saveNotificacionesToStorage, showSnackbar]);
-
-  const handleEliminarTodasNotificaciones = useCallback(() => {
-    setNotificaciones([]);
-    setNotificacionesNoLeidas(0);
-    localStorage.removeItem("dashboard_notificaciones");
-    showSnackbar("Todas las notificaciones eliminadas", "success");
-  }, [showSnackbar]);
-
-  const handleRefreshNotificaciones = useCallback(async (silent = false) => {
-    if (!notificacionesHabilitadas) {
-      if (!silent) showSnackbar("Las notificaciones están desactivadas", "warning");
-      return;
-    }
-
-    if (!silent) showSnackbar("Actualizando notificaciones...", "info");
-    
-    try {
-      const productosCriticos = await productosService.getProductosCriticos();
-      const nuevasNotificaciones = generarNotificacionesStock(productosCriticos);
-
-      if (nuevasNotificaciones.length > 0) {
-        const notisExistentes = loadNotificacionesFromStorage();
-        
-        const notisCombinadas = [...notisExistentes];
-        nuevasNotificaciones.forEach(nueva => {
-          const existe = notisExistentes.some(
-            n => n.producto_id === nueva.producto_id && 
-                 n.tipo === nueva.tipo &&
-                 new Date(n.fecha) > new Date(Date.now() - 24*60*60*1000)
-          );
-          if (!existe) notisCombinadas.unshift(nueva);
-        });
-        
-        const notisFinales = notisCombinadas.slice(0, 50);
-        saveNotificacionesToStorage(notisFinales);
-        setNotificaciones(notisFinales);
-        setNotificacionesNoLeidas(notisFinales.filter((n) => !n.leida).length);
-        
-        if (!silent) {
-          showSnackbar(`${nuevasNotificaciones.length} nuevas notificaciones`, "success");
-        }
-      } else {
-        if (!silent) showSnackbar("No hay nuevas notificaciones", "info");
-      }
-      
-    } catch (error) {
-      console.error("Error actualizando notificaciones:", error);
-      if (!silent) showSnackbar("Error al actualizar notificaciones", "error");
-    }
-  }, [showSnackbar, loadNotificacionesFromStorage, saveNotificacionesToStorage, 
-      generarNotificacionesStock, notificacionesHabilitadas]);
-
-  // ============ FUNCIÓN PRINCIPAL DE CARGA DE DATOS ============
-  
+  // Función principal de carga de datos
   const fetchDashboardData = useCallback(async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true);
-    else setLoading(true);
-    
+    if (showRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setApiError(false);
 
     try {
-      // Cargar estadísticas
+      console.log('🔄 Cargando datos del dashboard...');
+      
+      // Cargar estadísticas de productos
       const statsData = await productosService.getStats();
-      console.log("📊 Datos de estadísticas recibidos:", statsData);
+      setStats(statsData);
       
-      // Cargar movimientos recientes
-      const movimientos = await historialService.getUltimosMovimientos(5);
+      // Cargar estadísticas de préstamos desde el API (mismo endpoint que AsignacionPage)
+      await cargarPrestamos();
       
-      setStats({ ...statsData, movimientosRecientes: movimientos || [] });
+      console.log("📊 Datos cargados:", { statsData });
       
-      // Actualizar notificaciones si están habilitadas
-      if (notificacionesHabilitadas) {
-        await handleRefreshNotificaciones(true);
-      }
-
       if (showRefresh) showSnackbar("Datos actualizados", "success");
     } catch (error) {
-      console.error("Error general al cargar datos:", error);
+      console.error("Error cargando datos:", error);
       setApiError(true);
-      showSnackbar("Error al conectar con el servidor", "error");
+      showSnackbar("Error al cargar los datos", "error");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [showSnackbar, handleRefreshNotificaciones, notificacionesHabilitadas]);
+  }, [showSnackbar, cargarPrestamos]);
 
+  // Búsqueda
   const handleSearch = async (term) => {
     if (!term.trim()) { setSearchResults([]); return; }
     setSearching(true);
     try {
-      const [productos, bodegas, movimientos] = await Promise.all([
+      const [productos, bodegas] = await Promise.all([
         productosService.search(term),
         bodegasService.search(term),
-        historialService.search(term),
       ]);
-
       setSearchResults([
         ...(productos || []).map((p) => ({ ...p, tipo: "producto" })),
         ...(bodegas || []).map((b) => ({ ...b, tipo: "bodega" })),
-        ...(movimientos || []).map((m) => ({ ...m, tipo: "movimiento" })),
       ]);
     } catch (error) {
       console.error("Error en búsqueda:", error);
@@ -1197,19 +502,16 @@ const Dashboard = () => {
     try {
       showSnackbar("Generando reporte...", "info");
       const blob = await productosService.exportExcel();
-      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `reporte_${new Date().toISOString().slice(0,10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
-      
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
-      
       showSnackbar("Reporte generado exitosamente", "success");
     } catch (error) {
       console.error("Error generando reporte:", error);
@@ -1229,21 +531,16 @@ const Dashboard = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Auto-refresh cada 5 minutos
+  // Auto-refresh cada 30 segundos para mantener datos actualizados
   useEffect(() => {
-    if (!notificacionesHabilitadas) return;
     const intervalo = setInterval(() => {
-      handleRefreshNotificaciones(true);
-    }, 5 * 60 * 1000);
+      if (!loading && !refreshing) {
+        console.log('🔄 Auto-refresh de datos...');
+        cargarPrestamos(); // Solo recargar préstamos, no todo
+      }
+    }, 30000);
     return () => clearInterval(intervalo);
-  }, [notificacionesHabilitadas, handleRefreshNotificaciones]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchDashboardData(false);
-    }, 300000);
-    return () => clearInterval(interval);
-  }, [fetchDashboardData]);
+  }, [loading, refreshing, cargarPrestamos]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -1252,17 +549,10 @@ const Dashboard = () => {
       navigate("/login"); 
       return; 
     }
-
     setUser(currentUser);
-    console.log("👤 Usuario cargado:", currentUser);
-    console.log("🔧 API URL configurada:", API_BASE_URL);
-
-    loadConfigNotificaciones();
-    loadNotificacionesFromStorage();
     fetchDashboardData();
-  }, [navigate, loadConfigNotificaciones, loadNotificacionesFromStorage, fetchDashboardData]);
+  }, []);
 
-  // Responsive drawer
   useEffect(() => {
     setDrawerOpen(!isMobile);
   }, [isMobile]);
@@ -1272,7 +562,6 @@ const Dashboard = () => {
       mode: darkMode ? "dark" : "light",
       primary: { main: "#2563EB" },
       background: { default: darkMode ? "#0F172A" : "#F8FAFC", paper: darkMode ? "#1E293B" : "#FFFFFF" },
-      text: { primary: darkMode ? "#F1F5F9" : "#0F172A", secondary: darkMode ? "#94A3B8" : "#475569" },
     },
     shape: { borderRadius: 14 },
   });
@@ -1302,17 +591,6 @@ const Dashboard = () => {
     </Drawer>
   );
 
-  // Renderizado condicional mientras carga
-  if (loading && !user) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!user) return null;
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -1332,14 +610,6 @@ const Dashboard = () => {
               <Tooltip title="Buscar">
                 <IconButton color="inherit" onClick={() => setSearchOpen(true)}>
                   <SearchIcon />
-                </IconButton>
-              </Tooltip>
-              
-              <Tooltip title={notificacionesHabilitadas ? "Notificaciones" : "Notificaciones desactivadas"}>
-                <IconButton color="inherit" onClick={(e) => setNotificacionesAnchor(e.currentTarget)}>
-                  <Badge badgeContent={notificacionesHabilitadas ? notificacionesNoLeidas : 0} color="error">
-                    {notificacionesHabilitadas ? <NotificationsIcon /> : <NotificationsOffIcon />}
-                  </Badge>
                 </IconButton>
               </Tooltip>
               
@@ -1367,6 +637,49 @@ const Dashboard = () => {
                   <LogoutIcon sx={{ mr: 1 }} />Salir
                 </MenuItem>
               </Menu>
+
+              {/* Diálogo de búsqueda */}
+              <Dialog open={searchOpen} onClose={() => setSearchOpen(false)} maxWidth="md" fullWidth>
+                <DialogTitle>Buscar</DialogTitle>
+                <DialogContent>
+                  <TextField
+                    fullWidth
+                    placeholder="Buscar productos, bodegas..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    autoFocus
+                    InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
+                    sx={{ mb: 2 }}
+                  />
+                  {searching && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', my: 2 }} />}
+                  {!searching && searchResults.length > 0 && (
+                    <List>
+                      {searchResults.map((result, idx) => (
+                        <ListItemButton key={idx} onClick={() => {
+                          if (result.tipo === 'producto') navigate('/productos');
+                          else if (result.tipo === 'bodega') navigate('/bodegas');
+                          setSearchOpen(false);
+                        }}>
+                          <ListItemIcon>
+                            {result.tipo === 'producto' && <InventoryIcon />}
+                            {result.tipo === 'bodega' && <WarehouseIcon />}
+                          </ListItemIcon>
+                          <ListItemText 
+                            primary={result.nombre || result.descripcion}
+                            secondary={result.tipo === 'producto' ? `Stock: ${result.cantidad || 0}` : result.ubicacion}
+                          />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  )}
+                  {!searching && searchTerm && searchResults.length === 0 && (
+                    <Typography color="text.secondary" align="center" sx={{ py: 4 }}>No se encontraron resultados</Typography>
+                  )}
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setSearchOpen(false)}>Cerrar</Button>
+                </DialogActions>
+              </Dialog>
             </Toolbar>
           </AppBar>
 
@@ -1375,59 +688,40 @@ const Dashboard = () => {
           <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
             {apiError && (
               <Alert severity="error" sx={{ mb: 3 }} action={
-                <Button color="inherit" size="small" onClick={() => fetchDashboardData(true)}>
-                  Reintentar
-                </Button>
+                <Button color="inherit" size="small" onClick={() => fetchDashboardData(true)}>Reintentar</Button>
               }>
-                Error de conexión con el servidor en {API_BASE_URL}
+                Error de conexión con el servidor
               </Alert>
             )}
 
             {/* Tarjeta de bienvenida */}
             <Paper sx={{ p: { xs: 3, md: 5 }, mb: 4, borderRadius: 4, background: "linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)", color: "white" }}>
               <Typography variant={isMobile ? "h5" : "h4"} fontWeight={800} gutterBottom>
-                ¡Bienvenido, {user?.nombre || user?.usuario}!
+                ¡Bienvenido, {user?.nombre || user?.usuario || "Usuario"}!
               </Typography>
-              
               <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                {!apiError && stats.dadosDeBaja > 0 && (
-                  <span>📦 Hay {stats.dadosDeBaja} productos dados de baja. </span>
-                )}
-                {!apiError && stats.bajoStock > 0 && (
-                  <span>⚠️ Hay {stats.bajoStock} productos con stock crítico. </span>
-                )}
-                {!apiError && stats.asignados > 0 && (
-                  <span>Actualmente hay {stats.asignados} equipos asignados.</span>
-                )}
-                {!apiError && stats.bajoStock === 0 && stats.asignados === 0 && stats.dadosDeBaja === 0 && (
-                  <span>Todo está en orden con tu inventario.</span>
-                )}
+                {!loading && stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
+                {!loading && stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
+                {!loading && statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
+                {!loading && stats.totalProductos === 0 && `Cargando datos del inventario...`}
               </Typography>
-              
               <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
-                <Button 
-                  variant="contained" 
-                  startIcon={<AssessmentIcon />} 
-                  onClick={handleGenerarReporte}
-                  sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600, "&:hover": { bgcolor: "#f1f5f9" } }}
-                >
-                  Reporte
+                <Button variant="contained" startIcon={<AssessmentIcon />} onClick={handleGenerarReporte} sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}>
+                  Reporte Excel
                 </Button>
-                <Button 
-                  variant="outlined" 
-                  startIcon={<BarChartIcon />} 
-                  onClick={() => navigate("/stock")}
-                  sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600, "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.1)" } }}
-                >
-                  Ver Stock 
+                <Button variant="outlined" startIcon={<BarChartIcon />} onClick={() => navigate("/stock")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
+                  Ver Stock
+                </Button>
+                <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => navigate("/asignacion")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
+                  Gestionar Préstamos
                 </Button>
               </Box>
             </Paper>
 
-            {/* Stats Grid - Acortado para que quepa */}
+            {/* Stats Grid - 4 tarjetas (TOTAL, DISPONIBLES, ASIGNADOS, PRÉSTAMOS) */}
             <Grid container spacing={{ xs: 2, sm: 3 }}>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={InventoryIcon} title="TOTAL" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading} />
+                <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading} />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
                 <StatCard icon={CheckCircleIcon} title="DISPONIBLES" value={stats.disponibles} color="#16A34A" loading={loading} />
@@ -1436,11 +730,12 @@ const Dashboard = () => {
                 <StatCard icon={AssignmentIcon} title="ASIGNADOS" value={stats.asignados} color="#9333EA" onClick={() => navigate("/asignacion")} loading={loading} />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={WarningIcon} title="STOCK CRÍTICO" value={stats.bajoStock} color="#F59E0B" onClick={() => navigate("/productos?stock=critico")} loading={loading} />
+                <StatCard icon={ReceiptIcon} title="PRÉSTAMOS" value={statsPrestamos.activos} change={`${statsPrestamos.total} totales`} color="#F59E0B" onClick={() => navigate("/asignacion")} loading={loading} />
               </Grid>
             </Grid>
 
-            <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: 2, mb: 4 }}>
+            {/* Tarjetas de Navegación */}
+            <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: 2 }}>
               <Grid item xs={6} sm={6} md={3}>
                 <NavigationCard icon={InventoryIcon} title="Productos" description="Gestiona inventario" onClick={() => navigate("/productos")} color="#2563EB" />
               </Grid>
@@ -1454,14 +749,12 @@ const Dashboard = () => {
                 <NavigationCard icon={Inventory2Icon} title="Stock" description="Por marca/modelo" onClick={() => navigate("/stock")} color="#F59E0B" />
               </Grid>
             </Grid>
-
           </Container>
 
           <ScrollToTopFab />
           
-          {/* Diálogos */}
           <PerfilDialog open={openPerfil} onClose={() => setOpenPerfil(false)} user={user} onProfileUpdate={handleProfileUpdate} showSnackbar={showSnackbar} />
-          <ConfiguracionDialog open={openConfig} onClose={() => setOpenConfig(false)} darkMode={darkMode} setDarkMode={setDarkMode} notificacionesHabilitadas={notificacionesHabilitadas} setNotificacionesHabilitadas={setNotificacionesHabilitadas} saveConfigNotificaciones={saveConfigNotificaciones} showSnackbar={showSnackbar} handleRefreshNotificaciones={handleRefreshNotificaciones} />
+          <ConfiguracionDialog open={openConfig} onClose={() => setOpenConfig(false)} darkMode={darkMode} setDarkMode={setDarkMode} />
           
           <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
             <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
