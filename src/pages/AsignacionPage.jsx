@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CON ACTUALIZACIÓN AUTOMÁTICA CORREGIDA
+// src/pages/AsignacionPage.jsx - VERSIÓN CORREGIDA (SIN PANTALLA EN BLANCO)
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
@@ -40,12 +40,7 @@ import {
     TableRow,
     TablePagination,
     ToggleButton,
-    ToggleButtonGroup,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemIcon,
-    Divider
+    ToggleButtonGroup
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -65,8 +60,7 @@ import {
     Visibility as VisibilityIcon,
     Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
-    Description as DescriptionIcon,
-    DateRange as DateRangeIcon
+    Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -176,8 +170,6 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
 // ============================================
 const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
     const [downloading, setDownloading] = useState(false);
-    const [documentoAsignacion, setDocumentoAsignacion] = useState(null);
-    const [documentoRecepcion, setDocumentoRecepcion] = useState(null);
 
     const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
 
@@ -234,7 +226,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
             </DialogTitle>
             <DialogContent dividers>
                 <Grid container spacing={2}>
-                    {/* Información del Producto */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
@@ -250,7 +241,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                         </Paper>
                     </Grid>
 
-                    {/* Información del Colaborador */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
@@ -266,28 +256,26 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                         </Paper>
                     </Grid>
 
-                    {/* Detalles de la Asignación/Préstamo */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                                 Detalles de la Operación
                             </Typography>
                             <Grid container spacing={1}>
-                                <Grid item xs={6}><Typography variant="caption">ID Asignación:</Typography><Typography variant="body2" fontFamily="monospace">{asignacion?.id}</Typography></Grid>
-                                <Grid item xs={6}><Typography variant="caption">Fecha Asignación:</Typography><Typography variant="body2">{new Date(asignacion?.fecha_asignacion).toLocaleDateString()}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">ID:</Typography><Typography variant="body2" fontFamily="monospace">{asignacion?.id}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">Fecha:</Typography><Typography variant="body2">{new Date(asignacion?.fecha_asignacion).toLocaleDateString()}</Typography></Grid>
                                 <Grid item xs={12}><Typography variant="caption">Motivo:</Typography><Typography variant="body2">{asignacion?.motivo || '-'}</Typography></Grid>
                                 <Grid item xs={12}><Typography variant="caption">Observaciones:</Typography><Typography variant="body2">{asignacion?.observaciones || '-'}</Typography></Grid>
                                 {asignacion?.fecha_devolucion && (
                                     <>
-                                        <Grid item xs={6}><Typography variant="caption">Fecha Devolución:</Typography><Typography variant="body2">{new Date(asignacion.fecha_devolucion).toLocaleDateString()}</Typography></Grid>
-                                        <Grid item xs={6}><Typography variant="caption">Condición Entrega:</Typography><Typography variant="body2">{asignacion?.condicion_entrega || '-'}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="caption">Devolución:</Typography><Typography variant="body2">{new Date(asignacion.fecha_devolucion).toLocaleDateString()}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="caption">Condición:</Typography><Typography variant="body2">{asignacion?.condicion_entrega || '-'}</Typography></Grid>
                                     </>
                                 )}
                             </Grid>
                         </Paper>
                     </Grid>
 
-                    {/* Documentos - Solo para asignaciones normales */}
                     {!esPrestamo && (
                         <Grid item xs={12}>
                             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -300,7 +288,7 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                                         variant="outlined"
                                         size="small"
                                         startIcon={<PdfIcon sx={{ color: '#f44336' }} />}
-                                        onClick={() => handleDescargarDocumento(`acta_asignacion_${asignacion?.id}_*.pdf`, "Acta de Asignación")}
+                                        onClick={() => handleDescargarDocumento(`acta_asignacion_${asignacion?.id}.pdf`, "Acta de Asignación")}
                                         disabled={downloading}
                                         sx={{ borderRadius: 0 }}
                                     >
@@ -311,7 +299,7 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                                             variant="outlined"
                                             size="small"
                                             startIcon={<PdfIcon sx={{ color: '#f44336' }} />}
-                                            onClick={() => handleDescargarDocumento(`acta_recepcion_${asignacion?.id}_*.pdf`, "Acta de Recepción")}
+                                            onClick={() => handleDescargarDocumento(`acta_recepcion_${asignacion?.id}.pdf`, "Acta de Recepción")}
                                             disabled={downloading}
                                             sx={{ borderRadius: 0 }}
                                         >
@@ -319,9 +307,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                                         </Button>
                                     )}
                                 </Stack>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                    Nota: Los documentos se generan automáticamente al momento de la operación.
-                                </Typography>
                             </Paper>
                         </Grid>
                     )}
@@ -330,7 +315,7 @@ const DetallesDialog = ({ open, onClose, asignacion, producto }) => {
                         <Grid item xs={12}>
                             <Alert severity="info" sx={{ borderRadius: 0 }}>
                                 <Typography variant="body2">
-                                    <strong>ℹ️ Préstamo:</strong> Este registro corresponde a un préstamo, por lo tanto no tiene documentos asociados.
+                                    <strong>ℹ️ Préstamo:</strong> Este registro no tiene documentos asociados.
                                 </Typography>
                             </Alert>
                         </Grid>
@@ -416,15 +401,10 @@ const AsignacionPage = () => {
         navigate('/dashboard');
     };
 
-    // Función para descargar documento
     const handleDescargarDocumento = async (asignacionId, tipo) => {
         setDownloadingDoc(true);
         try {
             const token = localStorage.getItem('token');
-            const filename = tipo === 'asignacion' 
-                ? `acta_asignacion_${asignacionId}_*.pdf`
-                : `acta_recepcion_${asignacionId}_*.pdf`;
-            
             const response = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacionId}/${tipo}`, {
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -460,10 +440,14 @@ const AsignacionPage = () => {
         }
     };
 
-    // Función principal para cargar datos - CORREGIDA PARA ACTUALIZACIÓN AUTOMÁTICA
+    // Función principal para cargar datos
     const fetchData = useCallback(async (showRefresh = false) => {
-        if (showRefresh) setRefreshing(true);
-        else setLoading(true);
+        // No ocultar la tabla durante el refresco para evitar pantalla en blanco
+        if (showRefresh) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
         
         setApiError(false);
 
@@ -507,7 +491,7 @@ const AsignacionPage = () => {
                 console.log(`✅ ${activas.length} asignaciones activas encontradas`);
             } catch (err) {
                 console.error('Error cargando asignaciones:', err);
-                setAsignacionesActivas([]);
+                // Mantener datos anteriores en caso de error
             }
             
             // Cargar bodegas
@@ -516,15 +500,12 @@ const AsignacionPage = () => {
                 setBodegas(bodegasData || []);
             } catch (err) {
                 console.error('Error cargando bodegas:', err);
-                setBodegas([]);
             }
             
         } catch (error) {
             console.error('Error cargando datos:', error);
             setApiError(true);
             showSnackbar('Error al cargar los datos', 'error');
-            setProductos([]);
-            setAsignacionesActivas([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -535,10 +516,50 @@ const AsignacionPage = () => {
         fetchData();
     }, [fetchData]);
 
-    // Función de refresco después de operaciones
+    // Función de refresco - NO muestra loading para evitar pantalla en blanco
     const refreshData = async () => {
         console.log('🔄 Refrescando datos después de operación...');
-        await fetchData(true);
+        setRefreshing(true);
+        try {
+            const filterParams = {};
+            if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
+            
+            // Cargar productos en segundo plano
+            const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
+            
+            let todosLosProductos = [];
+            if (productosData && Array.isArray(productosData)) {
+                todosLosProductos = productosData;
+            } else if (productosData && productosData.data && Array.isArray(productosData.data)) {
+                todosLosProductos = productosData.data;
+            }
+            
+            const productosProcesados = todosLosProductos.map(p => ({
+                ...p,
+                id_estado_equipo: Number(p.id_estado_equipo) || 1,
+            }));
+            
+            const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
+            setProductos(productosFiltrados);
+            
+            // Cargar asignaciones activas
+            const asignacionesResponse = await api.get('/asignaciones/activas');
+            let asignaciones = [];
+            if (asignacionesResponse.data) {
+                if (asignacionesResponse.data.success && Array.isArray(asignacionesResponse.data.data)) {
+                    asignaciones = asignacionesResponse.data.data;
+                } else if (Array.isArray(asignacionesResponse.data)) {
+                    asignaciones = asignacionesResponse.data;
+                }
+            }
+            const activas = asignaciones.filter(a => !a.fecha_devolucion);
+            setAsignacionesActivas(activas);
+            
+        } catch (error) {
+            console.error('Error refrescando datos:', error);
+        } finally {
+            setRefreshing(false);
+        }
     };
 
     const handleAsignar = (producto) => {
@@ -583,30 +604,27 @@ const AsignacionPage = () => {
         }
     };
 
-    // Handlers con refresco automático CORREGIDOS
-    const handleAsignacionSuccess = async (result) => {
-        console.log('✅ Asignación exitosa, refrescando datos...');
-        showSnackbar(result.message || 'Asignación completada exitosamente', 'success');
+    // Handlers - Cierran diálogos y refrescan datos
+    const handleAsignacionSuccess = () => {
+        showSnackbar('Asignación completada exitosamente', 'success');
         setOpenAsignacion(false);
         setProductoSeleccionado(null);
-        await refreshData();
+        refreshData();
     };
 
-    const handlePrestamoSuccess = async (result) => {
-        console.log('✅ Préstamo exitoso, refrescando datos...');
-        showSnackbar(result.message || 'Préstamo registrado exitosamente', 'success');
+    const handlePrestamoSuccess = () => {
+        showSnackbar('Préstamo registrado exitosamente', 'success');
         setOpenPrestamo(false);
         setProductoSeleccionado(null);
-        await refreshData();
+        refreshData();
     };
 
-    const handleRecepcionSuccess = async (result) => {
-        console.log('✅ Recepción exitosa, refrescando datos...');
-        showSnackbar(result.message || 'Recepción completada exitosamente', 'success');
+    const handleRecepcionSuccess = () => {
+        showSnackbar('Recepción completada exitosamente', 'success');
         setOpenRecepcion(false);
         setProductoSeleccionado(null);
         setAsignacionSeleccionada(null);
-        await refreshData();
+        refreshData();
     };
 
     const handleClearFilters = () => {
@@ -634,7 +652,6 @@ const AsignacionPage = () => {
         return asignacionesActivas.find(a => a.producto_id === productoId);
     };
 
-    // Filtrar productos por tipo de estado seleccionado
     const filteredProductos = productos.filter(producto => {
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
@@ -692,7 +709,6 @@ const AsignacionPage = () => {
             </AppBar>
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
-                {/* Header */}
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
                     <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>
                         Gestión de Asignaciones con Firma Digital
@@ -808,9 +824,7 @@ const AsignacionPage = () => {
                                 fullWidth
                                 sx={{ height: 40 }}
                             >
-                                <ToggleButton value="todos" sx={{ borderRadius: 0, textTransform: 'none' }}>
-                                    Todos
-                                </ToggleButton>
+                                <ToggleButton value="todos" sx={{ borderRadius: 0, textTransform: 'none' }}>Todos</ToggleButton>
                                 <ToggleButton value="disponibles" sx={{ borderRadius: 0, textTransform: 'none' }}>
                                     <CheckCircleIcon sx={{ fontSize: 16, mr: 0.5, color: colors.success }} />
                                     Disponibles
@@ -850,7 +864,7 @@ const AsignacionPage = () => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {loading ? (
+                            {loading && paginatedProductos.length === 0 ? (
                                 <TableRow><TableCell colSpan={9} align="center"><CircularProgress /><Typography sx={{ mt: 2 }}>Cargando productos...</Typography></TableCell></TableRow>
                             ) : paginatedProductos.length === 0 ? (
                                 <TableRow><TableCell colSpan={9} align="center"><InventoryIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} /><Typography variant="h6">No hay productos</Typography><Typography variant="body2" color="text.secondary">No se encontraron productos con los filtros aplicados</Typography></TableCell></TableRow>
@@ -868,165 +882,62 @@ const AsignacionPage = () => {
                                                     <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}>
                                                         <InventoryIcon sx={{ fontSize: 16 }} />
                                                     </Avatar>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {producto.nombre}
-                                                    </Typography>
+                                                    <Typography variant="body2" fontWeight={500}>{producto.nombre}</Typography>
                                                 </Box>
                                             </TableCell>
                                             <TableCell>{producto.marca || '-'}</TableCell>
                                             <TableCell>{producto.modelo || '-'}</TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    label={producto.numero_serie || 'N/A'} 
-                                                    size="small" 
-                                                    variant="outlined"
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    icon={<StoreIcon />} 
-                                                    label={producto.bodega_nombre || 'Sin bodega'} 
-                                                    size="small" 
-                                                    sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} 
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    label={producto.condicion || 'NUEVO'} 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1),
-                                                        color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success
-                                                    }} 
-                                                />
-                                            </TableCell>
+                                            <TableCell><Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" /></TableCell>
+                                            <TableCell><Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} /></TableCell>
+                                            <TableCell><Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} /></TableCell>
                                             <TableCell>
                                                 <Stack direction="column" spacing={0.5}>
-                                                    <Chip 
-                                                        label={getEstadoTexto(producto.id_estado_equipo)} 
-                                                        size="small"
-                                                        sx={{ 
-                                                            backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), 
-                                                            color: getEstadoColor(producto.id_estado_equipo),
-                                                            fontWeight: 500,
-                                                            fontSize: '0.7rem'
-                                                        }}
-                                                    />
+                                                    <Chip label={getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), color: getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />
                                                     {asignacionActiva && (
-                                                        <Chip 
-                                                            icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />}
-                                                            label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} 
-                                                            size="small"
-                                                            sx={{ 
-                                                                backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1),
-                                                                color: esPrestamo ? colors.warning : colors.primary,
-                                                                fontWeight: 600,
-                                                                fontSize: '0.65rem',
-                                                                height: 20
-                                                            }}
-                                                        />
+                                                        <Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />
                                                     )}
                                                 </Stack>
                                             </TableCell>
                                             <TableCell>
                                                 {asignacionActiva ? (
                                                     <Box display="flex" alignItems="center" gap={1}>
-                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}>
-                                                            <PersonIcon sx={{ fontSize: 14 }} />
-                                                        </Avatar>
-                                                        <Typography variant="body2">
-                                                            {asignacionActiva.colaborador_nombre}
-                                                        </Typography>
+                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}><PersonIcon sx={{ fontSize: 14 }} /></Avatar>
+                                                        <Typography variant="body2">{asignacionActiva.colaborador_nombre}</Typography>
                                                     </Box>
-                                                ) : (
-                                                    <Typography variant="body2" color="text.secondary">-</Typography>
-                                                )}
+                                                ) : (<Typography variant="body2" color="text.secondary">-</Typography>)}
                                             </TableCell>
                                             <TableCell align="center">
                                                 <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
                                                     {estaDisponible ? (
                                                         <>
                                                             <Tooltip title="Asignar producto (con documento)">
-                                                                <Button
-                                                                    variant="contained"
-                                                                    size="small"
-                                                                    startIcon={<AssignmentIcon />}
-                                                                    onClick={() => handleAsignar(producto)}
-                                                                    sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}
-                                                                >
-                                                                    Asignar
-                                                                </Button>
+                                                                <Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button>
                                                             </Tooltip>
                                                             <Tooltip title="Préstamo (sin documento)">
-                                                                <Button
-                                                                    variant="outlined"
-                                                                    size="small"
-                                                                    startIcon={<PersonIcon />}
-                                                                    onClick={() => handlePrestamo(producto)}
-                                                                    sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}
-                                                                >
-                                                                    Préstamo
-                                                                </Button>
+                                                                <Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button>
                                                             </Tooltip>
                                                         </>
                                                     ) : estaAsignado ? (
                                                         <>
-                                                            <Tooltip title={`Recibir ${esPrestamo ? 'préstamo' : 'producto'} (devolución)`}>
-                                                                <Button
-                                                                    variant="contained"
-                                                                    size="small"
-                                                                    startIcon={<ReceiptIcon />}
-                                                                    onClick={() => handleRecibir(producto)}
-                                                                    sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}
-                                                                >
-                                                                    Recibir
-                                                                </Button>
+                                                            <Tooltip title={`Recibir ${esPrestamo ? 'préstamo' : 'producto'}`}>
+                                                                <Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button>
                                                             </Tooltip>
                                                             {!esPrestamo && (
-                                                                <>
-                                                                    <Tooltip title="Descargar Acta de Asignación">
-                                                                        <IconButton 
-                                                                            size="small" 
-                                                                            onClick={() => handleDescargarDocumento(asignacionActiva.id, 'asignacion')}
-                                                                            disabled={downloadingDoc}
-                                                                            sx={{ color: '#f44336' }}
-                                                                        >
-                                                                            <PdfIcon fontSize="small" />
-                                                                        </IconButton>
-                                                                    </Tooltip>
-                                                                    <Tooltip title="Ver detalles">
-                                                                        <IconButton 
-                                                                            size="small" 
-                                                                            onClick={() => handleVerDetalles(producto)} 
-                                                                            sx={{ color: colors.info }}
-                                                                        >
-                                                                            <VisibilityIcon fontSize="small" />
-                                                                        </IconButton>
-                                                                    </Tooltip>
-                                                                </>
-                                                            )}
-                                                            {esPrestamo && (
-                                                                <Tooltip title="Ver detalles del préstamo">
-                                                                    <IconButton 
-                                                                        size="small" 
-                                                                        onClick={() => handleVerDetalles(producto)} 
-                                                                        sx={{ color: colors.warning }}
-                                                                    >
-                                                                        <VisibilityIcon fontSize="small" />
+                                                                <Tooltip title="Descargar Acta">
+                                                                    <IconButton size="small" onClick={() => handleDescargarDocumento(asignacionActiva.id, 'asignacion')} disabled={downloadingDoc} sx={{ color: '#f44336' }}>
+                                                                        <PdfIcon fontSize="small" />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                             )}
+                                                            <Tooltip title="Ver detalles">
+                                                                <IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}>
+                                                                    <VisibilityIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
                                                         </>
                                                     ) : (
-                                                        <Tooltip title="Producto no disponible para asignación">
-                                                            <Button
-                                                                variant="outlined"
-                                                                size="small"
-                                                                disabled
-                                                                sx={{ opacity: 0.5, borderRadius: 0 }}
-                                                            >
-                                                                No disponible
-                                                            </Button>
+                                                        <Tooltip title="Producto no disponible">
+                                                            <Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>
                                                         </Tooltip>
                                                     )}
                                                 </Stack>
@@ -1037,57 +948,17 @@ const AsignacionPage = () => {
                             )}
                         </TableBody>
                     </Table>
-                    <TablePagination 
-                        rowsPerPageOptions={[5, 10, 25, 50]} 
-                        component="div" 
-                        count={filteredProductos.length} 
-                        rowsPerPage={rowsPerPage} 
-                        page={page} 
-                        onPageChange={handleChangePage} 
-                        onRowsPerPageChange={handleChangeRowsPerPage} 
-                        labelRowsPerPage="Filas" 
-                    />
+                    <TablePagination rowsPerPageOptions={[5, 10, 25, 50]} component="div" count={filteredProductos.length} rowsPerPage={rowsPerPage} page={page} onPageChange={handleChangePage} onRowsPerPageChange={handleChangeRowsPerPage} labelRowsPerPage="Filas" />
                 </StyledTableContainer>
 
                 {/* Diálogos */}
-                <AsignacionCompletaDialog 
-                    open={openAsignacion} 
-                    onClose={() => setOpenAsignacion(false)} 
-                    productoSeleccionado={productoSeleccionado} 
-                    onSuccess={handleAsignacionSuccess} 
-                />
-                
-                <RecepcionDialog 
-                    open={openRecepcion} 
-                    onClose={() => setOpenRecepcion(false)} 
-                    producto={productoSeleccionado} 
-                    asignacion={asignacionSeleccionada} 
-                    onSuccess={handleRecepcionSuccess} 
-                />
+                <AsignacionCompletaDialog open={openAsignacion} onClose={() => setOpenAsignacion(false)} productoSeleccionado={productoSeleccionado} onSuccess={handleAsignacionSuccess} />
+                <RecepcionDialog open={openRecepcion} onClose={() => setOpenRecepcion(false)} producto={productoSeleccionado} asignacion={asignacionSeleccionada} onSuccess={handleRecepcionSuccess} />
+                <PrestamoDialog open={openPrestamo} onClose={() => setOpenPrestamo(false)} productoSeleccionado={productoSeleccionado} onSuccess={handlePrestamoSuccess} />
+                <DetallesDialog open={openDetalles} onClose={() => setOpenDetalles(false)} asignacion={asignacionSeleccionada} producto={productoSeleccionado} />
 
-                <PrestamoDialog 
-                    open={openPrestamo} 
-                    onClose={() => setOpenPrestamo(false)} 
-                    productoSeleccionado={productoSeleccionado} 
-                    onSuccess={handlePrestamoSuccess} 
-                />
-
-                <DetallesDialog 
-                    open={openDetalles} 
-                    onClose={() => setOpenDetalles(false)} 
-                    asignacion={asignacionSeleccionada} 
-                    producto={productoSeleccionado} 
-                />
-
-                <Snackbar 
-                    open={snackbar.open} 
-                    autoHideDuration={6000} 
-                    onClose={handleCloseSnackbar} 
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                >
-                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>
-                        {snackbar.message}
-                    </Alert>
+                <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                    <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>{snackbar.message}</Alert>
                 </Snackbar>
             </Container>
         </Box>
