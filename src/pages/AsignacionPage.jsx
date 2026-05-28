@@ -909,7 +909,7 @@ const AsignacionPage = () => {
                                     const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
                                     
                                     return (
-                                        <TableRow key={producto.id} hover>
+                                        <TableRow key={`${producto.id}-${producto.numero_serie || producto.id}`} hover>
                                             <TableCell>
                                                 <Box display="flex" alignItems="center" gap={1}>
                                                     <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}>
