@@ -1,4 +1,4 @@
-// src/services/productos.js - VERSIÓN COMPLETA CON FILTROS
+// src/services/productos.js - VERSIÓN COMPLETA CON FILTROS CORREGIDOS
 
 import api from './api';
 
@@ -12,50 +12,99 @@ export const productosService = {
     /**
      * Listar todos los productos con filtros
      */
+    getProductos: async (search = '', filters = {}) => {
+        try {
+            console.log('📤 getProductos - search:', search, 'filters:', filters);
+            
+            const params = new URLSearchParams();
+            
+            // Búsqueda por texto
+            if (search && search.trim()) {
+                params.append('search', search.trim());
+            }
+            
+            // Filtros
+            if (filters.marca && filters.marca !== '') {
+                params.append('marca', filters.marca);
+            }
+            if (filters.estado && filters.estado !== '') {
+                params.append('estado', filters.estado);
+            }
+            if (filters.condicion && filters.condicion !== '') {
+                params.append('condicion', filters.condicion);
+            }
+            if (filters.bodega_id && filters.bodega_id !== '') {
+                params.append('bodega_id', filters.bodega_id);
+            }
+            
+            const queryString = params.toString();
+            const url = queryString ? `/productos?${queryString}` : '/productos';
+            
+            console.log('📤 URL productos:', url);
+            
+            const response = await api.get(url);
+            
+            console.log('✅ Respuesta productos:', response.data);
+            
+            if (response.data && response.data.success) {
+                const productos = response.data.data.map(producto => ({
+                    id: producto.id,
+                    nombre: producto.nombre || '',
+                    marca: producto.marca || '',
+                    modelo: producto.modelo || '',
+                    numero_serie: producto.numero_serie || '',
+                    precio: producto.precio || 0,
+                    condicion: producto.condicion || 'NUEVO',
+                    id_estado_equipo: producto.id_estado_equipo || 1,
+                    estado: producto.estado || this.getEstadoFromId(producto.id_estado_equipo),
+                    bodega_id: producto.bodega_id,
+                    bodega_nombre: producto.bodega_nombre || 'Sin bodega',
+                    oc_numero: producto.oc_numero || '',
+                    factura_numero: producto.factura_numero || '',
+                    descripcion: producto.descripcion || '',
+                    fecha_adquisicion: producto.fecha_adquisicion || null,
+                    fecha_creacion: producto.fecha_creacion || null,
+                    imagen_path: producto.imagen_path || null,
+                    colaborador_asignado: producto.colaborador_asignado || null,
+                    historial_uso: producto.historial_uso || [],
+                    historial_mantenciones: producto.historial_mantenciones || [],
+                    fecha_baja: producto.fecha_baja || null,
+                    fecha_donacion: producto.fecha_donacion || null
+                }));
+                
+                console.log(`✅ ${productos.length} productos procesados`);
+                console.log(`📊 Disponibles: ${productos.filter(p => p.id_estado_equipo === 1).length}`);
+                console.log(`📊 Asignados: ${productos.filter(p => p.id_estado_equipo === 2).length}`);
+                console.log(`📊 En Mantención: ${productos.filter(p => p.id_estado_equipo === 3).length}`);
+                console.log(`📊 En Reparación: ${productos.filter(p => p.id_estado_equipo === 4).length}`);
+                console.log(`📊 No Disponibles: ${productos.filter(p => p.id_estado_equipo === 5).length}`);
+                console.log(`📊 Dados de Baja: ${productos.filter(p => p.id_estado_equipo === 6).length}`);
+                
+                return productos;
+            }
+            
+            return [];
+        } catch (error) {
+            console.error('❌ Error en getProductos:', error);
+            return [];
+        }
+    },
 
-getProductos: async (search = '', filters = {}) => {
-    try {
-        const params = new URLSearchParams();
-        
-        if (search && search.trim()) {
-            params.append('search', search.trim());
-        }
-        // ... resto de filtros
-        
-        const queryString = params.toString();
-        const url = queryString ? `/productos?${queryString}` : '/productos';
-        
-        const response = await api.get(url);
-        
-        if (response.data && response.data.success) {
-            const productos = response.data.data.map(producto => ({
-                id: producto.id,
-                nombre: producto.nombre || '',
-                marca: producto.marca || '',
-                modelo: producto.modelo || '',
-                numero_serie: producto.numero_serie || '',
-                precio: producto.precio || 0,
-                condicion: producto.condicion || 'NUEVO',
-                // IMPORTANTE: Capturar el id_estado_equipo correctamente
-                id_estado_equipo: producto.id_estado_equipo || 1,
-                estado: producto.estado || 'DISPONIBLE',
-                bodega_nombre: producto.bodega_nombre || 'Sin bodega',
-                // ... resto de campos
-            }));
-            
-            console.log(`✅ ${productos.length} productos procesados`);
-            console.log(`📊 Disponibles: ${productos.filter(p => p.id_estado_equipo === 1).length}`);
-            console.log(`📊 Asignados: ${productos.filter(p => p.id_estado_equipo === 2).length}`);
-            
-            return productos;
-        }
-        
-        return [];
-    } catch (error) {
-        console.error('❌ Error en getProductos:', error);
-        return [];
-    }
-},
+    /**
+     * Obtener estado a partir del ID
+     */
+    getEstadoFromId: (idEstadoEquipo) => {
+        const estados = {
+            1: 'DISPONIBLE',
+            2: 'ASIGNADO',
+            3: 'EN MANTENCIÓN',
+            4: 'EN REPARACIÓN',
+            5: 'NO DISPONIBLE',
+            6: 'BAJA'
+        };
+        return estados[idEstadoEquipo] || 'DISPONIBLE';
+    },
+
     /**
      * Obtener producto por ID
      */
@@ -64,6 +113,8 @@ getProductos: async (search = '', filters = {}) => {
             console.log(`📤 Buscando producto con ID: ${id}`);
             
             const response = await api.get(`/productos/${id}`);
+            
+            console.log('✅ Respuesta getProductoById:', response.data);
             
             if (response.data && response.data.success) {
                 const producto = response.data.data;
@@ -75,7 +126,8 @@ getProductos: async (search = '', filters = {}) => {
                     factura_numero: producto.factura_numero || '',
                     descripcion: producto.descripcion || '',
                     marca: producto.marca || '',
-                    estado: producto.estado || 'DISPONIBLE',
+                    estado: producto.estado || this.getEstadoFromId(producto.id_estado_equipo),
+                    id_estado_equipo: producto.id_estado_equipo || 1,
                     modelo: producto.modelo || '',
                     numero_serie: producto.numero_serie || '',
                     condicion: producto.condicion || 'NUEVO',
@@ -362,7 +414,6 @@ getProductos: async (search = '', filters = {}) => {
         try {
             console.log(`📤 Obteniendo historial de uso para producto ${productoId}`);
             
-            // Validar ID
             if (!productoId || isNaN(Number(productoId))) {
                 console.warn('ID de producto inválido para obtener historial');
                 return [];
@@ -509,12 +560,14 @@ getProductos: async (search = '', filters = {}) => {
             if (response.data && response.data.success) {
                 return response.data.data;
             }
+            // Fallback si el endpoint no existe
             return [
                 { id: 1, nombre: 'DISPONIBLE' },
                 { id: 2, nombre: 'ASIGNADO' },
                 { id: 3, nombre: 'EN MANTENCIÓN' },
                 { id: 4, nombre: 'EN REPARACIÓN' },
-                { id: 5, nombre: 'NO DISPONIBLE' }
+                { id: 5, nombre: 'NO DISPONIBLE' },
+                { id: 6, nombre: 'BAJA' }
             ];
         } catch (error) {
             console.error('❌ Error en getEstados:', error);
@@ -523,7 +576,8 @@ getProductos: async (search = '', filters = {}) => {
                 { id: 2, nombre: 'ASIGNADO' },
                 { id: 3, nombre: 'EN MANTENCIÓN' },
                 { id: 4, nombre: 'EN REPARACIÓN' },
-                { id: 5, nombre: 'NO DISPONIBLE' }
+                { id: 5, nombre: 'NO DISPONIBLE' },
+                { id: 6, nombre: 'BAJA' }
             ];
         }
     },

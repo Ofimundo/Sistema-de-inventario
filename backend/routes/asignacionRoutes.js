@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN ACTUALIZADA CON BUSCADOR DE DOCUMENTOS
+// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA Y CORREGIDA
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -11,12 +11,18 @@ const multer = require('multer');
 const DOCS_DIR = path.join(__dirname, '../uploads/documentos');
 const DOCUMENTOS_FISICOS_DIR = path.join(__dirname, '../uploads/documentos_fisicos');
 
+// Asegurar que los directorios existen
 if (!fs.existsSync(DOCS_DIR)) {
     fs.mkdirSync(DOCS_DIR, { recursive: true });
+    console.log(`📁 Directorio creado: ${DOCS_DIR}`);
 }
 if (!fs.existsSync(DOCUMENTOS_FISICOS_DIR)) {
     fs.mkdirSync(DOCUMENTOS_FISICOS_DIR, { recursive: true });
+    console.log(`📁 Directorio creado: ${DOCUMENTOS_FISICOS_DIR}`);
 }
+
+console.log(`📁 Directorio de documentos: ${DOCS_DIR}`);
+console.log(`📁 El directorio existe: ${fs.existsSync(DOCS_DIR)}`);
 
 // Configurar multer para subida de documentos físicos
 const storage = multer.diskStorage({
@@ -124,9 +130,11 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
 }
 
 // ============================================
-// FUNCIÓN CORREGIDA PARA GENERAR ACTA DE ASIGNACIÓN
+// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN
 // ============================================
 async function generarActaAsignacion(datos) {
+    console.log('🔧 generarActaAsignacion llamado con ID:', datos.id_asignacion);
+    
     return new Promise(async (resolve, reject) => {
         try {
             const {
@@ -270,6 +278,7 @@ async function generarActaAsignacion(datos) {
             doc.end();
 
         } catch (error) {
+            console.error('❌ Error en generarActaAsignacion:', error);
             reject(error);
         }
     });
@@ -279,6 +288,8 @@ async function generarActaAsignacion(datos) {
 // FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN
 // ============================================
 function generarActaRecepcion(datos) {
+    console.log('🔧 generarActaRecepcion llamado con ID:', datos.id_asignacion);
+    
     return new Promise((resolve, reject) => {
         try {
             const {
@@ -416,6 +427,7 @@ function generarActaRecepcion(datos) {
             doc.end();
 
         } catch (error) {
+            console.error('❌ Error en generarActaRecepcion:', error);
             reject(error);
         }
     });
@@ -425,7 +437,7 @@ function generarActaRecepcion(datos) {
 // ENDPOINTS
 // ============================================
 
-// GET - Obtener asignaciones activas (incluye es_prestamo)
+// GET - Obtener asignaciones activas
 router.get('/activas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/activas');
@@ -457,11 +469,10 @@ router.get('/activas', async (req, res) => {
             ORDER BY a.fecha_asignacion DESC
         `);
         
-        console.log(`✅ ${result.recordset.length} asignaciones activas encontradas`);
         res.json({ success: true, data: result.recordset });
         
     } catch (error) {
-        console.error('❌ Error en GET /activas:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
@@ -498,11 +509,10 @@ router.get('/prestamos/activos', async (req, res) => {
             ORDER BY a.fecha_asignacion DESC
         `);
         
-        console.log(`✅ ${result.recordset.length} préstamos activos encontrados`);
         res.json({ success: true, data: result.recordset });
         
     } catch (error) {
-        console.error('❌ Error en GET /prestamos/activos:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
@@ -523,8 +533,6 @@ router.get('/prestamos/estadisticas', async (req, res) => {
             WHERE es_prestamo = 1
         `);
         
-        console.log(`✅ Estadísticas de préstamos:`, result.recordset[0]);
-        
         res.json({
             success: true,
             data: {
@@ -536,7 +544,7 @@ router.get('/prestamos/estadisticas', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ Error en GET /prestamos/estadisticas:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -558,9 +566,6 @@ router.get('/prestamos/historial', async (req, res) => {
                 a.observaciones,
                 a.fecha_asignacion,
                 a.fecha_devolucion,
-                a.observaciones_devolucion,
-                a.condicion_entrega,
-                a.usuario_responsable,
                 a.es_prestamo,
                 p.nombre as producto_nombre,
                 p.marca,
@@ -583,12 +588,10 @@ router.get('/prestamos/historial', async (req, res) => {
             request.input('fecha_inicio', sql.DateTime, fecha_inicio);
             condiciones.push('a.fecha_asignacion >= @fecha_inicio');
         }
-        
         if (fecha_fin) {
             request.input('fecha_fin', sql.DateTime, fecha_fin);
             condiciones.push('a.fecha_asignacion <= @fecha_fin');
         }
-        
         if (colaborador_id) {
             request.input('colaborador_id', sql.Int, colaborador_id);
             condiciones.push('a.colaborador_id = @colaborador_id');
@@ -597,32 +600,29 @@ router.get('/prestamos/historial', async (req, res) => {
         if (condiciones.length > 0) {
             query += ' AND ' + condiciones.join(' AND ');
         }
-        
         query += ' ORDER BY a.fecha_asignacion DESC';
         
         const result = await request.query(query);
-        
-        console.log(`✅ ${result.recordset.length} préstamos encontrados en historial`);
-        
-        res.json({
-            success: true,
-            data: result.recordset
-        });
+        res.json({ success: true, data: result.recordset });
         
     } catch (error) {
-        console.error('❌ Error en GET /prestamos/historial:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
 
-// GET - Buscar documento por asignación ID y tipo (NUEVO ENDPOINT)
+// ============================================
+// ENDPOINTS PARA DOCUMENTOS
+// ============================================
+
+// GET - Buscar documento por asignación ID y tipo
 router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
     try {
         const { asignacionId, tipo } = req.params;
         console.log(`📥 GET /api/asignaciones/buscar-documento/${asignacionId}/${tipo}`);
         
         if (!fs.existsSync(DOCS_DIR)) {
-            return res.json({ success: false, message: 'Directorio de documentos no encontrado', filename: null });
+            return res.json({ success: false, message: 'Directorio no encontrado', filename: null });
         }
         
         const files = fs.readdirSync(DOCS_DIR);
@@ -633,27 +633,23 @@ router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
         const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
         
         if (foundFile) {
-            console.log(`✅ Documento encontrado: ${foundFile}`);
-            res.json({
-                success: true,
-                data: { filename: foundFile }
-            });
+            res.json({ success: true, data: { filename: foundFile } });
         } else {
-            console.log(`⚠️ Documento no encontrado para ${pattern}`);
             res.json({ success: false, message: 'Documento no encontrado', filename: null });
         }
     } catch (error) {
-        console.error('❌ Error en GET /buscar-documento:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, filename: null });
     }
 });
 
-// GET - Descargar acta por filename
+// GET - Descargar documento por filename
 router.get('/descargar/:filename', (req, res) => {
     try {
         const { filename } = req.params;
+        console.log(`📥 GET /api/asignaciones/descargar/${filename}`);
         
-        if (!filename || !filename.endsWith('.pdf')) {
+        if (!filename) {
             return res.status(400).json({ success: false, message: 'Nombre de archivo inválido' });
         }
         
@@ -661,20 +657,33 @@ router.get('/descargar/:filename', (req, res) => {
         const filepath = path.join(DOCS_DIR, safeFilename);
         
         if (!fs.existsSync(filepath)) {
+            // Buscar archivo alternativo
+            const files = fs.readdirSync(DOCS_DIR);
+            const pattern = safeFilename.split('_').slice(0, 3).join('_');
+            const foundFile = files.find(f => f.includes(pattern) && f.endsWith('.pdf'));
+            
+            if (foundFile) {
+                const foundPath = path.join(DOCS_DIR, foundFile);
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
+                const fileStream = fs.createReadStream(foundPath);
+                fileStream.pipe(res);
+                return;
+            }
+            
             return res.status(404).json({ success: false, message: 'Documento no encontrado' });
         }
         
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
         res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         
         const fileStream = fs.createReadStream(filepath);
         fileStream.pipe(res);
         console.log(`✅ Documento descargado: ${safeFilename}`);
         
     } catch (error) {
-        console.error('Error descargando documento:', error);
+        console.error('Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -696,21 +705,12 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             es_prestamo
         } = req.body;
         
-        // Si es préstamo, no generar documento
         if (es_prestamo) {
-            console.log('⚠️ Es un préstamo, no se genera documento');
-            return res.json({
-                success: true,
-                message: 'Préstamo registrado sin documento',
-                es_prestamo: true
-            });
+            return res.json({ success: true, message: 'Préstamo sin documento', es_prestamo: true });
         }
         
         if (!colaborador || !productos || productos.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Datos incompletos: colaborador y productos son requeridos' 
-            });
+            return res.status(400).json({ success: false, message: 'Datos incompletos' });
         }
         
         const pdfBuffer = await generarActaAsignacion({
@@ -722,24 +722,23 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             observaciones: observaciones || 'Sin observaciones',
             firma_trabajador: firma_trabajador || colaborador.nombre,
             firma_gerente: firma_gerente || EMPRESA.representante_legal,
-            es_prestamo: es_prestamo || false
+            es_prestamo: false
         });
+        
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('No se pudo generar el PDF');
+        }
         
         const filename = `acta_asignacion_${id_asignacion || Date.now()}.pdf`;
         const filepath = path.join(DOCS_DIR, filename);
         fs.writeFileSync(filepath, pdfBuffer);
         
-        console.log(`✅ Acta de asignación generada: ${filename}`);
+        console.log(`✅ Acta guardada: ${filename} (${pdfBuffer.length} bytes)`);
         
-        res.json({
-            success: true,
-            message: 'Acta de asignación generada exitosamente',
-            filename: filename,
-            filepath: `/uploads/documentos/${filename}`
-        });
+        res.json({ success: true, message: 'Acta generada exitosamente', filename: filename });
         
     } catch (error) {
-        console.error('❌ Error generando acta:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -753,7 +752,6 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             id_asignacion,
             colaborador,
             productos,
-            fecha_asignacion,
             fecha_recepcion,
             motivo,
             observaciones,
@@ -763,57 +761,243 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             es_prestamo
         } = req.body;
         
-        // Si es préstamo, no generar documento
         if (es_prestamo) {
-            console.log('⚠️ Es un préstamo, no se genera documento de recepción');
-            return res.json({
-                success: true,
-                message: 'Devolución de préstamo registrada sin documento',
-                es_prestamo: true
-            });
+            return res.json({ success: true, message: 'Préstamo sin documento', es_prestamo: true });
         }
         
         if (!colaborador || !productos || productos.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Datos incompletos: colaborador y productos son requeridos' 
-            });
+            return res.status(400).json({ success: false, message: 'Datos incompletos' });
         }
         
         const pdfBuffer = await generarActaRecepcion({
             id_asignacion: id_asignacion || Date.now(),
             colaborador,
             productos,
-            fecha_asignacion: fecha_asignacion || new Date(),
             fecha_recepcion: fecha_recepcion || new Date(),
             motivo: motivo || 'Devolución de equipo',
             observaciones: observaciones || 'Sin observaciones',
             condicion_entrega: condicion_entrega || 'BUENO',
             firma_trabajador: firma_trabajador || colaborador.nombre,
             firma_gerente: firma_gerente || EMPRESA.representante_legal,
-            es_prestamo: es_prestamo || false
+            es_prestamo: false
         });
+        
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('No se pudo generar el PDF');
+        }
         
         const filename = `acta_recepcion_${id_asignacion || Date.now()}.pdf`;
         const filepath = path.join(DOCS_DIR, filename);
         fs.writeFileSync(filepath, pdfBuffer);
         
-        console.log(`✅ Acta de recepción generada: ${filename}`);
+        console.log(`✅ Acta guardada: ${filename} (${pdfBuffer.length} bytes)`);
         
-        res.json({
-            success: true,
-            message: 'Acta de recepción generada exitosamente',
-            filename: filename,
-            filepath: `/uploads/documentos/${filename}`
-        });
+        res.json({ success: true, message: 'Acta generada exitosamente', filename: filename });
         
     } catch (error) {
-        console.error('❌ Error generando acta:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// GET - Obtener estadísticas generales (incluye préstamos)
+// GET - Descargar acta de asignación por ID
+router.get('/descargar-acta/:asignacionId', async (req, res) => {
+    try {
+        const { asignacionId } = req.params;
+        console.log(`📥 GET /api/asignaciones/descargar-acta/${asignacionId}`);
+        
+        if (!fs.existsSync(DOCS_DIR)) {
+            return res.status(404).json({ success: false, message: 'Directorio no encontrado' });
+        }
+        
+        const files = fs.readdirSync(DOCS_DIR);
+        const pattern = `acta_asignacion_${asignacionId}`;
+        const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
+        
+        if (!foundFile) {
+            return res.status(404).json({ success: false, message: 'Acta no encontrada' });
+        }
+        
+        const filepath = path.join(DOCS_DIR, foundFile);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
+        
+        const fileStream = fs.createReadStream(filepath);
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Descargar acta de recepción por ID
+router.get('/descargar-acta-recepcion/:asignacionId', async (req, res) => {
+    try {
+        const { asignacionId } = req.params;
+        console.log(`📥 GET /api/asignaciones/descargar-acta-recepcion/${asignacionId}`);
+        
+        if (!fs.existsSync(DOCS_DIR)) {
+            return res.status(404).json({ success: false, message: 'Directorio no encontrado' });
+        }
+        
+        const files = fs.readdirSync(DOCS_DIR);
+        const pattern = `acta_recepcion_${asignacionId}`;
+        const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
+        
+        if (!foundFile) {
+            return res.status(404).json({ success: false, message: 'Acta no encontrada' });
+        }
+        
+        const filepath = path.join(DOCS_DIR, foundFile);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
+        
+        const fileStream = fs.createReadStream(filepath);
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// POST - Generar PDF de asignación (endpoint simplificado)
+router.post('/generar-pdf/:asignacionId', async (req, res) => {
+    try {
+        const { asignacionId } = req.params;
+        console.log(`📥 POST /api/asignaciones/generar-pdf/${asignacionId}`);
+        
+        const pool = await getConnection();
+        
+        // Obtener datos de la asignación
+        const result = await pool.request()
+            .input('id', sql.Int, asignacionId)
+            .query(`
+                SELECT a.*, p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
+                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.cargo as colaborador_cargo
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.id = @id
+            `);
+        
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Asignación no encontrada' });
+        }
+        
+        const data = result.recordset[0];
+        
+        // Generar PDF
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+            const pdfData = Buffer.concat(buffers);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="acta_asignacion_${asignacionId}.pdf"`);
+            res.send(pdfData);
+        });
+        
+        // Contenido del PDF
+        doc.fontSize(18).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(10).text(`ID Asignación: ${asignacionId}`);
+        doc.text(`Fecha: ${new Date().toLocaleDateString()}`);
+        doc.moveDown();
+        doc.fontSize(12).text('DATOS DEL COLABORADOR', { underline: true });
+        doc.text(`Nombre: ${data.colaborador_nombre}`);
+        doc.text(`RUT: ${data.colaborador_rut}`);
+        doc.text(`Cargo: ${data.colaborador_cargo}`);
+        doc.moveDown();
+        doc.fontSize(12).text('DATOS DEL EQUIPO', { underline: true });
+        doc.text(`Producto: ${data.producto_nombre}`);
+        doc.text(`N° Serie: ${data.numero_serie}`);
+        doc.text(`Marca/Modelo: ${data.marca} ${data.modelo}`);
+        doc.moveDown();
+        doc.fontSize(12).text('FIRMAS', { underline: true });
+        doc.moveDown();
+        doc.text('_________________________', { align: 'center' });
+        doc.text('Firma del Trabajador', { align: 'center' });
+        doc.moveDown();
+        doc.text('_________________________', { align: 'center' });
+        doc.text('Firma del Gerente', { align: 'center' });
+        
+        doc.end();
+        
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Descargar PDF de asignación (endpoint simplificado)
+router.get('/descargar-pdf/:asignacionId', async (req, res) => {
+    try {
+        const { asignacionId } = req.params;
+        console.log(`📥 GET /api/asignaciones/descargar-pdf/${asignacionId}`);
+        
+        const pool = await getConnection();
+        
+        const result = await pool.request()
+            .input('id', sql.Int, asignacionId)
+            .query(`
+                SELECT a.*, p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
+                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.cargo as colaborador_cargo
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.id = @id
+            `);
+        
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Asignación no encontrada' });
+        }
+        
+        const data = result.recordset[0];
+        
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+            const pdfData = Buffer.concat(buffers);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="acta_asignacion_${asignacionId}.pdf"`);
+            res.send(pdfData);
+        });
+        
+        doc.fontSize(18).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(10).text(`ID Asignación: ${asignacionId}`);
+        doc.text(`Fecha: ${new Date(data.fecha_asignacion).toLocaleDateString()}`);
+        doc.moveDown();
+        doc.fontSize(12).text('DATOS DEL COLABORADOR', { underline: true });
+        doc.text(`Nombre: ${data.colaborador_nombre}`);
+        doc.text(`RUT: ${data.colaborador_rut}`);
+        doc.text(`Cargo: ${data.colaborador_cargo}`);
+        doc.moveDown();
+        doc.fontSize(12).text('DATOS DEL EQUIPO', { underline: true });
+        doc.text(`Producto: ${data.producto_nombre}`);
+        doc.text(`N° Serie: ${data.numero_serie}`);
+        doc.text(`Marca/Modelo: ${data.marca} ${data.modelo}`);
+        doc.moveDown();
+        
+        if (data.firma_trabajador) {
+            doc.fontSize(10).text(`Firma Trabajador: ${data.firma_trabajador}`);
+        }
+        if (data.firma_gerente) {
+            doc.fontSize(10).text(`Firma Gerente: ${data.firma_gerente}`);
+        }
+        
+        doc.end();
+        
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Obtener estadísticas generales
 router.get('/estadisticas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/estadisticas');
@@ -829,8 +1013,6 @@ router.get('/estadisticas', async (req, res) => {
             FROM INV.asignaciones
         `);
         
-        console.log(`✅ Estadísticas generales:`, result.recordset[0]);
-        
         res.json({
             success: true,
             data: {
@@ -843,19 +1025,18 @@ router.get('/estadisticas', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ Error en GET /estadisticas:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// POST - Crear asignación (incluye es_prestamo)
+// POST - Crear asignación
 router.post('/', async (req, res) => {
     let pool;
     let transaction;
     
     try {
         console.log('📥 POST /api/asignaciones');
-        console.log('Body recibido:', req.body);
         
         const { 
             producto_id, 
@@ -863,320 +1044,248 @@ router.post('/', async (req, res) => {
             motivo, 
             observaciones, 
             fecha_asignacion,
-            documento_path, 
-            condicion_entrega, 
-            firma_trabajador, 
+            firma_trabajador,
             firma_gerente,
             es_prestamo
         } = req.body;
         
         if (!producto_id || !colaborador_id) {
-            return res.status(400).json({ success: false, message: 'producto_id y colaborador_id son requeridos' });
+            return res.status(400).json({ success: false, message: 'Faltan campos requeridos' });
         }
         
-        let productoIdNum, colaboradorIdNum;
-        try {
-            productoIdNum = validarId(producto_id, 'producto_id');
-            colaboradorIdNum = validarId(colaborador_id, 'colaborador_id');
-        } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
-        }
+        const productoIdNum = validarId(producto_id, 'producto_id');
+        const colaboradorIdNum = validarId(colaborador_id, 'colaborador_id');
         
         pool = await getConnection();
         transaction = new sql.Transaction(pool);
         await transaction.begin();
         
-        try {
-            // Verificar producto
-            const productoCheck = await transaction.request()
-                .input('id', sql.Int, productoIdNum)
-                .query(`
-                    SELECT p.id, p.id_estado_equipo, p.nombre, p.numero_serie, p.marca, p.modelo, p.condicion
-                    FROM INV.productos p WHERE p.id = @id
-                `);
+        const productoCheck = await transaction.request()
+            .input('id', sql.Int, productoIdNum)
+            .query(`SELECT id, id_estado_equipo, nombre, numero_serie, marca, modelo, condicion FROM INV.productos WHERE id = @id`);
+        
+        if (productoCheck.recordset.length === 0) {
+            await transaction.rollback();
+            return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+        }
+        
+        const producto = productoCheck.recordset[0];
+        
+        if (producto.id_estado_equipo !== ESTADOS.DISPONIBLE) {
+            await transaction.rollback();
+            return res.status(400).json({ success: false, message: `Producto no disponible. Estado: ${getEstadoTexto(producto.id_estado_equipo)}` });
+        }
+        
+        const colaboradorCheck = await transaction.request()
+            .input('id', sql.Int, colaboradorIdNum)
+            .query(`SELECT id, nombre, email, rut, cargo, departamento, direccion, fecha_nacimiento FROM INV.colaboradores WHERE id = @id AND estado = 'ACTIVO'`);
+        
+        if (colaboradorCheck.recordset.length === 0) {
+            await transaction.rollback();
+            return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
+        }
+        
+        const colaborador = colaboradorCheck.recordset[0];
+        const fechaAsignacionValue = fecha_asignacion ? new Date(fecha_asignacion) : new Date();
+        const esPrestamoValue = es_prestamo === true || es_prestamo === 1;
+        
+        const insertAsignacion = await transaction.request()
+            .input('producto_id', sql.Int, productoIdNum)
+            .input('colaborador_id', sql.Int, colaboradorIdNum)
+            .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
+            .input('motivo', sql.NVarChar(500), motivo || (esPrestamoValue ? 'PRÉSTAMO TEMPORAL' : 'Asignación de equipo'))
+            .input('fecha_asignacion', sql.DateTime, fechaAsignacionValue)
+            .input('observaciones', sql.NVarChar(1000), observaciones || '')
+            .input('condicion_entrega', sql.NVarChar(50), 'BUENO')
+            .input('es_prestamo', sql.Bit, esPrestamoValue)
+            .query(`
+                INSERT INTO INV.asignaciones (
+                    producto_id, colaborador_id, id_estado_equipo, motivo, fecha_asignacion,
+                    observaciones, condicion_entrega, es_prestamo
+                ) VALUES (
+                    @producto_id, @colaborador_id, @id_estado_equipo, @motivo, @fecha_asignacion,
+                    @observaciones, @condicion_entrega, @es_prestamo
+                );
+                SELECT SCOPE_IDENTITY() as id;
+            `);
+        
+        const asignacionId = insertAsignacion.recordset[0].id;
+        
+        await transaction.request()
+            .input('id', sql.Int, productoIdNum)
+            .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
+            .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
+        
+        let documentoGenerado = null;
+        
+        if (!esPrestamoValue) {
+            const documentoData = {
+                id_asignacion: asignacionId,
+                colaborador: {
+                    nombre: colaborador.nombre,
+                    rut: colaborador.rut,
+                    email: colaborador.email,
+                    cargo: colaborador.cargo,
+                    departamento: colaborador.departamento,
+                    direccion: colaborador.direccion || EMPRESA.domicilio,
+                    fecha_nacimiento: colaborador.fecha_nacimiento || '1990-01-01'
+                },
+                productos: [{
+                    tipo: 'Equipo',
+                    nombre: producto.nombre,
+                    marca: producto.marca || 'N/A',
+                    modelo: producto.modelo || 'N/A',
+                    numero_serie: producto.numero_serie || 'N/A',
+                    condicion: producto.condicion || 'NUEVO',
+                    cantidad: 1
+                }],
+                fecha_asignacion: fechaAsignacionValue,
+                motivo: motivo || 'Asignación de equipo',
+                observaciones: observaciones || 'Sin observaciones',
+                firma_trabajador: firma_trabajador || colaborador.nombre,
+                firma_gerente: firma_gerente || EMPRESA.representante_legal,
+                es_prestamo: false
+            };
             
-            if (productoCheck.recordset.length === 0) {
-                await transaction.rollback();
-                return res.status(404).json({ success: false, message: 'Producto no encontrado' });
-            }
-            
-            const producto = productoCheck.recordset[0];
-            console.log(`📊 Producto: ${producto.nombre}, Estado: ${producto.id_estado_equipo === 1 ? 'DISPONIBLE' : getEstadoTexto(producto.id_estado_equipo)}`);
-            
-            if (producto.id_estado_equipo !== ESTADOS.DISPONIBLE) {
-                await transaction.rollback();
-                return res.status(400).json({ success: false, message: `Producto no disponible. Estado: ${getEstadoTexto(producto.id_estado_equipo)}` });
-            }
-            
-            // Verificar colaborador
-            const colaboradorCheck = await transaction.request()
-                .input('id', sql.Int, colaboradorIdNum)
-                .query(`
-                    SELECT c.id, c.nombre, c.email, c.rut, c.cargo, c.departamento, c.direccion, c.fecha_nacimiento
-                    FROM INV.colaboradores c WHERE c.id = @id AND c.estado = 'ACTIVO'
-                `);
-            
-            if (colaboradorCheck.recordset.length === 0) {
-                await transaction.rollback();
-                return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
-            }
-            
-            const colaborador = colaboradorCheck.recordset[0];
-            const fechaAsignacionValue = fecha_asignacion ? new Date(fecha_asignacion) : new Date();
-            const esPrestamoValue = es_prestamo === true || es_prestamo === 1;
-            
-            // Insertar asignación con es_prestamo
-            const insertAsignacion = await transaction.request()
-                .input('producto_id', sql.Int, productoIdNum)
-                .input('colaborador_id', sql.Int, colaboradorIdNum)
-                .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
-                .input('motivo', sql.NVarChar(500), motivo || (esPrestamoValue ? 'PRÉSTAMO TEMPORAL' : 'Asignación de equipo'))
-                .input('fecha_asignacion', sql.DateTime, fechaAsignacionValue)
-                .input('documento_path', sql.NVarChar(500), documento_path || '')
-                .input('observaciones', sql.NVarChar(1000), observaciones || '')
-                .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
-                .input('es_prestamo', sql.Bit, esPrestamoValue)
-                .query(`
-                    INSERT INTO INV.asignaciones (
-                        producto_id, colaborador_id, id_estado_equipo, motivo, fecha_asignacion, 
-                        documento_path, observaciones, condicion_entrega, es_prestamo
-                    ) VALUES (
-                        @producto_id, @colaborador_id, @id_estado_equipo, @motivo, @fecha_asignacion,
-                        @documento_path, @observaciones, @condicion_entrega, @es_prestamo
-                    );
-                    SELECT SCOPE_IDENTITY() as id;
-                `);
-            
-            const asignacionId = insertAsignacion.recordset[0].id;
-            console.log(`✅ ${esPrestamoValue ? 'Préstamo' : 'Asignación'} insertada con ID: ${asignacionId}`);
-            
-            // Actualizar estado del producto a ASIGNADO
-            await transaction.request()
-                .input('id', sql.Int, productoIdNum)
-                .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
-                .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
-            
-            let documentoGenerado = null;
-            
-            // Solo generar acta si NO es préstamo
-            if (!esPrestamoValue) {
-                const documentoData = {
-                    id_asignacion: asignacionId,
-                    colaborador: {
-                        nombre: colaborador.nombre,
-                        rut: colaborador.rut,
-                        email: colaborador.email,
-                        cargo: colaborador.cargo,
-                        departamento: colaborador.departamento,
-                        direccion: colaborador.direccion || EMPRESA.domicilio,
-                        fecha_nacimiento: colaborador.fecha_nacimiento || '1990-01-01'
-                    },
-                    productos: [{
-                        tipo: 'Equipo',
-                        nombre: producto.nombre,
-                        marca: producto.marca || 'N/A',
-                        modelo: producto.modelo || 'N/A',
-                        numero_serie: producto.numero_serie || 'N/A',
-                        condicion: producto.condicion || 'NUEVO',
-                        cantidad: 1
-                    }],
-                    fecha_asignacion: fechaAsignacionValue,
-                    motivo: motivo || 'Asignación de equipo',
-                    observaciones: observaciones || 'Sin observaciones',
-                    firma_trabajador: firma_trabajador || colaborador.nombre,
-                    firma_gerente: firma_gerente || EMPRESA.representante_legal,
-                    es_prestamo: false
-                };
-                
-                const pdfBuffer = await generarActaAsignacion(documentoData);
+            const pdfBuffer = await generarActaAsignacion(documentoData);
+            if (pdfBuffer && pdfBuffer.length > 0) {
                 const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
                 const filepath = path.join(DOCS_DIR, filename);
                 fs.writeFileSync(filepath, pdfBuffer);
-                console.log(`✅ Acta de asignación guardada: ${filename}`);
-                
-                documentoGenerado = {
-                    filename: filename,
-                    ruta: `/uploads/documentos/${filename}`,
-                    tipo: 'ASIGNACION'
-                };
+                documentoGenerado = { filename: filename };
             }
-            
-            await transaction.commit();
-            console.log('✅ Transacción CONFIRMADA');
-            
-            res.json({
-                success: true,
-                message: esPrestamoValue 
-                    ? `Préstamo registrado correctamente para ${colaborador.nombre} (sin documento)` 
-                    : `Producto asignado correctamente a ${colaborador.nombre}`,
-                data: {
-                    id: asignacionId,
-                    es_prestamo: esPrestamoValue,
-                    producto: { id: producto.id, nombre: producto.nombre, numero_serie: producto.numero_serie },
-                    colaborador: { id: colaborador.id, nombre: colaborador.nombre, rut: colaborador.rut, email: colaborador.email, cargo: colaborador.cargo },
-                    documento: documentoGenerado
-                }
-            });
-            
-        } catch (error) {
-            if (transaction) await transaction.rollback();
-            console.error('❌ Error en transacción:', error);
-            throw error;
         }
         
+        await transaction.commit();
+        
+        res.json({
+            success: true,
+            message: esPrestamoValue ? 'Préstamo registrado correctamente' : 'Producto asignado correctamente',
+            data: {
+                id: asignacionId,
+                es_prestamo: esPrestamoValue,
+                documento: documentoGenerado
+            }
+        });
+        
     } catch (error) {
-        console.error('❌ Error en POST /asignaciones:', error);
+        if (transaction) await transaction.rollback();
+        console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// PUT - Finalizar asignación (incluye préstamos)
+// PUT - Finalizar asignación
 router.put('/:asignacionId/finalizar', async (req, res) => {
     let pool;
     let transaction;
     
     try {
         const { asignacionId } = req.params;
-        const { 
-            fecha_devolucion, 
-            motivo_devolucion,
-            observaciones_devolucion, 
-            condicion_entrega, 
-            firma_trabajador_devolucion, 
-            firma_gerente_devolucion 
-        } = req.body;
+        const { fecha_devolucion, motivo_devolucion, observaciones_devolucion, condicion_entrega, firma_trabajador_devolucion, firma_gerente_devolucion } = req.body;
         
         console.log(`📥 PUT /api/asignaciones/${asignacionId}/finalizar`);
         
-        let asignacionIdNum;
-        try {
-            asignacionIdNum = validarId(asignacionId, 'ID de asignación');
-        } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
-        }
+        const asignacionIdNum = validarId(asignacionId, 'ID de asignación');
         
         pool = await getConnection();
         transaction = new sql.Transaction(pool);
         await transaction.begin();
         
-        try {
-            const asignacionResult = await transaction.request()
-                .input('id', sql.Int, asignacionIdNum)
-                .query(`
-                    SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.motivo, a.observaciones, a.es_prestamo,
-                           p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo, p.condicion as producto_condicion,
-                           c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
-                           c.cargo as colaborador_cargo, c.departamento as colaborador_departamento,
-                           c.direccion as colaborador_direccion, c.fecha_nacimiento as colaborador_fecha_nacimiento
-                    FROM INV.asignaciones a
-                    LEFT JOIN INV.productos p ON a.producto_id = p.id
-                    LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                    WHERE a.id = @id AND a.fecha_devolucion IS NULL
-                `);
+        const asignacionResult = await transaction.request()
+            .input('id', sql.Int, asignacionIdNum)
+            .query(`
+                SELECT a.id, a.producto_id, a.colaborador_id, a.es_prestamo,
+                       p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
+                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
+                       c.cargo as colaborador_cargo, c.departamento as colaborador_departamento,
+                       c.direccion as colaborador_direccion
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.id = @id AND a.fecha_devolucion IS NULL
+            `);
+        
+        if (asignacionResult.recordset.length === 0) {
+            await transaction.rollback();
+            return res.status(404).json({ success: false, message: 'Asignación no encontrada o ya finalizada' });
+        }
+        
+        const asignacion = asignacionResult.recordset[0];
+        const fechaRecepcionValue = fecha_devolucion ? new Date(fecha_devolucion) : new Date();
+        const esPrestamoValue = asignacion.es_prestamo === true || asignacion.es_prestamo === 1;
+        
+        await transaction.request()
+            .input('id', sql.Int, asignacionIdNum)
+            .input('fecha_devolucion', sql.DateTime, fechaRecepcionValue)
+            .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
+            .input('observaciones', sql.NVarChar(2000), observaciones_devolucion || '')
+            .input('firma_trabajador_devolucion', sql.NVarChar, firma_trabajador_devolucion || null)
+            .input('firma_gerente_devolucion', sql.NVarChar, firma_gerente_devolucion || null)
+            .query(`
+                UPDATE INV.asignaciones 
+                SET fecha_devolucion = @fecha_devolucion, 
+                    condicion_entrega = @condicion_entrega,
+                    observaciones = @observaciones,
+                    firma_trabajador_devolucion = @firma_trabajador_devolucion,
+                    firma_gerente_devolucion = @firma_gerente_devolucion
+                WHERE id = @id
+            `);
+        
+        await transaction.request()
+            .input('id', sql.Int, asignacion.producto_id)
+            .input('id_estado_equipo', sql.Int, ESTADOS.DISPONIBLE)
+            .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
+        
+        let documentoGenerado = null;
+        
+        if (!esPrestamoValue) {
+            const recepcionData = {
+                id_asignacion: asignacionIdNum,
+                colaborador: {
+                    nombre: asignacion.colaborador_nombre,
+                    rut: asignacion.colaborador_rut,
+                    email: asignacion.colaborador_email,
+                    cargo: asignacion.colaborador_cargo,
+                    departamento: asignacion.colaborador_departamento,
+                    direccion: asignacion.colaborador_direccion || EMPRESA.domicilio
+                },
+                productos: [{
+                    tipo: 'Equipo',
+                    nombre: asignacion.producto_nombre,
+                    marca: asignacion.marca || 'N/A',
+                    modelo: asignacion.modelo || 'N/A',
+                    numero_serie: asignacion.numero_serie || 'N/A',
+                    cantidad: 1
+                }],
+                fecha_recepcion: fechaRecepcionValue,
+                motivo: motivo_devolucion || 'Devolución de equipo',
+                observaciones: observaciones_devolucion || 'Sin observaciones',
+                condicion_entrega: condicion_entrega || 'BUENO',
+                firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
+                firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal,
+                es_prestamo: false
+            };
             
-            if (asignacionResult.recordset.length === 0) {
-                await transaction.rollback();
-                return res.status(404).json({ success: false, message: 'Asignación no encontrada o ya finalizada' });
-            }
-            
-            const asignacion = asignacionResult.recordset[0];
-            const fechaRecepcionValue = fecha_devolucion ? new Date(fecha_devolucion) : new Date();
-            const esPrestamoValue = asignacion.es_prestamo === true || asignacion.es_prestamo === 1;
-            
-            const observacionesCombinadas = `[MOTIVO DEVOLUCIÓN]: ${motivo_devolucion || 'No especificado'}
-[OBSERVACIONES]: ${observaciones_devolucion || 'Sin observaciones'}
-[CONDICIÓN]: ${condicion_entrega || 'BUENO'}
-[FECHA RECEPCIÓN]: ${new Date().toLocaleString()}`;
-            
-            await transaction.request()
-                .input('id', sql.Int, asignacionIdNum)
-                .input('fecha_devolucion', sql.DateTime, fechaRecepcionValue)
-                .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
-                .input('observaciones', sql.NVarChar(2000), observacionesCombinadas)
-                .input('firma_trabajador_devolucion', sql.NVarChar, firma_trabajador_devolucion || null)
-                .input('firma_gerente_devolucion', sql.NVarChar, firma_gerente_devolucion || null)
-                .query(`
-                    UPDATE INV.asignaciones 
-                    SET fecha_devolucion = @fecha_devolucion, 
-                        condicion_entrega = @condicion_entrega,
-                        observaciones = @observaciones,
-                        firma_trabajador_devolucion = @firma_trabajador_devolucion,
-                        firma_gerente_devolucion = @firma_gerente_devolucion
-                    WHERE id = @id
-                `);
-            
-            await transaction.request()
-                .input('id', sql.Int, asignacion.producto_id)
-                .input('id_estado_equipo', sql.Int, ESTADOS.DISPONIBLE)
-                .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
-            
-            let documentoGenerado = null;
-            
-            // Solo generar acta si NO es préstamo
-            if (!esPrestamoValue) {
-                const recepcionData = {
-                    id_asignacion: asignacionIdNum,
-                    colaborador: {
-                        nombre: asignacion.colaborador_nombre,
-                        rut: asignacion.colaborador_rut,
-                        email: asignacion.colaborador_email,
-                        cargo: asignacion.colaborador_cargo,
-                        departamento: asignacion.colaborador_departamento,
-                        direccion: asignacion.colaborador_direccion || EMPRESA.domicilio,
-                        fecha_nacimiento: asignacion.colaborador_fecha_nacimiento || '1990-01-01'
-                    },
-                    productos: [{
-                        tipo: 'Equipo',
-                        nombre: asignacion.producto_nombre,
-                        marca: asignacion.marca || 'N/A',
-                        modelo: asignacion.modelo || 'N/A',
-                        numero_serie: asignacion.numero_serie || 'N/A',
-                        condicion_asignacion: asignacion.producto_condicion || 'NUEVO',
-                        condicion_entrega: condicion_entrega || 'BUENO',
-                        cantidad: 1
-                    }],
-                    fecha_recepcion: fechaRecepcionValue,
-                    motivo: motivo_devolucion || asignacion.motivo || 'Devolución de equipo',
-                    observaciones: observaciones_devolucion || 'Sin observaciones',
-                    condicion_entrega: condicion_entrega || 'BUENO',
-                    firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
-                    firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal,
-                    es_prestamo: false
-                };
-                
-                const pdfBuffer = await generarActaRecepcion(recepcionData);
+            const pdfBuffer = await generarActaRecepcion(recepcionData);
+            if (pdfBuffer && pdfBuffer.length > 0) {
                 const filename = `acta_recepcion_${asignacionIdNum}_${Date.now()}.pdf`;
                 const filepath = path.join(DOCS_DIR, filename);
                 fs.writeFileSync(filepath, pdfBuffer);
-                console.log(`✅ Acta de recepción guardada: ${filename}`);
-                
-                documentoGenerado = {
-                    filename: filename,
-                    ruta: `/uploads/documentos/${filename}`,
-                    tipo: 'RECEPCION'
-                };
+                documentoGenerado = { filename: filename };
             }
-            
-            await transaction.commit();
-            console.log(`✅ ${esPrestamoValue ? 'Préstamo' : 'Asignación'} finalizada correctamente`);
-            
-            res.json({
-                success: true,
-                message: esPrestamoValue 
-                    ? 'Devolución de préstamo registrada correctamente (sin documento)' 
-                    : 'Devolución registrada correctamente',
-                data: { 
-                    es_prestamo: esPrestamoValue,
-                    documento: documentoGenerado 
-                }
-            });
-            
-        } catch (error) {
-            if (transaction) await transaction.rollback();
-            throw error;
         }
         
+        await transaction.commit();
+        
+        res.json({
+            success: true,
+            message: esPrestamoValue ? 'Devolución de préstamo registrada' : 'Devolución registrada correctamente',
+            data: { es_prestamo: esPrestamoValue, documento: documentoGenerado }
+        });
+        
     } catch (error) {
+        if (transaction) await transaction.rollback();
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
@@ -1186,33 +1295,19 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
 router.get('/historial', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/historial');
-        
         const pool = await getConnection();
         
         const result = await pool.request().query(`
-            SELECT 
-                a.id,
-                a.producto_id,
-                a.colaborador_id,
-                a.motivo,
-                a.observaciones,
-                a.fecha_asignacion,
-                a.fecha_devolucion,
-                a.es_prestamo,
-                p.nombre as producto_nombre,
-                p.numero_serie,
-                p.marca,
-                p.modelo,
-                c.nombre as colaborador_nombre,
-                c.email as colaborador_email,
-                c.cargo as colaborador_cargo
+            SELECT a.id, a.producto_id, a.colaborador_id, a.motivo, a.observaciones,
+                   a.fecha_asignacion, a.fecha_devolucion, a.es_prestamo,
+                   p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
+                   c.nombre as colaborador_nombre, c.email as colaborador_email, c.cargo as colaborador_cargo
             FROM INV.asignaciones a
             LEFT JOIN INV.productos p ON a.producto_id = p.id
             LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
             ORDER BY a.fecha_asignacion DESC
         `);
         
-        console.log(`✅ ${result.recordset.length} registros encontrados`);
         res.json({ success: true, data: result.recordset });
         
     } catch (error) {
@@ -1225,12 +1320,7 @@ router.get('/historial', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        let idNum;
-        try {
-            idNum = validarId(id, 'ID de asignación');
-        } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
-        }
+        const idNum = validarId(id, 'ID de asignación');
         
         const pool = await getConnection();
         const result = await pool.request()

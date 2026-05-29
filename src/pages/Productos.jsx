@@ -1,4 +1,4 @@
-// src/pages/Productos.jsx - VERSIÓN COMPLETA CORREGIDA (BODEGA NO OBLIGATORIA)
+// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO PARA NOMBRE DE PRODUCTO
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -55,7 +55,8 @@ import {
     Collapse,
     Accordion,
     AccordionSummary,
-    AccordionDetails
+    AccordionDetails,
+    Autocomplete
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -1382,7 +1383,7 @@ function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialU
 }
 
 // ============================================
-// FORMULARIO DE PRODUCTO CON BODEGA NO OBLIGATORIA
+// FORMULARIO DE PRODUCTO CON AUTOCOMPLETADO PARA NOMBRE
 // ============================================
 function ProductoForm({ open, onClose, producto, onSave }) {
     const [formData, setFormData] = useState({
@@ -1422,6 +1423,10 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const [fechaTerminoMantencion, setFechaTerminoMantencion] = useState(new Date().toISOString().split('T')[0]);
     const [observacionesMantencion, setObservacionesMantencion] = useState('');
 
+    // Estado para la lista de nombres de productos existentes (para el autocompletado)
+    const [nombresProductosExistentes, setNombresProductosExistentes] = useState([]);
+    const [todosLosProductos, setTodosLosProductos] = useState([]);
+
     const opcionesEstado = [
         'DISPONIBLE',
         'ASIGNADO',
@@ -1437,6 +1442,24 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const handleCloseSnackbar = () => {
         setSnackbar({ ...snackbar, open: false });
     };
+
+    // Cargar todos los productos para obtener los nombres existentes
+    useEffect(() => {
+        const fetchTodosLosProductos = async () => {
+            try {
+                const productosData = await productosService.getProductos('', {});
+                if (productosData && Array.isArray(productosData)) {
+                    setTodosLosProductos(productosData);
+                    // Extraer nombres únicos para el autocompletado
+                    const nombresUnicos = [...new Set(productosData.map(p => p.nombre).filter(n => n))];
+                    setNombresProductosExistentes(nombresUnicos.sort());
+                }
+            } catch (error) {
+                console.error('Error cargando productos para autocompletado:', error);
+            }
+        };
+        if (open) fetchTodosLosProductos();
+    }, [open]);
 
     // Cargar bodegas
     useEffect(() => {
@@ -1557,7 +1580,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         if (!formData.nombre?.trim()) nuevosErrores.nombre = 'El nombre es requerido';
         if (!formData.numero_serie?.trim()) nuevosErrores.numero_serie = 'El número de serie es requerido (producto único)';
         if (!formData.condicion) nuevosErrores.condicion = 'Debe seleccionar una condición';
-        // BODEGA NO ES OBLIGATORIA
         if (formData.estado === 'ASIGNADO' && !colaboradorSeleccionado) {
             nuevosErrores.asignacion = 'Debe seleccionar un colaborador para asignar el producto';
         }
@@ -1974,17 +1996,49 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label="Nombre del producto *"
-                                name="nombre"
+                            {/* AUTOCOMPLETADO PARA NOMBRE DE PRODUCTO */}
+                            <Autocomplete
+                                freeSolo
+                                options={nombresProductosExistentes}
                                 value={formData.nombre}
-                                onChange={handleChange}
-                                error={!!errores.nombre}
-                                helperText={errores.nombre}
-                                size="small"
-                                disabled={loading}
-                                required
+                                onInputChange={(event, newValue) => {
+                                    setFormData({ ...formData, nombre: newValue || '' });
+                                    if (errores.nombre) {
+                                        setErrores({ ...errores, nombre: null });
+                                    }
+                                }}
+                                onChange={(event, newValue) => {
+                                    setFormData({ ...formData, nombre: newValue || '' });
+                                    if (errores.nombre) {
+                                        setErrores({ ...errores, nombre: null });
+                                    }
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Nombre del producto *"
+                                        error={!!errores.nombre}
+                                        helperText={errores.nombre || "Escriba el nombre o seleccione uno existente"}
+                                        size="small"
+                                        disabled={loading}
+                                        required
+                                    />
+                                )}
+                                renderOption={(props, option) => (
+                                    <li {...props}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <InventoryIcon sx={{ fontSize: 16, color: colors.primary }} />
+                                            <Typography variant="body2">{option}</Typography>
+                                            <Chip 
+                                                label="Existente" 
+                                                size="small" 
+                                                sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
+                                            />
+                                        </Box>
+                                    </li>
+                                )}
+                                freeSoloHelperText="Si el producto no está en la lista, escriba el nombre y se creará como nuevo."
+                                fullWidth
                             />
                         </Grid>
 
@@ -2514,10 +2568,10 @@ const Productos = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [filters, setFilters] = useState({
-    estado: '',
-    condicion: '',
-    bodega_id: ''
-});
+        estado: '',
+        condicion: '',
+        bodega_id: ''
+    });
     
     // Estados para datos auxiliares
     const [marcas, setMarcas] = useState([]);
@@ -2662,13 +2716,13 @@ const Productos = () => {
         fetchData();
     }, [searchTerm, filters.marca, filters.estado, filters.condicion, filters.bodega_id]);
 
-        const handleClearFilters = () => {
+    const handleClearFilters = () => {
         setSearchTerm('');
         setFilters({
-    estado: '',
-    condicion: '',
-    bodega_id: ''
-});
+            estado: '',
+            condicion: '',
+            bodega_id: ''
+        });
         setPage(0);
     };
 
@@ -2887,58 +2941,28 @@ const Productos = () => {
         return `http://localhost:98/uploads/${imagenPath}`;
     };
 
-// ============================================
-// FILTROS CORREGIDOS
-// ============================================
-
-const filteredProductos = productos.filter((producto) => {
-
-    // FILTRO POR ESTADO
-    if (filters.estado && producto.estado !== filters.estado) {
-        return false;
-    }
-
-    // FILTRO POR CONDICION
-    if (filters.condicion && producto.condicion !== filters.condicion) {
-        return false;
-    }
-
-    // FILTRO POR BODEGA
-    if (filters.bodega_id && producto.bodega_id !== Number(filters.bodega_id)) {
-        return false;
-    }
-
-    // BUSCADOR GENERAL
-    if (searchTerm && searchTerm.trim() !== '') {
-
-        const term = searchTerm.toLowerCase().trim();
-
-        const nombre = (producto.nombre || '').toLowerCase();
-        const marca = (producto.marca || '').toLowerCase();
-        const modelo = (producto.modelo || '').toLowerCase();
-
-        const numeroSerie =
-            (producto.numero_serie ||
-            producto.numeroSerie ||
-            producto.serial ||
-            producto.serie ||
-            '').toLowerCase();
-
-        const codigo = (producto.codigo || '').toLowerCase();
-
-        if (
-            !nombre.includes(term) &&
-            !marca.includes(term) &&
-            !modelo.includes(term) &&
-            !numeroSerie.includes(term) &&
-            !codigo.includes(term)
-        ) {
+    const filteredProductos = productos.filter((producto) => {
+        if (filters.estado && producto.estado !== filters.estado) {
             return false;
         }
-    }
-
-    return true;
-});
+        if (filters.condicion && producto.condicion !== filters.condicion) {
+            return false;
+        }
+        if (filters.bodega_id && producto.bodega_id !== Number(filters.bodega_id)) {
+            return false;
+        }
+        if (searchTerm && searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase().trim();
+            const nombre = (producto.nombre || '').toLowerCase();
+            const marca = (producto.marca || '').toLowerCase();
+            const modelo = (producto.modelo || '').toLowerCase();
+            const numeroSerie = (producto.numero_serie || '').toLowerCase();
+            if (!nombre.includes(term) && !marca.includes(term) && !modelo.includes(term) && !numeroSerie.includes(term)) {
+                return false;
+            }
+        }
+        return true;
+    });
 
     const paginatedProductos = filteredProductos.slice(
         page * rowsPerPage,
@@ -2967,7 +2991,7 @@ const filteredProductos = productos.filter((producto) => {
         return iconos[estado] || <InventoryIcon fontSize="small" />;
     };
 
-        const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length + (searchTerm ? 1 : 0);
+    const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length + (searchTerm ? 1 : 0);
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar 
@@ -3197,76 +3221,71 @@ const filteredProductos = productos.filter((producto) => {
                         </Grid>
                     </Grid>
 
-<Collapse in={showAdvancedFilters}>
-    <Box sx={{ mt: 3 }}>
-        <Typography variant="subtitle2" className="filters-title">
-            FILTROS AVANZADOS
-        </Typography>
+                    <Collapse in={showAdvancedFilters}>
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle2" className="filters-title">
+                                FILTROS AVANZADOS
+                            </Typography>
 
-        <Grid container spacing={2}>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <FormControl fullWidth>
+                                        <InputLabel id="estado-label">Estado</InputLabel>
+                                        <Select
+                                            labelId="estado-label"
+                                            value={filters.estado}
+                                            onChange={handleFilterChange('estado')}
+                                            label="Estado"
+                                        >
+                                            <MenuItem value="">Todos</MenuItem>
+                                            {estados.map((estado) => (
+                                                <MenuItem key={estado.id} value={estado.nombre}>
+                                                    {estado.nombre}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
 
-            {/* FILTRO ESTADO */}
-            <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth>
-                    <InputLabel id="estado-label">Estado</InputLabel>
-                    <Select
-                        labelId="estado-label"
-                        value={filters.estado}
-                        onChange={handleFilterChange('estado')}
-                        label="Estado"
-                    >
-                        <MenuItem value="">Todos</MenuItem>
-                        {estados.map((estado) => (
-                            <MenuItem key={estado.id} value={estado.nombre}>
-                                {estado.nombre}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </Grid>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <FormControl fullWidth>
+                                        <InputLabel id="condicion-label">Condición</InputLabel>
+                                        <Select
+                                            labelId="condicion-label"
+                                            value={filters.condicion}
+                                            onChange={handleFilterChange('condicion')}
+                                            label="Condición"
+                                        >
+                                            <MenuItem value="">Todas</MenuItem>
+                                            <MenuItem value="Nuevo">Nuevo</MenuItem>
+                                            <MenuItem value="Usado">Usado</MenuItem>
+                                            <MenuItem value="Reparacion">Reparación</MenuItem>
+                                            <MenuItem value="Dañado">Dañado</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
 
-            {/* FILTRO CONDICION */}
-            <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth>
-                    <InputLabel id="condicion-label">Condición</InputLabel>
-                    <Select
-                        labelId="condicion-label"
-                        value={filters.condicion}
-                        onChange={handleFilterChange('condicion')}
-                        label="Condición"
-                    >
-                        <MenuItem value="">Todas</MenuItem>
-                        <MenuItem value="Nuevo">Nuevo</MenuItem>
-                        <MenuItem value="Usado">Usado</MenuItem>
-                        <MenuItem value="Reparacion">Reparación</MenuItem>
-                        <MenuItem value="Dañado">Dañado</MenuItem>
-                    </Select>
-                </FormControl>
-            </Grid>
-
-            {/* FILTRO BODEGA */}
-            <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth>
-                    <InputLabel id="bodega-label">Bodega</InputLabel>
-                    <Select
-                        labelId="bodega-label"
-                        value={filters.bodega_id}
-                        onChange={handleFilterChange('bodega_id')}
-                        label="Bodega"
-                    >
-                        <MenuItem value="">Todas</MenuItem>
-                        {bodegas.map((bodega) => (
-                            <MenuItem key={bodega.id} value={bodega.id}>
-                                {bodega.nombre}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </Grid>
-
-        </Grid>
-    </Box>
-</Collapse>
+                                <Grid item xs={12} sm={6} md={4}>
+                                    <FormControl fullWidth>
+                                        <InputLabel id="bodega-label">Bodega</InputLabel>
+                                        <Select
+                                            labelId="bodega-label"
+                                            value={filters.bodega_id}
+                                            onChange={handleFilterChange('bodega_id')}
+                                            label="Bodega"
+                                        >
+                                            <MenuItem value="">Todas</MenuItem>
+                                            {bodegas.map((bodega) => (
+                                                <MenuItem key={bodega.id} value={bodega.id}>
+                                                    {bodega.nombre}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                            </Grid>
+                        </Box>
+                    </Collapse>
                 </FilterPaper>
 
                 <StyledTableContainer>

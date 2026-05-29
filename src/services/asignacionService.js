@@ -1,34 +1,8 @@
-// src/services/asignacionService.js - VERSIÓN ACTUALIZADA CON FUNCIONES DE DESCARGA Y BÚSQUEDA
+// src/services/asignacionService.js - VERSIÓN COMPLETA CORREGIDA
 import api from './api';
 
-// ============================================
-// 🔥 URL BASE DINÁMICA PARA DESCARGAS
-// ============================================
-const getApiBaseUrl = () => {
-    // Para Vite
-    if (import.meta.env && import.meta.env.VITE_API_URL) {
-        let url = import.meta.env.VITE_API_URL;
-        // Eliminar /api del final si existe para no duplicar
-        if (url.endsWith('/api')) {
-            url = url.slice(0, -4);
-        }
-        console.log('📍 API Base URL (desde VITE):', url);
-        return url;
-    }
-    // Para Create React App
-    if (process.env && process.env.REACT_APP_API_URL) {
-        let url = process.env.REACT_APP_API_URL;
-        if (url.endsWith('/api')) {
-            url = url.slice(0, -4);
-        }
-        console.log('📍 API Base URL (desde CRA):', url);
-        return url;
-    }
-    // URL por defecto (producción)
-    return 'https://sistema-inventario-backend-p3xg.onrender.com';
-};
-
-const API_BASE_URL = getApiBaseUrl();
+// URL BASE
+const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
 console.log('🔧 API_BASE_URL en asignacionService:', API_BASE_URL);
 
 export const asignacionService = {
@@ -61,7 +35,7 @@ export const asignacionService = {
     },
 
     /**
-     * Obtener todas las asignaciones (incluye préstamos)
+     * Obtener todas las asignaciones
      */
     getAsignaciones: async () => {
         try {
@@ -244,6 +218,29 @@ export const asignacionService = {
     },
 
     /**
+     * Finalizar asignación (devolución)
+     */
+    finalizarAsignacion: async (asignacionId, data) => {
+        try {
+            console.log(`📤 Finalizando asignación ${asignacionId}...`);
+            const response = await api.put(`/asignaciones/${asignacionId}/finalizar`, {
+                fecha_devolucion: data.fecha_devolucion || new Date().toISOString().split('T')[0],
+                motivo_devolucion: data.motivo_devolucion || data.motivo || '',
+                observaciones_devolucion: data.observaciones_devolucion || data.observaciones || '',
+                condicion_entrega: data.condicion_entrega || 'BUENO',
+                firma_trabajador_devolucion: data.firma_trabajador_devolucion || data.firma_trabajador || null,
+                firma_gerente_devolucion: data.firma_gerente_devolucion || data.firma_gerente || null,
+                usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema'
+            });
+            console.log('✅ Asignación finalizada:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en finalizarAsignacion:', error);
+            throw error;
+        }
+    },
+
+    /**
      * Buscar documento por asignación ID y tipo
      */
     buscarDocumentoPorAsignacion: async (asignacionId, tipo) => {
@@ -348,19 +345,16 @@ export const asignacionService = {
     },
 
     /**
-     * Descargar documento por ID
+     * Descargar acta de asignación por ID de asignación
      */
-    descargarDocumentoById: async (documentoId) => {
+    descargarActaAsignacion: async (asignacionId) => {
         try {
-            console.log(`📤 Descargando documento ${documentoId}...`);
-            console.log(`🔧 API_BASE_URL: ${API_BASE_URL}`);
-            
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar-documento/${documentoId}`;
-            console.log('📥 URL de descarga:', downloadUrl);
+            console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
             
             const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta/${asignacionId}`;
             
-            const response = await fetch(downloadUrl, {
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -368,72 +362,21 @@ export const asignacionService = {
             });
 
             if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
             }
 
             const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
+            const downloadUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `documento_${documentoId}.pdf`);
+            link.href = downloadUrl;
+            link.download = `acta_asignacion_${asignacionId}.pdf`;
             document.body.appendChild(link);
             link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
             
-            console.log(`✅ Documento ${documentoId} descargado`);
+            console.log('✅ Acta de asignación descargada');
             return { success: true };
-        } catch (error) {
-            console.error('❌ Error en descargarDocumentoById:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Descargar acta de asignación por ID de asignación
-     */
-    descargarActaAsignacion: async (asignacionId) => {
-        try {
-            console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
-            
-            // Primero buscar el documento
-            const documento = await asignacionService.buscarDocumentoPorAsignacion(asignacionId, 'asignacion');
-            
-            if (documento && documento.filename) {
-                return await asignacionService.descargarDocumento(documento.filename);
-            } else {
-                // Si no existe, intentar generar uno nuevo
-                const asignacion = await asignacionService.getAsignacionById(asignacionId);
-                if (asignacion && !asignacion.es_prestamo) {
-                    // Generar acta
-                    const actaData = {
-                        id_asignacion: asignacionId,
-                        colaborador: {
-                            nombre: asignacion.colaborador_nombre,
-                            rut: asignacion.colaborador_rut,
-                            email: asignacion.colaborador_email,
-                            cargo: asignacion.colaborador_cargo,
-                            departamento: asignacion.colaborador_departamento
-                        },
-                        productos: [{
-                            nombre: asignacion.producto_nombre,
-                            marca: asignacion.marca,
-                            modelo: asignacion.modelo,
-                            numero_serie: asignacion.numero_serie
-                        }],
-                        fecha_asignacion: asignacion.fecha_asignacion,
-                        motivo: asignacion.motivo,
-                        observaciones: asignacion.observaciones,
-                        es_prestamo: false
-                    };
-                    
-                    const response = await asignacionService.generarActaAsignacion(actaData);
-                    if (response.success && response.filename) {
-                        return await asignacionService.descargarDocumento(response.filename);
-                    }
-                }
-                throw new Error('No se pudo encontrar o generar el acta de asignación');
-            }
         } catch (error) {
             console.error('❌ Error en descargarActaAsignacion:', error);
             throw error;
@@ -447,14 +390,32 @@ export const asignacionService = {
         try {
             console.log(`📤 Descargando acta de recepción para ${asignacionId}...`);
             
-            // Primero buscar el documento
-            const documento = await asignacionService.buscarDocumentoPorAsignacion(asignacionId, 'recepcion');
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta-recepcion/${asignacionId}`;
             
-            if (documento && documento.filename) {
-                return await asignacionService.descargarDocumento(documento.filename);
-            } else {
-                throw new Error('No se encontró el acta de recepción');
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
             }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `acta_recepcion_${asignacionId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            console.log('✅ Acta de recepción descargada');
+            return { success: true };
         } catch (error) {
             console.error('❌ Error en descargarActaRecepcion:', error);
             throw error;
@@ -490,29 +451,6 @@ export const asignacionService = {
         } catch (error) {
             console.error('❌ Error en getHistorialPrestamos:', error);
             return [];
-        }
-    },
-
-    /**
-     * Finalizar asignación (devolución)
-     */
-    finalizarAsignacion: async (asignacionId, data) => {
-        try {
-            console.log(`📤 Finalizando asignación ${asignacionId}...`);
-            const response = await api.put(`/asignaciones/${asignacionId}/finalizar`, {
-                fecha_devolucion: data.fecha_devolucion || new Date().toISOString().split('T')[0],
-                motivo_devolucion: data.motivo_devolucion || data.motivo || '',
-                observaciones_devolucion: data.observaciones_devolucion || data.observaciones || '',
-                condicion_entrega: data.condicion_entrega || 'BUENO',
-                firma_trabajador_devolucion: data.firma_trabajador_devolucion || data.firma_trabajador || null,
-                firma_gerente_devolucion: data.firma_gerente_devolucion || data.firma_gerente || null,
-                usuario_responsable: data.usuario_responsable || localStorage.getItem('user') || 'Sistema'
-            });
-            console.log('✅ Asignación finalizada:', response.data);
-            return response.data;
-        } catch (error) {
-            console.error('❌ Error en finalizarAsignacion:', error);
-            throw error;
         }
     },
 

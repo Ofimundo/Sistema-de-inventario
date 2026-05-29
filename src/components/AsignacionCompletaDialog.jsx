@@ -1,9 +1,10 @@
-// src/components/AsignacionCompletaDialog.jsx - VERSIÓN ACTUALIZADA CON MEJORAS EN DESCARGA DE DOCUMENTOS
+// src/components/AsignacionCompletaDialog.jsx - VERSIÓN COMPLETA (NO ELIMINA NADA)
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
     DialogTitle,
     DialogContent,
+    DialogActions,
     Button,
     Box,
     Typography,
@@ -19,7 +20,8 @@ import {
     RadioGroup,
     FormControlLabel,
     Radio,
-    Chip
+    Chip,
+    Grid
 } from '@mui/material';
 import {
     Assignment as AssignmentIcon,
@@ -31,44 +33,17 @@ import {
     Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
     Clear as ClearIcon,
+    Description as DescriptionIcon
 } from '@mui/icons-material';
 import colaboradorService from '../services/colaboradorService';
 import api from '../services/api';
-import { asignacionService } from '../services/asignacionService';
+
+// URL BASE
+const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
 
 // ============================================
-// 🔥 URL BASE DINÁMICA - CORREGIDA
+// COMPONENTE DE FIRMA DIBUJADA
 // ============================================
-const getApiBaseUrl = () => {
-    // Para Vite
-    if (import.meta.env && import.meta.env.VITE_API_URL) {
-        let url = import.meta.env.VITE_API_URL;
-        // Eliminar /api del final si existe para no duplicar
-        if (url.endsWith('/api')) {
-            url = url.slice(0, -4);
-        }
-        console.log('📍 API Base URL (desde VITE):', url);
-        return url;
-    }
-    // Para Create React App
-    if (process.env && process.env.REACT_APP_API_URL) {
-        let url = process.env.REACT_APP_API_URL;
-        if (url.endsWith('/api')) {
-            url = url.slice(0, -4);
-        }
-        console.log('📍 API Base URL (desde CRA):', url);
-        return url;
-    }
-    // URL por defecto
-    return 'https://sistema-inventario-backend-p3xg.onrender.com';
-};
-
-const API_BASE_URL = getApiBaseUrl();
-
-// Agregar log para verificar la URL
-console.log('🔧 API_BASE_URL final en AsignacionCompletaDialog:', API_BASE_URL);
-
-// Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 150, label = 'Firma' }) => {
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -197,7 +172,9 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height
     );
 };
 
-// Componente de Firma por Texto
+// ============================================
+// COMPONENTE DE FIRMA POR TEXTO
+// ============================================
 const FirmaTexto = ({ label, onFirmaCapturada, valorInicial = '', required = true }) => {
     const [firma, setFirma] = useState(valorInicial);
     const [editando, setEditando] = useState(!valorInicial);
@@ -253,6 +230,9 @@ const FirmaTexto = ({ label, onFirmaCapturada, valorInicial = '', required = tru
     );
 };
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSuccess, esPrestamo = false }) => {
     const [colaboradores, setColaboradores] = useState([]);
     const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
@@ -269,9 +249,9 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
     const [searchTerm, setSearchTerm] = useState('');
     const [success, setSuccess] = useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-    const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
     const [asignacionId, setAsignacionId] = useState(null);
+    const [documentoGenerado, setDocumentoGenerado] = useState(null);
 
     useEffect(() => {
         if (open && productoSeleccionado) {
@@ -287,8 +267,8 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             setSearchTerm('');
             setSuccess(false);
             setShowConfirmDialog(false);
-            setDocumentoGenerado(null);
             setAsignacionId(null);
+            setDocumentoGenerado(null);
             setTipoFirmaTrabajador('texto');
             setTipoFirmaGerente('texto');
         }
@@ -325,20 +305,85 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         return firmaGerenteText;
     };
 
-    // Función mejorada para descargar el acta usando el servicio
-    const handleDescargarDocumento = async () => {
-        if (!asignacionId || downloading) return;
-        
-        setDownloading(true);
+    // Función para generar y descargar el acta de asignación
+    const generarYDescargarActa = async (idAsignacion) => {
         try {
-            console.log('📥 Descargando acta de asignación para:', asignacionId);
-            await asignacionService.descargarActaAsignacion(asignacionId);
-            console.log('✅ Acta de asignación descargada correctamente');
+            console.log('📄 Generando acta para asignación ID:', idAsignacion);
+            
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/generar-acta-asignacion`;
+            
+            const actaData = {
+                id_asignacion: idAsignacion,
+                colaborador: {
+                    nombre: colaboradorSeleccionado.nombre,
+                    rut: colaboradorSeleccionado.rut,
+                    email: colaboradorSeleccionado.email || '',
+                    cargo: colaboradorSeleccionado.cargo || '',
+                    departamento: colaboradorSeleccionado.departamento || '',
+                    direccion: colaboradorSeleccionado.direccion || 'Lota Nº2305, comuna de Providencia',
+                    fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
+                    nacionalidad: 'chilena'
+                },
+                productos: [{
+                    tipo: 'Equipo',
+                    nombre: productoSeleccionado.nombre,
+                    marca: productoSeleccionado.marca || 'N/A',
+                    modelo: productoSeleccionado.modelo || 'N/A',
+                    numero_serie: productoSeleccionado.numero_serie || 'N/A',
+                    condicion: productoSeleccionado.condicion || 'NUEVO',
+                    cantidad: 1
+                }],
+                fecha_asignacion: new Date().toISOString(),
+                motivo: motivo,
+                observaciones: observaciones || 'Sin observaciones',
+                firma_trabajador: getFirmaTrabajadorFinal(),
+                firma_gerente: getFirmaGerenteFinal(),
+                es_prestamo: false
+            };
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(actaData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.success && result.filename) {
+                // Descargar el PDF
+                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${result.filename}`;
+                const downloadResponse = await fetch(downloadUrl, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (downloadResponse.ok) {
+                    const blob = await downloadResponse.blob();
+                    const downloadUrlBlob = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrlBlob;
+                    link.download = result.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrlBlob);
+                    console.log('✅ Acta generada y descargada correctamente');
+                    return true;
+                }
+            }
+            
+            return false;
         } catch (error) {
-            console.error('❌ Error descargando acta:', error);
-            alert('Error al descargar el acta de asignación. Por favor, intente nuevamente.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
+            console.error('❌ Error generando acta:', error);
+            return false;
         }
     };
 
@@ -352,7 +397,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
             return;
         }
         
-        // Para préstamos, las firmas son opcionales
         if (!esPrestamo) {
             const firmaTrabajador = getFirmaTrabajadorFinal();
             const firmaGerente = getFirmaGerenteFinal();
@@ -382,68 +426,29 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 }
             }
             
-            // Crear la asignación/préstamo
+            // Crear la asignación
             const asignacionResponse = await api.post('/asignaciones', {
                 producto_id: productoSeleccionado.id,
                 colaborador_id: colaboradorSeleccionado.id,
                 motivo: motivo,
                 observaciones: observaciones,
-                fecha_asignacion: new Date().toISOString().split('T')[0],
+                fecha_asignacion: new Date().toISOString(),
                 usuario_responsable: usuarioResponsable,
                 firma_trabajador: esPrestamo ? null : getFirmaTrabajadorFinal(),
                 firma_gerente: esPrestamo ? null : getFirmaGerenteFinal(),
                 es_prestamo: esPrestamo || false
             });
 
+            console.log('📥 Respuesta de asignación:', asignacionResponse.data);
+
             if (asignacionResponse.data?.success || asignacionResponse.data?.id) {
                 const newAsignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
                 setAsignacionId(newAsignacionId);
                 
-                let documentoData = null;
-                
-                // Solo generar documento si NO es préstamo
-                if (!esPrestamo) {
-                    try {
-                        const actaData = {
-                            id_asignacion: newAsignacionId,
-                            colaborador: {
-                                nombre: colaboradorSeleccionado.nombre,
-                                rut: colaboradorSeleccionado.rut,
-                                email: colaboradorSeleccionado.email,
-                                cargo: colaboradorSeleccionado.cargo,
-                                departamento: colaboradorSeleccionado.departamento,
-                                nacionalidad: 'chilena',
-                                fecha_nacimiento: colaboradorSeleccionado.fecha_nacimiento || '1990-01-01',
-                                domicilio: colaboradorSeleccionado.domicilio || colaboradorSeleccionado.direccion || '',
-                                comuna: colaboradorSeleccionado.comuna || '',
-                                ciudad: colaboradorSeleccionado.ciudad || ''
-                            },
-                            productos: [{
-                                tipo: 'Equipo',
-                                nombre: productoSeleccionado.nombre,
-                                marca: productoSeleccionado.marca,
-                                modelo: productoSeleccionado.modelo,
-                                numero_serie: productoSeleccionado.numero_serie,
-                                condicion: productoSeleccionado.condicion || 'NUEVO'
-                            }],
-                            fecha_asignacion: new Date(),
-                            motivo: motivo,
-                            observaciones: observaciones,
-                            firma_trabajador: getFirmaTrabajadorFinal(),
-                            firma_gerente: getFirmaGerenteFinal(),
-                            usuario_responsable: usuarioResponsable,
-                            es_prestamo: false
-                        };
-
-                        const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData);
-                        
-                        if (actaResponse.data?.success) {
-                            documentoData = actaResponse.data;
-                            setDocumentoGenerado(documentoData);
-                        }
-                    } catch (docError) {
-                        console.warn('⚠️ Error generando documento (no crítico):', docError);
-                    }
+                // SI NO ES PRÉSTAMO, generar y descargar el acta automáticamente
+                let documentoGeneradoOk = false;
+                if (!esPrestamo && newAsignacionId) {
+                    documentoGeneradoOk = await generarYDescargarActa(newAsignacionId);
                 }
                 
                 setShowConfirmDialog(true);
@@ -451,15 +456,17 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 
                 if (onSuccess) {
                     const mensaje = esPrestamo 
-                        ? `✅ Préstamo registrado exitosamente para ${productoSeleccionado.nombre} (sin documento)` 
-                        : `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}. El acta se ha generado.`;
+                        ? `✅ Préstamo registrado exitosamente para ${productoSeleccionado.nombre}`
+                        : documentoGeneradoOk 
+                            ? `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}. El acta se ha descargado.`
+                            : `✅ Asignación completada exitosamente para ${productoSeleccionado.nombre}.`;
                     
                     onSuccess({
                         success: true,
                         message: mensaje,
-                        documento: documentoData,
+                        asignacion_id: newAsignacionId,
                         es_prestamo: esPrestamo,
-                        asignacion_id: newAsignacionId
+                        documento_generado: documentoGeneradoOk
                     });
                 }
             } else {
@@ -485,12 +492,47 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
         setSearchTerm('');
         setSuccess(false);
         setShowConfirmDialog(false);
-        setDocumentoGenerado(null);
         setAsignacionId(null);
+        setDocumentoGenerado(null);
         onClose();
     };
 
-    // Ventana de confirmación con documento
+    const handleDescargarActa = async () => {
+        if (!asignacionId || downloading) return;
+        
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta/${asignacionId}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `acta_asignacion_${asignacionId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            console.log('✅ Acta descargada');
+        } catch (error) {
+            console.error('Error descargando acta:', error);
+            alert('Error al descargar el acta');
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
+        }
+    };
+
     const ConfirmacionDialog = () => (
         <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ bgcolor: esPrestamo ? '#F59E0B' : '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
@@ -508,26 +550,38 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 </Typography>
                 
                 {!esPrestamo && (
-                    <Box sx={{ 
-                        mt: 2, 
-                        p: 2, 
-                        bgcolor: '#f5f5f5', 
-                        borderRadius: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 1
-                    }}>
-                        <PdfIcon sx={{ color: '#f44336' }} />
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                            acta_asignacion_{asignacionId}.pdf
-                        </Typography>
-                    </Box>
+                    <>
+                        <Box sx={{ 
+                            mt: 2, 
+                            p: 2, 
+                            bgcolor: '#f5f5f5', 
+                            borderRadius: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 1
+                        }}>
+                            <PdfIcon sx={{ color: '#f44336' }} />
+                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                acta_asignacion_{asignacionId}.pdf
+                            </Typography>
+                        </Box>
+                        
+                        <Button 
+                            variant="contained" 
+                            startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                            onClick={handleDescargarActa}
+                            disabled={downloading}
+                            sx={{ mt: 2, borderRadius: 0, bgcolor: '#0A66C2' }}
+                        >
+                            {downloading ? 'Descargando...' : 'Descargar Acta'}
+                        </Button>
+                    </>
                 )}
                 
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                     {esPrestamo 
-                        ? `Se ha registrado el préstamo del producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
+                        ? `Producto: ${productoSeleccionado?.nombre} | Colaborador: ${colaboradorSeleccionado?.nombre}`
                         : `Se ha asignado el producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
                     }
                 </Typography>
@@ -540,72 +594,19 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                     </Alert>
                 )}
                 
-                <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
-                    {!esPrestamo && (
-                        <Button 
-                            variant="contained" 
-                            startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-                            onClick={handleDescargarDocumento}
-                            disabled={downloading}
-                            sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
-                        >
-                            {downloading ? 'Descargando...' : 'Descargar Acta'}
-                        </Button>
-                    )}
-                    <Button 
-                        variant="outlined" 
-                        onClick={() => {
-                            setShowConfirmDialog(false);
-                            handleClose();
-                        }}
-                        sx={{ borderRadius: 0 }}
-                    >
-                        Cerrar
-                    </Button>
-                </Box>
+                <Button 
+                    variant="outlined" 
+                    onClick={() => {
+                        setShowConfirmDialog(false);
+                        handleClose();
+                    }}
+                    sx={{ mt: 3, borderRadius: 0 }}
+                >
+                    Cerrar
+                </Button>
             </DialogContent>
         </Dialog>
     );
-
-    if (success && !showConfirmDialog) {
-        return (
-            <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        <CheckCircleIcon sx={{ color: esPrestamo ? '#F59E0B' : '#4caf50' }} />
-                        <Typography variant="h6">{esPrestamo ? '¡Préstamo Registrado!' : '¡Asignación Exitosa!'}</Typography>
-                    </Box>
-                </DialogTitle>
-                <DialogContent dividers>
-                    <Box textAlign="center" py={2}>
-                        <CheckCircleIcon sx={{ fontSize: 60, color: esPrestamo ? '#F59E0B' : '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>
-                            {esPrestamo ? 'Préstamo registrado exitosamente' : 'Asignación completada exitosamente'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            {esPrestamo 
-                                ? `Se ha registrado el préstamo del producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
-                                : `Se ha asignado el producto ${productoSeleccionado?.nombre} a ${colaboradorSeleccionado?.nombre}`
-                            }
-                        </Typography>
-                        {esPrestamo && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                Nota: Este préstamo no requiere documento formal.
-                            </Typography>
-                        )}
-                        {!esPrestamo && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                El acta de asignación se ha generado y puede descargarla desde el botón correspondiente.
-                            </Typography>
-                        )}
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2' }}>
-                            Cerrar
-                        </Button>
-                    </Box>
-                </DialogContent>
-            </Dialog>
-        );
-    }
 
     if (!productoSeleccionado) return null;
 
@@ -627,11 +628,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                                 <Chip 
                                     label="SIN DOCUMENTO" 
                                     size="small" 
-                                    sx={{ 
-                                        bgcolor: '#F59E0B', 
-                                        color: 'white',
-                                        fontWeight: 500
-                                    }} 
+                                    sx={{ bgcolor: '#F59E0B', color: 'white', fontWeight: 500 }} 
                                 />
                             )}
                         </Box>
@@ -729,16 +726,11 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                             onChange={(e) => setObservaciones(e.target.value)}
                             multiline
                             rows={2}
-                            placeholder={esPrestamo 
-                                ? "Observaciones sobre el préstamo..."
-                                : "Observaciones importantes sobre la transacción..."
-                            }
                         />
 
                         {/* Firmas - Solo para asignaciones normales */}
                         {!esPrestamo && (
                             <>
-                                {/* Firma del Trabajador */}
                                 <Box>
                                     <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
                                         Firma del Trabajador / Colaborador *
@@ -772,7 +764,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                                     )}
                                 </Box>
 
-                                {/* Firma del Gerente */}
                                 <Box>
                                     <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
                                         Firma del Gerente General / Autorizante *
@@ -811,8 +802,7 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                         {esPrestamo && (
                             <Alert severity="info" sx={{ borderRadius: 0 }}>
                                 <Typography variant="body2">
-                                    <strong>ℹ️ Préstamo sin documento:</strong> Este préstamo se registrará en el sistema 
-                                    con la bandera <strong>es_prestamo = 1</strong> y no generará un documento formal.
+                                    <strong>ℹ️ Préstamo sin documento:</strong> Este préstamo no generará un documento formal.
                                 </Typography>
                             </Alert>
                         )}
@@ -835,7 +825,6 @@ const AsignacionCompletaDialog = ({ open, onClose, productoSeleccionado, onSucce
                 </DialogContent>
             </Dialog>
 
-            {/* Ventana de confirmación con documento */}
             <ConfirmacionDialog />
         </>
     );

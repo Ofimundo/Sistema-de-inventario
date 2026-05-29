@@ -1,4 +1,4 @@
-// src/components/RecepcionDialog.jsx - VERSIÓN ACTUALIZADA CON MEJORAS EN DESCARGA DE DOCUMENTOS
+// src/components/RecepcionDialog.jsx - VERSIÓN CORREGIDA (con generación de acta de recepción)
 /* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
@@ -40,7 +40,7 @@ import {
 import api from '../services/api';
 import { asignacionService } from '../services/asignacionService';
 
-// ✅ URL BASE CORREGIDA - FORZADA A PRODUCCIÓN
+// URL BASE
 const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
 console.log('🔧 RecepcionDialog - API_BASE_URL:', API_BASE_URL);
 
@@ -248,6 +248,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
+    const [recepcionId, setRecepcionId] = useState(null);
 
     // Detectar si es préstamo
     const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
@@ -266,14 +267,118 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         return firmaGerenteText;
     };
 
-    // Función para descargar el acta de recepción usando el servicio mejorado
+    // Función para generar y descargar el acta de recepción
+    const generarYDescargarActaRecepcion = async (idAsignacion) => {
+        try {
+            console.log('📄 Generando acta de recepción para asignación ID:', idAsignacion);
+            
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/generar-acta-recepcion`;
+            
+            const actaData = {
+                id_asignacion: idAsignacion,
+                colaborador: {
+                    nombre: asignacion?.colaborador_nombre || '',
+                    rut: asignacion?.colaborador_rut || '',
+                    email: asignacion?.colaborador_email || '',
+                    cargo: asignacion?.colaborador_cargo || '',
+                    departamento: asignacion?.colaborador_departamento || '',
+                    direccion: asignacion?.colaborador_direccion || 'Lota Nº2305, comuna de Providencia'
+                },
+                productos: [{
+                    tipo: 'Equipo',
+                    nombre: producto?.nombre || '',
+                    marca: producto?.marca || 'N/A',
+                    modelo: producto?.modelo || 'N/A',
+                    numero_serie: producto?.numero_serie || 'N/A',
+                    cantidad: 1
+                }],
+                fecha_recepcion: new Date().toISOString(),
+                motivo: motivoDevolucion || 'Devolución de equipo',
+                observaciones: observacionesDevolucion || 'Sin observaciones',
+                condicion_entrega: condicionEntrega,
+                firma_trabajador: getFirmaTrabajadorFinal(),
+                firma_gerente: getFirmaGerenteFinal(),
+                es_prestamo: false
+            };
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(actaData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.success && result.filename) {
+                // Descargar el PDF automáticamente
+                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${result.filename}`;
+                const downloadResponse = await fetch(downloadUrl, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (downloadResponse.ok) {
+                    const blob = await downloadResponse.blob();
+                    const downloadUrlBlob = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrlBlob;
+                    link.download = result.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrlBlob);
+                    console.log('✅ Acta de recepción generada y descargada correctamente');
+                    return result.filename;
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('❌ Error generando acta de recepción:', error);
+            return null;
+        }
+    };
+
+    // Función para descargar el acta de recepción manualmente
     const handleDescargarDocumento = async () => {
         if (!asignacion?.id || downloading) return;
         
         setDownloading(true);
         try {
             console.log('📥 Descargando acta de recepción para asignación:', asignacion.id);
-            await asignacionService.descargarActaRecepcion(asignacion.id);
+            
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta-recepcion/${asignacion.id}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `acta_recepcion_${asignacion.id}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+            
             console.log('✅ Acta de recepción descargada correctamente');
         } catch (error) {
             console.error('❌ Error descargando acta:', error);
@@ -324,22 +429,30 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             console.log('📥 Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                // Solo guardar documento si NO es préstamo
-                if (!esPrestamo) {
-                    setDocumentoGenerado({ filename: `acta_recepcion_${asignacion.id}.pdf` });
+                let filenameGenerado = null;
+                
+                // SI NO ES PRÉSTAMO, generar y descargar el acta de recepción automáticamente
+                if (!esPrestamo && asignacion.id) {
+                    filenameGenerado = await generarYDescargarActaRecepcion(asignacion.id);
+                    if (filenameGenerado) {
+                        setDocumentoGenerado({ filename: filenameGenerado });
+                    }
                 }
+                
                 setShowConfirmDialog(true);
                 setSuccess(true);
                 
                 if (onSuccess) {
                     const mensaje = esPrestamo 
                         ? 'Devolución de préstamo registrada exitosamente (sin documento)'
-                        : 'Devolución registrada exitosamente. El acta de recepción se ha generado.';
+                        : filenameGenerado 
+                            ? 'Devolución registrada exitosamente. El acta de recepción se ha generado y descargado.'
+                            : 'Devolución registrada exitosamente.';
                     
                     onSuccess({
                         success: true,
                         message: mensaje,
-                        documento: !esPrestamo ? { filename: `acta_recepcion_${asignacion.id}.pdf` } : null,
+                        documento: !esPrestamo ? { filename: filenameGenerado || `acta_recepcion_${asignacion.id}.pdf` } : null,
                         es_prestamo: esPrestamo
                     });
                 }
@@ -366,12 +479,13 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         setSuccess(false);
         setShowConfirmDialog(false);
         setDocumentoGenerado(null);
+        setRecepcionId(null);
         onClose();
     };
 
-    // Ventana de confirmación para PRÉSTAMOS (sin documento)
+    // Ventana de confirmación para PRÉSTAMOS
     const ConfirmacionPrestamoDialog = () => (
-        <Dialog open={showConfirmDialog && esPrestamo && !documentoGenerado} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
+        <Dialog open={showConfirmDialog && esPrestamo} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ bgcolor: '#F59E0B', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
@@ -428,9 +542,9 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         </Dialog>
     );
 
-    // Ventana de confirmación para ASIGNACIONES (con documento)
+    // Ventana de confirmación para ASIGNACIONES
     const ConfirmacionAsignacionDialog = () => (
-        <Dialog open={showConfirmDialog && !esPrestamo && documentoGenerado !== null} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
+        <Dialog open={showConfirmDialog && !esPrestamo} onClose={() => setShowConfirmDialog(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ bgcolor: '#4caf50', color: 'white', textAlign: 'center', py: 2 }}>
                 <CheckCircleIcon sx={{ fontSize: 50, mb: 1 }} />
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
@@ -439,7 +553,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    La devolución se ha registrado correctamente y el <strong>Acta de Recepción</strong> se ha generado.
+                    La devolución se ha registrado correctamente y el <strong>Acta de Recepción</strong> se ha generado y descargado automáticamente.
                 </Typography>
                 
                 <Paper variant="outlined" sx={{ p: 2, mt: 2, textAlign: 'left', bgcolor: '#f9f9f9' }}>
@@ -506,63 +620,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         </Dialog>
     );
 
-    // Ventana simple de éxito para asignaciones (sin diálogo de confirmación complejo)
-    if (success && !showConfirmDialog && !esPrestamo) {
-        return (
-            <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        <CheckCircleIcon sx={{ color: '#4caf50' }} />
-                        <Typography variant="h6">¡Devolución Exitosa!</Typography>
-                    </Box>
-                </DialogTitle>
-                <DialogContent dividers>
-                    <Box textAlign="center" py={2}>
-                        <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>Devolución registrada correctamente</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Se ha registrado la devolución del producto <strong>{producto?.nombre}</strong>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            El acta de recepción se ha generado y puede descargarla desde el botón de descarga.
-                        </Typography>
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: '#0A66C2' }}>
-                            Cerrar
-                        </Button>
-                    </Box>
-                </DialogContent>
-            </Dialog>
-        );
-    }
-
-    if (success && !showConfirmDialog && esPrestamo) {
-        return (
-            <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff3e0' }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        <CheckCircleIcon sx={{ color: '#F59E0B' }} />
-                        <Typography variant="h6">¡Devolución de Préstamo Exitosa!</Typography>
-                    </Box>
-                </DialogTitle>
-                <DialogContent dividers>
-                    <Box textAlign="center" py={2}>
-                        <CheckCircleIcon sx={{ fontSize: 60, color: '#F59E0B', mb: 2 }} />
-                        <Typography variant="h6" gutterBottom>Devolución de préstamo registrada</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Se ha registrado la devolución del producto <strong>{producto?.nombre}</strong>
-                        </Typography>
-                        <Alert severity="info" sx={{ mt: 2, borderRadius: 0 }}>
-                            Nota: Este es un préstamo, no se ha generado documento formal.
-                        </Alert>
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 3, borderRadius: 0, bgcolor: '#F59E0B' }}>
-                            Cerrar
-                        </Button>
-                    </Box>
-                </DialogContent>
-            </Dialog>
-        );
-    }
-
     if (!producto || !asignacion) return null;
 
     return (
@@ -591,7 +648,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         ID Asignación: <strong>{asignacion?.id}</strong> | Fecha: <strong>{new Date().toLocaleDateString('es-CL')}</strong>
-                        {esPrestamo && <Chip label="PRÉSTAMO" size="small" sx={{ ml: 1, bgcolor: '#F59E0B', color: 'white' }} />}
                     </Typography>
                 </DialogTitle>
 
@@ -655,7 +711,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                         <Box>
                             <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
                                 <WarningIcon fontSize="small" sx={{ color: '#F59E0B' }} />
-                                4. MOTIVO DE LA DEVOLUCIÓN {!esPrestamo && '*'}
+                                MOTIVO DE LA DEVOLUCIÓN {!esPrestamo && '*'}
                             </Typography>
                             <TextField
                                 fullWidth
@@ -665,7 +721,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                                 rows={3}
                                 placeholder={esPrestamo 
                                     ? "Ej: Término del préstamo, Devolución anticipada, etc."
-                                    : "Ej: Término de contrato, Cambio de equipo, Equipo defectuoso, Mantención preventiva, Actualización tecnológica, etc."
+                                    : "Ej: Término de contrato, Cambio de equipo, Equipo defectuoso, Mantención preventiva, etc."
                                 }
                                 helperText={esPrestamo ? "Campo opcional para préstamos" : "Campo obligatorio. Explique detalladamente la razón de la devolución."}
                                 error={!!error && !esPrestamo && !motivoDevolucion}
@@ -677,7 +733,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                         <Box>
                             <Typography variant="subtitle1" fontWeight={600} gutterBottom display="flex" alignItems="center" gap={1}>
                                 <DescriptionIcon fontSize="small" sx={{ color: '#3B82F6' }} />
-                                5. OBSERVACIONES
+                                OBSERVACIONES
                             </Typography>
                             <TextField
                                 fullWidth

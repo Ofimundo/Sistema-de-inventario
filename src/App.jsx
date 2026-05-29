@@ -1,4 +1,4 @@
-// src/App.jsx - VERSIÓN SIN QR
+// src/App.jsx - VERSIÓN CON RUTA DE CHECKLIST
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { 
@@ -14,6 +14,7 @@ import authService from './services/auth';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import RecoverPassword from './pages/RecoverPassword';
+import ChecklistAsignacionPage from './pages/ChecklistAsignacionPage';
 
 // Lazy load para mejorar rendimiento
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -150,6 +151,16 @@ function App() {
                         element={
                             <PrivateRoute>
                                 <AsignacionPage />
+                            </PrivateRoute>
+                        } 
+                    />
+                    
+                    {/* Checklist de entrega de equipos */}
+                    <Route 
+                        path="/checklist" 
+                        element={
+                            <PrivateRoute>
+                                <ChecklistAsignacionPage />
                             </PrivateRoute>
                         } 
                     />
