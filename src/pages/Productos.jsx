@@ -1,4 +1,4 @@
-// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO PARA NOMBRE DE PRODUCTO
+// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO CORREGIDO PARA MARCA Y MODELO
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -1383,7 +1383,7 @@ function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialU
 }
 
 // ============================================
-// FORMULARIO DE PRODUCTO CON AUTOCOMPLETADO PARA NOMBRE
+// FORMULARIO DE PRODUCTO CON AUTOCOMPLETADO CORREGIDO
 // ============================================
 function ProductoForm({ open, onClose, producto, onSave }) {
     const [formData, setFormData] = useState({
@@ -1423,8 +1423,10 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const [fechaTerminoMantencion, setFechaTerminoMantencion] = useState(new Date().toISOString().split('T')[0]);
     const [observacionesMantencion, setObservacionesMantencion] = useState('');
 
-    // Estado para la lista de nombres de productos existentes (para el autocompletado)
+    // Estado para las listas de opciones de autocompletado
     const [nombresProductosExistentes, setNombresProductosExistentes] = useState([]);
+    const [marcasExistentes, setMarcasExistentes] = useState([]);
+    const [modelosExistentes, setModelosExistentes] = useState([]);
     const [todosLosProductos, setTodosLosProductos] = useState([]);
 
     const opcionesEstado = [
@@ -1443,16 +1445,22 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    // Cargar todos los productos para obtener los nombres existentes
+    // Cargar todos los productos para obtener los nombres, marcas y modelos existentes
     useEffect(() => {
         const fetchTodosLosProductos = async () => {
             try {
                 const productosData = await productosService.getProductos('', {});
                 if (productosData && Array.isArray(productosData)) {
                     setTodosLosProductos(productosData);
-                    // Extraer nombres únicos para el autocompletado
-                    const nombresUnicos = [...new Set(productosData.map(p => p.nombre).filter(n => n))];
+                    // Extraer nombres únicos
+                    const nombresUnicos = [...new Set(productosData.map(p => p.nombre).filter(n => n && n.trim() !== ''))];
                     setNombresProductosExistentes(nombresUnicos.sort());
+                    // Extraer marcas únicas
+                    const marcasUnicas = [...new Set(productosData.map(p => p.marca).filter(m => m && m.trim() !== ''))];
+                    setMarcasExistentes(marcasUnicas.sort());
+                    // Extraer modelos únicos
+                    const modelosUnicos = [...new Set(productosData.map(p => p.modelo).filter(m => m && m.trim() !== ''))];
+                    setModelosExistentes(modelosUnicos.sort());
                 }
             } catch (error) {
                 console.error('Error cargando productos para autocompletado:', error);
@@ -2240,6 +2248,90 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             </Grid>
                         )}
 
+                        {/* Campo MARCA con Autocomplete CORREGIDO */}
+                        <Grid item xs={12} sm={6}>
+                            <Autocomplete
+                                freeSolo
+                                options={marcasExistentes}
+                                value={formData.marca}
+                                onInputChange={(event, newValue, reason) => {
+                                    if (reason === 'input') {
+                                        setFormData({ ...formData, marca: newValue || '' });
+                                    }
+                                }}
+                                onChange={(event, newValue) => {
+                                    setFormData({ ...formData, marca: newValue || '' });
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Marca"
+                                        placeholder="Escriba la marca o seleccione una existente"
+                                        size="small"
+                                        disabled={loading}
+                                        helperText="Puede escribir una nueva marca o seleccionar una existente"
+                                    />
+                                )}
+                                renderOption={(props, option) => (
+                                    <li {...props}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <InventoryIcon sx={{ fontSize: 16, color: colors.primary }} />
+                                            <Typography variant="body2">{option}</Typography>
+                                            <Chip 
+                                                label="Existente" 
+                                                size="small" 
+                                                sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
+                                            />
+                                        </Box>
+                                    </li>
+                                )}
+                                freeSolo
+                                fullWidth
+                            />
+                        </Grid>
+
+                        {/* Campo MODELO con Autocomplete CORREGIDO */}
+                        <Grid item xs={12} sm={6}>
+                            <Autocomplete
+                                freeSolo
+                                options={modelosExistentes}
+                                value={formData.modelo}
+                                onInputChange={(event, newValue, reason) => {
+                                    if (reason === 'input') {
+                                        setFormData({ ...formData, modelo: newValue || '' });
+                                    }
+                                }}
+                                onChange={(event, newValue) => {
+                                    setFormData({ ...formData, modelo: newValue || '' });
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Modelo"
+                                        placeholder="Escriba el modelo o seleccione uno existente"
+                                        size="small"
+                                        disabled={loading}
+                                        helperText="Puede escribir un nuevo modelo o seleccionar uno existente"
+                                    />
+                                )}
+                                renderOption={(props, option) => (
+                                    <li {...props}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <InventoryIcon sx={{ fontSize: 16, color: colors.primary }} />
+                                            <Typography variant="body2">{option}</Typography>
+                                            <Chip 
+                                                label="Existente" 
+                                                size="small" 
+                                                sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} 
+                                            />
+                                        </Box>
+                                    </li>
+                                )}
+                                freeSolo
+                                fullWidth
+                            />
+                        </Grid>
+
                         <Grid item xs={12}>
                             <Typography variant="subtitle2" fontWeight={600} color={colors.primary}>
                                 Mantención / Reparación
@@ -2410,26 +2502,17 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             <Divider sx={{ mb: 2 }} />
                         </Grid>
 
-                        <Grid item xs={12} sm={6}>
+                        <Grid item xs={12}>
                             <TextField
                                 fullWidth
-                                label="Marca"
-                                name="marca"
-                                value={formData.marca}
+                                label="Descripción"
+                                name="descripcion"
+                                value={formData.descripcion}
                                 onChange={handleChange}
+                                multiline
+                                rows={3}
                                 size="small"
-                                disabled={loading}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label="Modelo"
-                                name="modelo"
-                                value={formData.modelo}
-                                onChange={handleChange}
-                                size="small"
+                                placeholder="Descripción del producto..."
                                 disabled={loading}
                             />
                         </Grid>
@@ -2461,21 +2544,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                                 value={formData.factura_numero}
                                 onChange={handleChange}
                                 size="small"
-                                disabled={loading}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Descripción"
-                                name="descripcion"
-                                value={formData.descripcion}
-                                onChange={handleChange}
-                                multiline
-                                rows={3}
-                                size="small"
-                                placeholder="Descripción del producto..."
                                 disabled={loading}
                             />
                         </Grid>
@@ -2992,6 +3060,7 @@ const Productos = () => {
     };
 
     const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length + (searchTerm ? 1 : 0);
+    
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar 
