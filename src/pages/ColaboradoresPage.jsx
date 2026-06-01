@@ -1,5 +1,5 @@
-// src/pages/ColaboradoresPage.jsx - VERSIÓN CON FILTROS MEJORADOS
-import React, { useState, useEffect, useCallback } from 'react';
+// src/pages/ColaboradoresPage.jsx - VERSIÓN CORREGIDA (CON refreshProductosAsignados DEFINIDA)
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Box,
     Paper,
@@ -41,12 +41,7 @@ import {
     TableRow,
     TablePagination,
     Collapse,
-    FormControlLabel,
-    Switch,
-    Radio,
-    RadioGroup,
-    FormLabel,
-    Badge
+    FormHelperText
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -59,7 +54,6 @@ import {
     Refresh as RefreshIcon,
     Person as PersonIcon,
     Home as HomeIcon,
-    FilterList as FilterListIcon,
     FilterListOff as FilterListOffIcon,
     AssignmentInd as AssignmentIndIcon,
     Inventory as InventoryIcon,
@@ -450,8 +444,8 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {productos.map((prod) => (
-                                            <TableRow key={prod.asignacion_id || prod.id}>
+                                        {productos.map((prod, idx) => (
+                                            <TableRow key={prod.asignacion_id || prod.id || idx}>
                                                 <TableCell>
                                                     <Box display="flex" alignItems="center" gap={1}>
                                                         <InventoryIcon fontSize="small" sx={{ color: colors.primary }} />
@@ -527,6 +521,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
     const [errores, setErrores] = useState({});
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -561,6 +556,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             }
             setErrores({});
             setErrorMessage('');
+            setIsSubmitting(false);
         }
     }, [colaborador, open]);
 
@@ -612,7 +608,10 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
 
     const handleSubmit = async () => {
         if (!validarFormulario()) return;
-
+        
+        if (isSubmitting) return;
+        
+        setIsSubmitting(true);
         setLoading(true);
         setErrorMessage('');
 
@@ -632,7 +631,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
 
             if (response && response.success) {
                 if (onSave) {
-                    onSave(response.data);
+                    await onSave(response.data);
                 }
                 handleClose();
             } else {
@@ -641,7 +640,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         } catch (error) {
             console.error('❌ Error:', error);
             setErrorMessage(error.message || 'Error al procesar la solicitud');
-        } finally {
+            setIsSubmitting(false);
             setLoading(false);
         }
     };
@@ -663,6 +662,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         setErrores({});
         setErrorMessage('');
         setLoading(false);
+        setIsSubmitting(false);
         onClose();
     };
 
@@ -853,7 +853,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     onClick={handleSubmit}
                     variant="contained"
                     color="primary"
-                    disabled={loading}
+                    disabled={loading || isSubmitting}
                     startIcon={loading ? <CircularProgress size={20} /> : null}
                 >
                     {loading ? 'Guardando...' : (colaborador ? 'Actualizar' : 'Crear')}
@@ -938,6 +938,7 @@ const ColaboradoresPage = () => {
     const [filteredColaboradores, setFilteredColaboradores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [isFetching, setIsFetching] = useState(false);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [searchTerm, setSearchTerm] = useState('');
@@ -966,6 +967,7 @@ const ColaboradoresPage = () => {
     const [selectedColaboradorDetail, setSelectedColaboradorDetail] = useState(null);
     const [productosAsignados, setProductosAsignados] = useState([]);
     const [loadingProductos, setLoadingProductos] = useState(false);
+    const refreshTimeoutRef = useRef(null);
 
     // UI
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -1012,7 +1014,6 @@ const ColaboradoresPage = () => {
     const applyFilters = useCallback(() => {
         let result = [...colaboradores];
 
-        // Filtrar por búsqueda
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             result = result.filter(col => 
@@ -1022,22 +1023,18 @@ const ColaboradoresPage = () => {
             );
         }
 
-        // Filtrar por empresa
         if (filters.empresa) {
             result = result.filter(col => col.empresa === filters.empresa);
         }
 
-        // Filtrar por estado
         if (filters.estado) {
             result = result.filter(col => col.estado === filters.estado);
         }
 
-        // Filtrar por departamento
         if (filters.departamento) {
             result = result.filter(col => col.departamento === filters.departamento);
         }
 
-        // Filtrar por asignaciones
         if (filters.asignaciones) {
             switch (filters.asignaciones) {
                 case 'con_asignaciones':
@@ -1054,32 +1051,32 @@ const ColaboradoresPage = () => {
             }
         }
 
-        // Ordenar
         result = sortColaboradores(result, filters.ordenarPor);
-
         setFilteredColaboradores(result);
         setPage(0);
     }, [colaboradores, searchTerm, filters, sortColaboradores]);
 
-    // Aplicar filtros cuando cambian las dependencias
     useEffect(() => {
         applyFilters();
     }, [applyFilters]);
 
-    // Función para cargar datos
+    // Función para cargar datos - CON PREVENCIÓN DE LLAMADAS MÚLTIPLES
     const fetchData = useCallback(async (showRefresh = false) => {
+        if (isFetching) return;
+        
         if (showRefresh) {
             setRefreshing(true);
         } else {
             setLoading(true);
         }
+        
+        setIsFetching(true);
 
         try {
             const data = await colaboradorService.getColaboradores();
             console.log('📊 Datos de colaboradores recibidos:', data?.length || 0);
             setColaboradores(data || []);
             
-            // Calcular stats reales
             const activos = data?.filter(c => c.estado === 'ACTIVO').length || 0;
             const inactivos = data?.filter(c => c.estado === 'INACTIVO').length || 0;
             const departamentosUnicos = [...new Set(data?.map(c => c.departamento).filter(Boolean))];
@@ -1101,8 +1098,9 @@ const ColaboradoresPage = () => {
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setIsFetching(false);
         }
-    }, [showSnackbar]);
+    }, [showSnackbar, isFetching]);
 
     // Función para cargar datos iniciales
     const fetchInitialData = useCallback(async () => {
@@ -1113,6 +1111,15 @@ const ColaboradoresPage = () => {
         } catch (error) {
             console.error('Error cargando datos iniciales:', error);
         }
+    }, []);
+
+    // Efecto único para carga inicial
+    useEffect(() => {
+        const loadData = async () => {
+            await fetchData();
+            await fetchInitialData();
+        };
+        loadData();
     }, []);
 
     // Función para cargar productos asignados
@@ -1134,22 +1141,13 @@ const ColaboradoresPage = () => {
         }
     }, [showSnackbar]);
 
-    // Función para refrescar productos asignados
+    // Función para refrescar productos asignados (DEFINIDA CORRECTAMENTE)
     const refreshProductosAsignados = useCallback(async () => {
         if (selectedColaboradorDetail) {
             console.log('🔄 Refrescando productos asignados...');
             await loadProductosAsignados(selectedColaboradorDetail.id);
         }
     }, [selectedColaboradorDetail, loadProductosAsignados]);
-
-    // Efectos
-    useEffect(() => {
-        const loadData = async () => {
-            await fetchInitialData();
-            await fetchData();
-        };
-        loadData();
-    }, []); // Solo se ejecuta una vez al montar
 
     const handleClearFilters = useCallback(() => {
         setSearchTerm('');
@@ -1175,9 +1173,31 @@ const ColaboradoresPage = () => {
     const handleCloseForm = useCallback(() => {
         setSelectedColaborador(null);
         setOpenForm(false);
-        fetchData();
-        fetchInitialData();
-    }, [fetchData, fetchInitialData]);
+        if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+        }
+        refreshTimeoutRef.current = setTimeout(() => {
+            fetchData();
+        }, 300);
+    }, [fetchData]);
+
+    const handleSave = useCallback(async (colaboradorData) => {
+        setOpenForm(false);
+        setSelectedColaborador(null);
+        
+        showSnackbar(
+            selectedColaborador ? 'Colaborador actualizado correctamente' : 'Colaborador creado correctamente',
+            'success'
+        );
+        
+        if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+        }
+        refreshTimeoutRef.current = setTimeout(() => {
+            fetchData();
+            fetchInitialData();
+        }, 500);
+    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
 
     const handleOpenDetail = useCallback(async (colaborador) => {
         try {
@@ -1221,24 +1241,15 @@ const ColaboradoresPage = () => {
         }
     }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
 
-    const handleSave = useCallback(async (colaboradorData) => {
-        setOpenForm(false);
-        setSelectedColaborador(null);
-        showSnackbar(
-            selectedColaborador ? 'Colaborador actualizado' : 'Colaborador creado',
-            'success'
-        );
-        await fetchData();
-        await fetchInitialData();
-    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
-
     const handleRefresh = useCallback(() => {
+        if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+        }
         fetchData(true);
-        fetchInitialData();
         if (selectedColaboradorDetail) {
             loadProductosAsignados(selectedColaboradorDetail.id);
         }
-    }, [fetchData, fetchInitialData, selectedColaboradorDetail, loadProductosAsignados]);
+    }, [fetchData, selectedColaboradorDetail, loadProductosAsignados]);
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -1258,7 +1269,6 @@ const ColaboradoresPage = () => {
         value && value !== '' && key !== 'ordenarPor'
     ).length + (searchTerm ? 1 : 0);
 
-    // Estadísticas por empresa
     const statsPorEmpresa = OPCIONES_EMPRESA.map(emp => ({
         ...emp,
         cantidad: colaboradores.filter(c => c.empresa === emp.valor).length
@@ -1616,8 +1626,8 @@ const ColaboradoresPage = () => {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                paginatedColaboradores.map((col) => (
-                                    <TableRow key={col.id} hover>
+                                paginatedColaboradores.map((col, index) => (
+                                    <TableRow key={`${col.id}-${col.rut}-${index}`} hover>
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={1.5}>
                                                 <Avatar sx={{ bgcolor: getEmpresaColor(col.empresa), width: 40, height: 40 }}>

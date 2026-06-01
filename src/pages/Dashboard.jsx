@@ -1,5 +1,5 @@
-// src/pages/Dashboard.jsx - VERSIÓN CON API REAL (Opción 4)
-import React, { useState, useEffect, useCallback } from "react";
+// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA (SIN ERROR DE REMOVECHILD)
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container,
@@ -18,18 +18,15 @@ import {
   CardContent,
   Divider,
   List,
-  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Badge,
   Tooltip,
   Drawer,
   useMediaQuery,
   Snackbar,
   Alert,
   Skeleton,
-  Popover,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -42,7 +39,6 @@ import {
   CssBaseline,
   ThemeProvider,
   createTheme,
-  Chip,
 } from "@mui/material";
 import { alpha, styled } from "@mui/material/styles";
 import {
@@ -53,30 +49,17 @@ import {
   Person as PersonIcon,
   Logout as LogoutIcon,
   Dashboard as DashboardIcon,
-  TrendingUp as TrendingUpIcon,
-  Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Assignment as AssignmentIcon,
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
-  Notifications as NotificationsIcon,
   Search as SearchIcon,
   Refresh as RefreshIcon,
   ChevronLeft as ChevronLeftIcon,
   Autorenew as AutorenewIcon,
-  Error as ErrorIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
-  KeyboardArrowUp as KeyboardArrowUpIcon,
-  Close as CloseIcon,
-  NotificationsActive as NotificationsActiveIcon,
-  NotificationsOff as NotificationsOffIcon,
-  Lock as LockIcon,
-  Save as SaveIcon,
-  Email as EmailIcon,
-  Work as WorkIcon,
-  Business as BusinessIcon,
-  Badge as BadgeIcon,
   Inventory2 as Inventory2Icon,
   BarChart as BarChartIcon,
   Receipt as ReceiptIcon,
@@ -98,22 +81,23 @@ const ESTADO_TEXTO = {
 };
 
 // ============================================
-// SERVICIOS
+// SERVICIO DE PRODUCTOS
 // ============================================
 const productosService = {
   getProductos: async () => {
     try {
       const response = await api.get("/productos");
-      let productos = response.data?.data || response.data || [];
-      if (!Array.isArray(productos)) productos = [];
-      
-      console.log(`✅ ${productos.length} productos cargados`);
-      
+      let productos = [];
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        productos = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        productos = response.data;
+      }
       return productos.map(p => ({
         ...p,
         id_estado_equipo: Number(p.id_estado_equipo) || 1,
-        estado_texto: ESTADO_TEXTO[Number(p.id_estado_equipo)] || 'DESCONOCIDO',
-        cantidad: p.cantidad || 1
+        cantidad: p.cantidad || 1,
+        precio: p.precio || 0
       }));
     } catch (error) {
       console.error("Error fetching productos:", error);
@@ -121,74 +105,35 @@ const productosService = {
     }
   },
   
-  getStats: async () => {
-    try {
-      const productos = await productosService.getProductos();
-      const productosArray = Array.isArray(productos) ? productos : [];
-      
-      const estadosBaja = [5, 6];
-      const productosActivos = productosArray.filter(p => !estadosBaja.includes(p.id_estado_equipo));
-      const productosDadosDeBaja = productosArray.filter(p => estadosBaja.includes(p.id_estado_equipo));
-      
-      const disponibles = productosActivos.filter(p => p.id_estado_equipo === 1).length;
-      const asignados = productosActivos.filter(p => p.id_estado_equipo === 2).length;
-      const enMantencion = productosActivos.filter(p => p.id_estado_equipo === 3).length;
-      const enReparacion = productosActivos.filter(p => p.id_estado_equipo === 4).length;
-      const bajoStock = productosActivos.filter(p => (p.cantidad || 1) < 5).length;
-      const valorTotal = productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 1)), 0);
-      
-      return {
-        totalProductos: productosArray.length,
-        dadosDeBaja: productosDadosDeBaja.length,
-        totalActivos: productosActivos.length,
-        disponibles,
-        asignados,
-        enMantencion,
-        enReparacion,
-        bajoStock,
-        valorTotal,
-      };
-    } catch (error) {
-      console.error("Error calculating stats:", error);
-      return {
-        totalProductos: 0, dadosDeBaja: 0, totalActivos: 0,
-        disponibles: 0, asignados: 0, enMantencion: 0, enReparacion: 0, bajoStock: 0, valorTotal: 0,
-      };
-    }
+  getStats: async (productos) => {
+    const productosArray = Array.isArray(productos) ? productos : [];
+    const estadosBaja = [5, 6];
+    const productosActivos = productosArray.filter(p => !estadosBaja.includes(p.id_estado_equipo));
+    const productosDadosDeBaja = productosArray.filter(p => estadosBaja.includes(p.id_estado_equipo));
+    
+    return {
+      totalProductos: productosArray.length,
+      dadosDeBaja: productosDadosDeBaja.length,
+      totalActivos: productosActivos.length,
+      disponibles: productosActivos.filter(p => p.id_estado_equipo === 1).length,
+      asignados: productosActivos.filter(p => p.id_estado_equipo === 2).length,
+      enMantencion: productosActivos.filter(p => p.id_estado_equipo === 3).length,
+      enReparacion: productosActivos.filter(p => p.id_estado_equipo === 4).length,
+      bajoStock: productosActivos.filter(p => (p.cantidad || 1) < 5).length,
+      valorTotal: productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 1)), 0),
+    };
   },
   
-  search: async (term) => {
-    try {
-      const productos = await productosService.getProductos();
-      const productosArray = Array.isArray(productos) ? productos : [];
-      const lowerTerm = term.toLowerCase();
-      return productosArray.filter(p => 
-        (p.nombre?.toLowerCase() || '').includes(lowerTerm) ||
-        (p.codigo?.toLowerCase() || '').includes(lowerTerm) ||
-        (p.marca?.toLowerCase() || '').includes(lowerTerm) ||
-        (p.numero_serie?.toLowerCase() || '').includes(lowerTerm)
-      );
-    } catch (error) {
-      console.error("Error searching productos:", error);
-      return [];
-    }
-  },
-  
-  exportExcel: async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const exportUrl = `${api.defaults.baseURL}/export/productos`;
-      const response = await fetch(exportUrl, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error('Error al generar el reporte');
-      return await response.blob();
-    } catch (error) {
-      console.error("Error exporting Excel:", error);
-      throw error;
-    }
-  },
+  search: async (term, productos) => {
+    const productosArray = Array.isArray(productos) ? productos : [];
+    const lowerTerm = term.toLowerCase();
+    return productosArray.filter(p => 
+      (p.nombre?.toLowerCase() || '').includes(lowerTerm) ||
+      (p.codigo?.toLowerCase() || '').includes(lowerTerm) ||
+      (p.marca?.toLowerCase() || '').includes(lowerTerm) ||
+      (p.numero_serie?.toLowerCase() || '').includes(lowerTerm)
+    );
+  }
 };
 
 const bodegasService = {
@@ -200,52 +145,24 @@ const bodegasService = {
       console.error("Error fetching bodegas:", error);
       return [];
     }
-  },
-  
-  search: async (term) => {
-    try {
-      const bodegas = await bodegasService.getBodegas();
-      const bodegasArray = Array.isArray(bodegas) ? bodegas : [];
-      const lowerTerm = term.toLowerCase();
-      return bodegasArray.filter(b => (b.nombre?.toLowerCase() || '').includes(lowerTerm));
-    } catch (error) {
-      console.error("Error searching bodegas:", error);
-      return [];
-    }
-  },
+  }
 };
 
-// Servicio de préstamos - Usando el mismo endpoint que AsignacionPage
 const prestamosService = {
-  // Obtener préstamos activos desde el API (mismo endpoint que usa AsignacionPage)
-  getPrestamosActivos: async () => {
-    try {
-      console.log('📤 Obteniendo préstamos desde /asignaciones/activas...');
-      const response = await api.get('/asignaciones/activas');
-      let asignaciones = response.data?.data || response.data || [];
-      if (!Array.isArray(asignaciones)) asignaciones = [];
-      
-      // Filtrar solo préstamos (es_prestamo = true o 1)
-      const prestamos = asignaciones.filter(a => a.es_prestamo === true || a.es_prestamo === 1);
-      console.log(`✅ ${prestamos.length} préstamos encontrados`);
-      return prestamos;
-    } catch (error) {
-      console.error("Error obteniendo préstamos:", error);
-      return [];
-    }
-  },
-  
-  // Obtener estadísticas de préstamos
   getStatsPrestamos: async () => {
     try {
-      const prestamos = await prestamosService.getPrestamosActivos();
+      const response = await api.get('/asignaciones/activas');
+      let asignaciones = [];
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        asignaciones = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        asignaciones = response.data;
+      }
+      const prestamos = asignaciones.filter(a => a.es_prestamo === true || a.es_prestamo === 1);
       const activos = prestamos.filter(p => !p.fecha_devolucion).length;
-      return { 
-        total: prestamos.length, 
-        activos: activos 
-      };
+      return { total: prestamos.length, activos };
     } catch (error) {
-      console.error("Error obteniendo stats de préstamos:", error);
+      console.error("Error obteniendo préstamos:", error);
       return { total: 0, activos: 0 };
     }
   }
@@ -256,8 +173,7 @@ const authService = {
     try {
       const user = localStorage.getItem("user");
       return user ? JSON.parse(user) : null;
-    } catch (error) {
-      console.error("Error getting current user:", error);
+    } catch {
       return null;
     }
   },
@@ -280,25 +196,22 @@ const StyledCard = styled(Card)(({ theme }) => ({
   },
 }));
 
-const StatCard = ({ icon: Icon, title, value, change, color, loading, onClick }) => {
-  return (
-    <StyledCard onClick={onClick} sx={{ cursor: onClick ? "pointer" : "default" }}>
-      <CardContent>
-        <Avatar sx={{ bgcolor: alpha(color, 0.12), color, width: 50, height: 50, mb: 2 }}>
-          <Icon />
-        </Avatar>
-        <Typography variant="h5" fontWeight={700}>
-          {loading ? <Skeleton width={40} /> : value !== undefined ? value : 0}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{title}</Typography>
-        {change && !loading && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>{change}</Typography>
-        )}
-        {loading && <Skeleton width="60%" sx={{ mt: 0.5 }} />}
-      </CardContent>
-    </StyledCard>
-  );
-};
+const StatCard = ({ icon: Icon, title, value, change, color, loading, onClick }) => (
+  <StyledCard onClick={onClick} sx={{ cursor: onClick ? "pointer" : "default" }}>
+    <CardContent>
+      <Avatar sx={{ bgcolor: alpha(color, 0.12), color, width: 50, height: 50, mb: 2 }}>
+        <Icon />
+      </Avatar>
+      <Typography variant="h5" fontWeight={700}>
+        {loading ? <Skeleton width={40} /> : value ?? 0}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{title}</Typography>
+      {change && !loading && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>{change}</Typography>
+      )}
+    </CardContent>
+  </StyledCard>
+);
 
 const NavigationCard = ({ icon: Icon, title, description, onClick, color }) => (
   <StyledCard onClick={onClick} sx={{ cursor: "pointer", textAlign: "center" }}>
@@ -328,7 +241,7 @@ const ScrollToTopFab = () => {
 };
 
 // Diálogos
-const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) => {
+const PerfilDialog = ({ open, onClose, user, showSnackbar }) => {
   const [formData, setFormData] = useState({ nombre: '', email: '', rut: '', cargo: '', departamento: '' });
   const [loading, setLoading] = useState(false);
 
@@ -373,25 +286,23 @@ const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) =>
   );
 };
 
-const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode }) => {
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configuración</DialogTitle>
-      <DialogContent dividers>
-        <List>
-          <ListItem>
-            <ListItemIcon>{darkMode ? <DarkModeIcon /> : <LightModeIcon />}</ListItemIcon>
-            <ListItemText primary="Modo Oscuro" secondary="Activar tema oscuro" />
-            <Switch checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
-          </ListItem>
-        </List>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
+const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>Configuración</DialogTitle>
+    <DialogContent dividers>
+      <List>
+        <ListItemButton>
+          <ListItemIcon>{darkMode ? <DarkModeIcon /> : <LightModeIcon />}</ListItemIcon>
+          <ListItemText primary="Modo Oscuro" secondary="Activar tema oscuro" />
+          <Switch checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
+        </ListItemButton>
+      </List>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cerrar</Button>
+    </DialogActions>
+  </Dialog>
+);
 
 // ================= DASHBOARD PRINCIPAL =================
 const Dashboard = () => {
@@ -417,6 +328,10 @@ const Dashboard = () => {
   const [openPerfil, setOpenPerfil] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [apiError, setApiError] = useState(false);
+  const [productosCache, setProductosCache] = useState([]);
+  const [bodegasCache, setBodegasCache] = useState([]);
+  const refreshTimeoutRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   const menuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
@@ -424,29 +339,17 @@ const Dashboard = () => {
     { text: "Bodegas", icon: <WarehouseIcon />, path: "/bodegas" },
     { text: 'Colaboradores', icon: <PersonIcon />, path: '/colaboradores' },
     { text: "Asignaciones", icon: <AssignmentIcon />, path: "/asignacion" },
-    { text: "Stock por Marca/Modelo", icon: <Inventory2Icon />, path: "/stock" },
+    { text: "Stock", icon: <Inventory2Icon />, path: "/stock" },
     { text: "Historial", icon: <HistoryIcon />, path: "/historial" },
   ];
 
   const showSnackbar = useCallback((message, severity = "success") => {
-    setSnackbar({ open: true, message, severity });
-  }, []);
-
-  // Función para cargar préstamos desde el API (mismo endpoint que AsignacionPage)
-  const cargarPrestamos = useCallback(async () => {
-    try {
-      const prestamosStats = await prestamosService.getStatsPrestamos();
-      setStatsPrestamos(prestamosStats);
-      console.log("📊 Estadísticas de préstamos:", prestamosStats);
-      return prestamosStats;
-    } catch (error) {
-      console.error("Error cargando préstamos:", error);
-      setStatsPrestamos({ total: 0, activos: 0 });
-      return { total: 0, activos: 0 };
+    if (isMountedRef.current) {
+      setSnackbar({ open: true, message, severity });
     }
   }, []);
 
-  // Función principal de carga de datos
+  // Función para cargar todos los datos
   const fetchDashboardData = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
       setRefreshing(true);
@@ -456,94 +359,82 @@ const Dashboard = () => {
     setApiError(false);
 
     try {
-      console.log('🔄 Cargando datos del dashboard...');
+      // Cargar productos
+      const productos = await productosService.getProductos();
+      if (!isMountedRef.current) return;
+      setProductosCache(productos);
       
-      // Cargar estadísticas de productos
-      const statsData = await productosService.getStats();
-      setStats(statsData);
+      // Calcular estadísticas de productos
+      const newStats = await productosService.getStats(productos);
+      if (!isMountedRef.current) return;
+      setStats(newStats);
       
-      // Cargar estadísticas de préstamos desde el API (mismo endpoint que AsignacionPage)
-      await cargarPrestamos();
+      // Cargar estadísticas de préstamos
+      const prestamosStats = await prestamosService.getStatsPrestamos();
+      if (!isMountedRef.current) return;
+      setStatsPrestamos(prestamosStats);
       
-      console.log("📊 Datos cargados:", { statsData });
+      // Cargar bodegas para búsqueda
+      const bodegas = await bodegasService.getBodegas();
+      if (!isMountedRef.current) return;
+      setBodegasCache(bodegas);
       
-      if (showRefresh) showSnackbar("Datos actualizados", "success");
+      if (showRefresh && isMountedRef.current) {
+        showSnackbar("Datos actualizados", "success");
+      }
     } catch (error) {
       console.error("Error cargando datos:", error);
-      setApiError(true);
-      showSnackbar("Error al cargar los datos", "error");
+      if (isMountedRef.current) {
+        setApiError(true);
+        showSnackbar("Error al cargar los datos", "error");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [showSnackbar, cargarPrestamos]);
-
-  // Búsqueda
-  const handleSearch = async (term) => {
-    if (!term.trim()) { setSearchResults([]); return; }
-    setSearching(true);
-    try {
-      const [productos, bodegas] = await Promise.all([
-        productosService.search(term),
-        bodegasService.search(term),
-      ]);
-      setSearchResults([
-        ...(productos || []).map((p) => ({ ...p, tipo: "producto" })),
-        ...(bodegas || []).map((b) => ({ ...b, tipo: "bodega" })),
-      ]);
-    } catch (error) {
-      console.error("Error en búsqueda:", error);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleGenerarReporte = useCallback(async () => {
-    try {
-      showSnackbar("Generando reporte...", "info");
-      const blob = await productosService.exportExcel();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `reporte_${new Date().toISOString().slice(0,10)}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      showSnackbar("Reporte generado exitosamente", "success");
-    } catch (error) {
-      console.error("Error generando reporte:", error);
-      showSnackbar("Error al generar reporte", "error");
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [showSnackbar]);
 
-  const handleProfileUpdate = (updatedUser) => {
-    setUser(updatedUser);
-  };
-
-  // Debounce para búsqueda
+  // Búsqueda
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchTerm) handleSearch(searchTerm);
-    }, 500);
+    const timer = setTimeout(async () => {
+      if (searchTerm && searchTerm.trim()) {
+        setSearching(true);
+        try {
+          const productos = await productosService.search(searchTerm, productosCache);
+          const bodegas = bodegasCache.filter(b => 
+            (b.nombre?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+          );
+          setSearchResults([
+            ...productos.map(p => ({ ...p, tipo: "producto" })),
+            ...bodegas.map(b => ({ ...b, tipo: "bodega" }))
+          ]);
+        } catch (error) {
+          console.error("Error en búsqueda:", error);
+        } finally {
+          setSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, productosCache, bodegasCache]);
 
-  // Auto-refresh cada 30 segundos para mantener datos actualizados
+  // Auto-refresh cada 60 segundos
   useEffect(() => {
     const intervalo = setInterval(() => {
-      if (!loading && !refreshing) {
-        console.log('🔄 Auto-refresh de datos...');
-        cargarPrestamos(); // Solo recargar préstamos, no todo
+      if (!loading && !refreshing && isMountedRef.current) {
+        fetchDashboardData(false);
       }
-    }, 30000);
+    }, 60000);
     return () => clearInterval(intervalo);
-  }, [loading, refreshing, cargarPrestamos]);
+  }, [loading, refreshing, fetchDashboardData]);
 
   // Cargar datos iniciales
   useEffect(() => {
+    isMountedRef.current = true;
     const currentUser = authService.getCurrentUser();
     if (!currentUser) { 
       navigate("/login"); 
@@ -551,7 +442,12 @@ const Dashboard = () => {
     }
     setUser(currentUser);
     fetchDashboardData();
-  }, []);
+    
+    return () => {
+      isMountedRef.current = false;
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
+  }, [fetchDashboardData, navigate]);
 
   useEffect(() => {
     setDrawerOpen(!isMobile);
@@ -655,7 +551,7 @@ const Dashboard = () => {
                   {!searching && searchResults.length > 0 && (
                     <List>
                       {searchResults.map((result, idx) => (
-                        <ListItemButton key={idx} onClick={() => {
+                        <ListItemButton key={`${result.tipo}-${result.id}-${idx}`} onClick={() => {
                           if (result.tipo === 'producto') navigate('/productos');
                           else if (result.tipo === 'bodega') navigate('/bodegas');
                           setSearchOpen(false);
@@ -703,10 +599,10 @@ const Dashboard = () => {
                 {!loading && stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
                 {!loading && stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
                 {!loading && statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
-                {!loading && stats.totalProductos === 0 && `Cargando datos del inventario...`}
+                {loading && `Cargando datos del inventario...`}
               </Typography>
               <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
-                <Button variant="contained" startIcon={<AssessmentIcon />} onClick={handleGenerarReporte} sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}>
+                <Button variant="contained" startIcon={<AssessmentIcon />} sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}>
                   Reporte Excel
                 </Button>
                 <Button variant="outlined" startIcon={<BarChartIcon />} onClick={() => navigate("/stock")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
@@ -718,7 +614,7 @@ const Dashboard = () => {
               </Box>
             </Paper>
 
-            {/* Stats Grid - 4 tarjetas (TOTAL, DISPONIBLES, ASIGNADOS, PRÉSTAMOS) */}
+            {/* Stats Grid */}
             <Grid container spacing={{ xs: 2, sm: 3 }}>
               <Grid item xs={6} sm={6} md={3}>
                 <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading} />
@@ -753,7 +649,7 @@ const Dashboard = () => {
 
           <ScrollToTopFab />
           
-          <PerfilDialog open={openPerfil} onClose={() => setOpenPerfil(false)} user={user} onProfileUpdate={handleProfileUpdate} showSnackbar={showSnackbar} />
+          <PerfilDialog open={openPerfil} onClose={() => setOpenPerfil(false)} user={user} showSnackbar={showSnackbar} />
           <ConfiguracionDialog open={openConfig} onClose={() => setOpenConfig(false)} darkMode={darkMode} setDarkMode={setDarkMode} />
           
           <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
