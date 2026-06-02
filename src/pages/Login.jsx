@@ -1,4 +1,4 @@
-// src/pages/Login.jsx - VERSIÓN CORREGIDA
+// src/pages/Login.jsx - VERSIÓN COMPLETA CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -25,7 +25,7 @@ import {
     Inventory as InventoryIcon
 } from '@mui/icons-material';
 import { styled, alpha } from '@mui/material/styles';
-import { authService } from '../services/api';
+import api, { authService } from '../services/api';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
     padding: theme.spacing(4),
@@ -71,34 +71,89 @@ const Login = () => {
         
         try {
             console.log('📤 Intentando login con usuario:', data.usuario);
+            console.log('📡 Endpoint:', `${api.defaults.baseURL}/auth/login`);
             
-            // Llamar al servicio de login
-            const result = await authService.login(data.usuario, data.password);
+            // Llamar directamente a la API para tener más control
+            const response = await api.post('/auth/login', {
+                usuario: data.usuario.trim(),
+                password: data.password
+            });
             
-            console.log('📦 Resultado del login:', result);
+            console.log('📥 Respuesta completa:', response);
+            console.log('📦 Datos de respuesta:', response.data);
             
-            if (result && result.success) {
-                // ✅ CORREGIDO: Los datos del usuario están en result.data
-                const userData = result.data?.usuario || result.usuario;
+            const responseData = response.data;
+            
+            if (responseData && responseData.success) {
+                // Verificar que tenemos token
+                if (!responseData.token) {
+                    setError('El servidor no devolvió un token válido');
+                    setLoading(false);
+                    return;
+                }
                 
-                if (userData) {
-                    console.log('✅ Login exitoso, usuario:', userData.usuario);
-                    console.log('✅ Token guardado:', localStorage.getItem('token') ? 'Sí' : 'No');
-                    console.log('✅ User guardado:', localStorage.getItem('user') ? 'Sí' : 'No');
-                    
-                    // Forzar un pequeño delay para asegurar que localStorage se escribió
-                    setTimeout(() => {
-                        navigate('/dashboard', { replace: true });
-                    }, 100);
-                } else {
+                // Guardar token
+                localStorage.setItem('token', responseData.token);
+                console.log('✅ Token guardado');
+                
+                // Obtener datos del usuario (puede venir en 'usuario' o 'user')
+                const userData = responseData.usuario || responseData.user;
+                
+                if (!userData) {
                     setError('No se recibieron datos del usuario');
+                    setLoading(false);
+                    return;
+                }
+                
+                // Guardar usuario en localStorage
+                const userToStore = {
+                    id: userData.id,
+                    usuario: userData.usuario || data.usuario,
+                    nombre: userData.nombre || '',
+                    email: userData.email || '',
+                    cargo: userData.cargo || '',
+                    departamento: userData.departamento || '',
+                    rol: userData.rol || 'usuario',
+                    rut: userData.rut || ''
+                };
+                
+                localStorage.setItem('user', JSON.stringify(userToStore));
+                console.log('✅ Usuario guardado:', userToStore);
+                
+                // Verificar que se guardó correctamente
+                const savedToken = localStorage.getItem('token');
+                const savedUser = localStorage.getItem('user');
+                console.log('🔍 Token guardado:', savedToken ? 'Sí' : 'No');
+                console.log('🔍 Usuario guardado:', savedUser ? 'Sí' : 'No');
+                
+                if (savedToken && savedUser) {
+                    console.log('🚀 Redirigiendo al dashboard...');
+                    // Usar replace para evitar volver al login con el botón atrás
+                    navigate('/dashboard', { replace: true });
+                } else {
+                    setError('Error al guardar la sesión');
                 }
             } else {
-                setError(result?.message || 'Error al iniciar sesión');
+                setError(responseData?.message || 'Usuario o contraseña incorrectos');
             }
         } catch (error) {
             console.error('❌ Error en login:', error);
-            setError(error.message || 'Error al conectar con el servidor');
+            console.error('❌ Response:', error.response);
+            console.error('❌ Status:', error.response?.status);
+            console.error('❌ Data:', error.response?.data);
+            
+            // Manejar diferentes tipos de errores
+            if (error.response?.status === 401) {
+                setError('Usuario o contraseña incorrectos');
+            } else if (error.response?.status === 400) {
+                setError(error.response.data?.message || 'Datos inválidos');
+            } else if (error.response?.status === 500) {
+                setError('Error en el servidor. Intenta más tarde');
+            } else if (error.code === 'ECONNABORTED') {
+                setError('Tiempo de espera agotado. Verifica tu conexión');
+            } else {
+                setError(error.response?.data?.message || error.message || 'Error de conexión con el servidor');
+            }
         } finally {
             setLoading(false);
         }
@@ -121,6 +176,7 @@ const Login = () => {
                 minHeight: '100vh',
                 width: '100vw',
                 boxSizing: 'border-box',
+                overflow: 'auto',
             }}
         >
             <StyledPaper elevation={3}>
@@ -273,9 +329,12 @@ const Login = () => {
                                 background: 'linear-gradient(135deg, #cbd5e0 0%, #a0aec0 100%)',
                             },
                         }}
-                        startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
                     >
-                        {loading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
+                        {loading ? (
+                            <CircularProgress size={24} color="inherit" />
+                        ) : (
+                            'INICIAR SESIÓN'
+                        )}
                     </Button>
 
                     <Divider sx={{ my: 2 }}>

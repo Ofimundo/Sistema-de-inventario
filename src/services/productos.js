@@ -1,4 +1,4 @@
-// src/services/productos.js - VERSIÓN COMPLETA CON FILTROS CORREGIDOS
+// src/services/productos.js - VERSIÓN COMPLETA CON FILTROS CORREGIDOS Y LABORATORIO
 
 import api from './api';
 
@@ -446,7 +446,7 @@ export const productosService = {
     },
 
     // ============================================
-    // MÉTODOS DE DISPOSICIÓN (BAJA/DONACIÓN)
+    // MÉTODOS DE DISPOSICIÓN (BAJA/DONACIÓN/LABORATORIO)
     // ============================================
     
     /**
@@ -483,6 +483,25 @@ export const productosService = {
             return response.data;
         } catch (error) {
             console.error('❌ Error en registrarDonacion:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Registrar envío a laboratorio
+     */
+    registrarLaboratorio: async (formData) => {
+        try {
+            console.log('📤 Registrando envío a laboratorio');
+            
+            const response = await api.post('/productos/disposicion/laboratorio', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            
+            console.log('✅ Respuesta registrarLaboratorio:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en registrarLaboratorio:', error);
             throw error;
         }
     },

@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 
 class UsuarioModel {
     /**
-     * Crear nuevo usuario (VERSIÓN CORREGIDA)
+     * Crear nuevo usuario
      */
     async create(userData) {
         try {
@@ -13,22 +13,19 @@ class UsuarioModel {
                 password: userData.password ? '***' : 'UNDEFINED'
             });
 
-            // VALIDACIÓN ESTRICTA
             if (!userData.password) {
                 throw new Error('La contraseña es requerida para crear el usuario');
             }
 
             const pool = await getConnection();
             
-            // Hashear la contraseña
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(userData.password, salt);
             console.log('✅ Contraseña hasheada correctamente');
 
-            // Insertar en la base de datos
             const result = await pool.request()
                 .input('usuario', sql.NVarChar, userData.usuario)
-                .input('contraseña', sql.NVarChar, hashedPassword)  // ⚠️ Nota: usa 'contraseña' con ñ
+                .input('contraseña', sql.NVarChar, hashedPassword)
                 .input('nombre', sql.NVarChar, userData.nombre || '')
                 .input('email', sql.NVarChar, userData.email || '')
                 .input('cargo', sql.NVarChar, userData.cargo || '')
@@ -44,7 +41,6 @@ class UsuarioModel {
 
             const nuevoId = result.recordset[0].id;
             
-            // Retornar el usuario sin la contraseña
             return {
                 id: nuevoId,
                 usuario: userData.usuario,
@@ -84,13 +80,13 @@ class UsuarioModel {
             return {
                 id: user.id,
                 usuario: user.usuario,
-                contraseña: user.contraseña,  // ⚠️ Nota: campo con ñ
+                contraseña: user.contraseña,
                 nombre: user.nombre,
                 email: user.email,
                 cargo: user.cargo,
                 departamento: user.departamento,
                 rol: user.rol,
-                rut: user.rut,
+                rut: user.rut || '',
                 activo: user.activo
             };
         } catch (error) {
@@ -110,7 +106,7 @@ class UsuarioModel {
                 .query(`
                     SELECT id, usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo
                     FROM INV.usuarios
-                    WHERE id = @id AND (activo = 1 OR activo IS NULL)
+                    WHERE id = @id
                 `);
             
             if (result.recordset.length === 0) {
@@ -127,7 +123,7 @@ class UsuarioModel {
                 cargo: user.cargo,
                 departamento: user.departamento,
                 rol: user.rol,
-                rut: user.rut,
+                rut: user.rut || '',
                 activo: user.activo
             };
         } catch (error) {
@@ -170,7 +166,9 @@ class UsuarioModel {
                 console.log('⚠️ Datos faltantes para comparar contraseña');
                 return false;
             }
-            return await bcrypt.compare(plainPassword, hashedPassword);
+            const result = await bcrypt.compare(plainPassword, hashedPassword);
+            console.log('🔐 Comparación de contraseña:', result ? '✅ Válida' : '❌ Inválida');
+            return result;
         } catch (error) {
             console.error('❌ Error en comparePassword:', error);
             return false;
@@ -178,20 +176,33 @@ class UsuarioModel {
     }
 
     /**
-     * Actualizar contraseña
+     * Actualizar contraseña - CORREGIDO CON MÁS LOGS
      */
     async updatePassword(userId, hashedPassword) {
         try {
+            console.log('📝 updatePassword - Usuario ID:', userId);
+            console.log('📝 Nueva contraseña hasheada:', hashedPassword.substring(0, 20) + '...');
+            
             const pool = await getConnection();
-            await pool.request()
+            
+            const result = await pool.request()
                 .input('id', sql.Int, userId)
                 .input('contraseña', sql.NVarChar, hashedPassword)
                 .query(`
                     UPDATE INV.usuarios 
-                    SET contraseña = @contraseña, updated_at = GETDATE()
+                    SET contraseña = @contraseña
                     WHERE id = @id
                 `);
-            return true;
+            
+            console.log('📊 Filas afectadas:', result.rowsAffected);
+            
+            if (result.rowsAffected && result.rowsAffected[0] > 0) {
+                console.log('✅ Contraseña actualizada correctamente');
+                return true;
+            } else {
+                console.error('❌ No se actualizó ninguna fila');
+                throw new Error('No se pudo actualizar la contraseña');
+            }
         } catch (error) {
             console.error('❌ Error en updatePassword:', error);
             throw error;
@@ -205,7 +216,6 @@ class UsuarioModel {
         try {
             const pool = await getConnection();
             
-            // Primero obtener el usuario actual
             const currentUser = await this.findById(userId);
             if (!currentUser) {
                 throw new Error('Usuario no encontrado');
@@ -215,25 +225,26 @@ class UsuarioModel {
                 .input('id', sql.Int, userId)
                 .input('nombre', sql.NVarChar, userData.nombre || currentUser.nombre)
                 .input('email', sql.NVarChar, userData.email || currentUser.email)
-                .input('cargo', sql.NVarChar, userData.cargo || null)
-                .input('departamento', sql.NVarChar, userData.departamento || null)
+                .input('cargo', sql.NVarChar, userData.cargo !== undefined ? userData.cargo : currentUser.cargo)
+                .input('departamento', sql.NVarChar, userData.departamento !== undefined ? userData.departamento : currentUser.departamento)
+                .input('rut', sql.NVarChar, userData.rut !== undefined ? userData.rut : currentUser.rut)
                 .query(`
                     UPDATE INV.usuarios 
                     SET nombre = @nombre,
                         email = @email,
                         cargo = @cargo,
                         departamento = @departamento,
-                        updated_at = GETDATE()
+                        rut = @rut
                     WHERE id = @id
                 `);
             
-            // Retornar usuario actualizado
             return {
                 ...currentUser,
                 nombre: userData.nombre || currentUser.nombre,
                 email: userData.email || currentUser.email,
-                cargo: userData.cargo || currentUser.cargo,
-                departamento: userData.departamento || currentUser.departamento
+                cargo: userData.cargo !== undefined ? userData.cargo : currentUser.cargo,
+                departamento: userData.departamento !== undefined ? userData.departamento : currentUser.departamento,
+                rut: userData.rut !== undefined ? userData.rut : currentUser.rut
             };
         } catch (error) {
             console.error('❌ Error en update:', error);
@@ -242,7 +253,7 @@ class UsuarioModel {
     }
 
     /**
-     * Desactivar usuario (soft delete)
+     * Desactivar usuario
      */
     async deactivate(userId) {
         try {
@@ -251,7 +262,7 @@ class UsuarioModel {
                 .input('id', sql.Int, userId)
                 .query(`
                     UPDATE INV.usuarios 
-                    SET activo = 0, updated_at = GETDATE()
+                    SET activo = 0
                     WHERE id = @id
                 `);
             return true;

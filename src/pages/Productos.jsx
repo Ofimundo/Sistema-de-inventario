@@ -1,4 +1,4 @@
-// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO CORREGIDO PARA MARCA Y MODELO
+// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO CORREGIDO PARA MARCA Y MODELO + LABORATORIO
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -89,7 +89,11 @@ import {
     Download as DownloadIcon,
     Store as StoreIcon,
     ExpandMore as ExpandMoreIcon,
-    QrCode as QrCodeIcon
+    QrCode as QrCodeIcon,
+    Science as ScienceIcon, 
+    Upload as UploadIcon,    
+    Description as DescriptionIcon, 
+    PictureAsPdf as PictureAsPdfIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { productosService } from '../services/productos';
@@ -108,6 +112,7 @@ const colors = {
     info: '#3B82F6',
     background: '#F9FAFB',
     surface: '#FFFFFF',
+    laboratory: '#8B5CF6',
     text: {
         primary: '#111827',
         secondary: '#6B7280',
@@ -576,7 +581,7 @@ function HistorialUsoDialog({ open, onClose, producto, historial = [] }) {
 }
 
 // ============================================
-// DIÁLOGO DE DISPOSICIÓN (BAJA/DONACIÓN)
+// DIÁLOGO DE DISPOSICIÓN (BAJA/DONACIÓN/LABORATORIO)
 // ============================================
 function DisposicionDialog({ open, onClose, producto, onSuccess }) {
     const [tipo, setTipo] = useState('BAJA');
@@ -590,6 +595,8 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
     const [documento, setDocumento] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [laboratorioNombre, setLaboratorioNombre] = useState('');
+    const [laboratorioContacto, setLaboratorioContacto] = useState('');
 
     useEffect(() => {
         if (open) {
@@ -603,6 +610,8 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
             setRecibe('');
             setDocumento(null);
             setError('');
+            setLaboratorioNombre('');
+            setLaboratorioContacto('');
         }
     }, [open, producto]);
 
@@ -623,13 +632,22 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                 setError('Debe ingresar quién autoriza la baja');
                 return;
             }
-        } else {
+        } else if (tipo === 'DONACION') {
             if (!institucion?.trim()) {
                 setError('Debe ingresar la institución/beneficiario');
                 return;
             }
             if (!direccion?.trim()) {
                 setError('Debe ingresar la dirección');
+                return;
+            }
+        } else if (tipo === 'LABORATORIO') {
+            if (!laboratorioNombre?.trim()) {
+                setError('Debe ingresar el nombre del laboratorio');
+                return;
+            }
+            if (!autorizadoPor?.trim()) {
+                setError('Debe ingresar quién autoriza la salida a laboratorio');
                 return;
             }
         }
@@ -662,7 +680,7 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                 
                 response = await productosService.registrarBaja(formData);
                 
-            } else {
+            } else if (tipo === 'DONACION') {
                 formData.append('beneficiario', institucion.trim());
                 formData.append('direccion', direccion.trim());
                 
@@ -678,12 +696,27 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                 }
                 
                 response = await productosService.registrarDonacion(formData);
+            } else if (tipo === 'LABORATORIO') {
+                formData.append('tipo_disposicion', 'LABORATORIO');
+                formData.append('laboratorio_nombre', laboratorioNombre.trim());
+                formData.append('autorizado_por', autorizadoPor.trim());
+                formData.append('motivo', motivo.trim() || 'Envío a laboratorio para análisis');
+                if (laboratorioContacto?.trim()) formData.append('contacto', laboratorioContacto.trim());
+                if (descripcion?.trim()) formData.append('descripcion', descripcion.trim());
+                if (observaciones?.trim()) formData.append('observaciones', observaciones.trim());
+                if (documento) formData.append('documento_respaldo', documento);
+                response = await productosService.registrarLaboratorio(formData);
             }
             
             if (response && response.success) {
-                const mensaje = tipo === 'BAJA' 
-                    ? `Baja registrada para ${producto.nombre}` 
-                    : `Donación registrada para ${producto.nombre}`;
+                let mensaje = '';
+                if (tipo === 'BAJA') {
+                    mensaje = `Baja registrada para ${producto.nombre}`;
+                } else if (tipo === 'DONACION') {
+                    mensaje = `Donación registrada para ${producto.nombre}`;
+                } else {
+                    mensaje = `Producto enviado a laboratorio: ${laboratorioNombre}`;
+                }
                 
                 onSuccess(mensaje);
                 onClose();
@@ -717,11 +750,13 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                 <Box display="flex" alignItems="center" gap={1}>
                     {tipo === 'BAJA' ? (
                         <DeleteForeverIcon sx={{ color: colors.error }} />
-                    ) : (
+                    ) : tipo === 'DONACION' ? (
                         <VolunteerActivismIcon sx={{ color: colors.success }} />
+                    ) : (
+                        <ScienceIcon sx={{ color: colors.laboratory }} />
                     )}
                     <Typography variant="h6">
-                        {tipo === 'BAJA' ? 'Registrar Baja de Producto' : 'Registrar Donación de Producto'}
+                        {tipo === 'BAJA' ? 'Registrar Baja de Producto' : tipo === 'DONACION' ? 'Registrar Donación de Producto' : 'Enviar Producto a Laboratorio'}
                     </Typography>
                 </Box>
             </DialogTitle>
@@ -742,6 +777,16 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                         <RadioGroup row value={tipo} onChange={(e) => setTipo(e.target.value)}>
                             <FormControlLabel value="BAJA" control={<Radio />} label="Baja" />
                             <FormControlLabel value="DONACION" control={<Radio />} label="Donación" />
+                            <FormControlLabel 
+                                value="LABORATORIO" 
+                                control={<Radio />} 
+                                label={
+                                    <Box display="flex" alignItems="center" gap={0.5}>
+                                        <ScienceIcon fontSize="small" />
+                                        <span>Laboratorio</span>
+                                    </Box>
+                                } 
+                            />
                         </RadioGroup>
                     </FormControl>
 
@@ -787,7 +832,7 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                                 placeholder="Observaciones adicionales..."
                             />
                         </>
-                    ) : (
+                    ) : tipo === 'DONACION' ? (
                         <>
                             <TextField
                                 fullWidth
@@ -827,6 +872,79 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                                 placeholder="Motivo de la donación o detalles adicionales..."
                             />
                         </>
+                    ) : (
+                        <>
+                            <Alert severity="info" icon={<ScienceIcon />}>
+                                El producto será enviado a laboratorio para análisis. El estado cambiará a "EN LABORATORIO".
+                            </Alert>
+
+                            <TextField
+                                fullWidth
+                                label="Nombre del Laboratorio *"
+                                value={laboratorioNombre}
+                                onChange={(e) => setLaboratorioNombre(e.target.value)}
+                                error={!!error && !laboratorioNombre}
+                                helperText={error && !laboratorioNombre ? 'Requerido' : ''}
+                                placeholder="Ej: Laboratorio de Calidad, Labtest, etc."
+                                disabled={loading}
+                                InputProps={{
+                                    startAdornment: <InputAdornment position="start"><ScienceIcon sx={{ color: colors.laboratory }} /></InputAdornment>
+                                }}
+                            />
+
+                            <TextField
+                                fullWidth
+                                label="Autorizado por *"
+                                value={autorizadoPor}
+                                onChange={(e) => setAutorizadoPor(e.target.value)}
+                                error={!!error && !autorizadoPor}
+                                helperText={error && !autorizadoPor ? 'Requerido' : ''}
+                                placeholder="Nombre de quien autoriza el envío a laboratorio"
+                                disabled={loading}
+                            />
+
+                            <TextField
+                                fullWidth
+                                label="Contacto en laboratorio"
+                                value={laboratorioContacto}
+                                onChange={(e) => setLaboratorioContacto(e.target.value)}
+                                placeholder="Nombre de la persona de contacto (opcional)"
+                                disabled={loading}
+                            />
+
+                            <TextField
+                                fullWidth
+                                label="Motivo del envío"
+                                value={motivo}
+                                onChange={(e) => setMotivo(e.target.value)}
+                                multiline
+                                rows={2}
+                                placeholder="Ej: Análisis de calidad, Pruebas técnicas, Certificación, etc."
+                                disabled={loading}
+                            />
+
+                            <TextField
+                                fullWidth
+                                label="Descripción detallada"
+                                value={descripcion}
+                                onChange={(e) => setDescripcion(e.target.value)}
+                                multiline
+                                rows={3}
+                                placeholder="Detalles adicionales sobre el envío a laboratorio..."
+                                disabled={loading}
+                            />
+
+                            <TextField
+                                fullWidth
+                                label="Observaciones"
+                                value={observaciones}
+                                onChange={(e) => setObservaciones(e.target.value)}
+                                multiline
+                                rows={2}
+                                placeholder="Observaciones adicionales..."
+                                disabled={loading}
+                            />
+                        </>
                     )}
 
                     <Box>
@@ -858,10 +976,19 @@ function DisposicionDialog({ open, onClose, producto, onSuccess }) {
                 <Button 
                     onClick={handleSubmit}
                     variant="contained"
-                    color={tipo === 'BAJA' ? 'error' : 'success'}
+                    color={tipo === 'BAJA' ? 'error' : (tipo === 'DONACION' ? 'success' : 'secondary')}
                     disabled={loading}
+                    startIcon={loading ? <CircularProgress size={20} /> : (tipo === 'BAJA' ? <DeleteForeverIcon /> : (tipo === 'DONACION' ? <VolunteerActivismIcon /> : <ScienceIcon />))}
+                    sx={{
+                        ...(tipo === 'LABORATORIO' && {
+                            background: `linear-gradient(135deg, ${colors.laboratory} 0%, ${colors.secondary} 100%)`,
+                            '&:hover': {
+                                background: `linear-gradient(135deg, ${colors.laboratory} 0%, ${colors.secondary} 100%)`,
+                            }
+                        })
+                    }}
                 >
-                    {loading ? 'Procesando...' : 'Confirmar'}
+                    {loading ? 'Procesando...' : (tipo === 'BAJA' ? 'Registrar Baja' : (tipo === 'DONACION' ? 'Registrar Donación' : 'Enviar a Laboratorio'))}
                 </Button>
             </DialogActions>
         </Dialog>
@@ -1208,7 +1335,8 @@ function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialU
             'ASIGNADO': colors.info,
             'EN MANTENCIÓN': colors.warning,
             'EN REPARACIÓN': colors.warning,
-            'NO DISPONIBLE': colors.error
+            'NO DISPONIBLE': colors.error,
+            'EN LABORATORIO': colors.laboratory
         };
         return colores[estado] || colors.text.secondary;
     };
@@ -3043,7 +3171,8 @@ const Productos = () => {
             'ASIGNADO': colors.info,
             'EN MANTENCIÓN': colors.warning,
             'EN REPARACIÓN': colors.warning,
-            'NO DISPONIBLE': colors.error
+            'NO DISPONIBLE': colors.error,
+            'EN LABORATORIO': colors.laboratory
         };
         return colores[estado] || colors.text.secondary;
     };
@@ -3054,7 +3183,8 @@ const Productos = () => {
             'ASIGNADO': <AssignmentIcon fontSize="small" />,
             'EN MANTENCIÓN': <BuildIcon fontSize="small" />,
             'EN REPARACIÓN': <HandymanIcon fontSize="small" />,
-            'NO DISPONIBLE': <DeleteForeverIcon fontSize="small" />
+            'NO DISPONIBLE': <DeleteForeverIcon fontSize="small" />,
+            'EN LABORATORIO': <ScienceIcon fontSize="small" />
         };
         return iconos[estado] || <InventoryIcon fontSize="small" />;
     };

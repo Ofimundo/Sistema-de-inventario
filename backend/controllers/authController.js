@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "ofimundo123";
 
 const AuthController = {
   /**
-   * Iniciar sesión
+   * Iniciar sesión (incluye RUT en respuesta)
    */
   login: async (req, res) => {
     try {
@@ -59,7 +59,7 @@ const AuthController = {
           rol: user.rol || "usuario",
         },
         JWT_SECRET,
-        { expiresIn: "24h" },
+        { expiresIn: "7d" },  // Token válido por 7 días
       );
 
       res.json({
@@ -74,7 +74,7 @@ const AuthController = {
           cargo: user.cargo || "",
           departamento: user.departamento || "",
           rol: user.rol || "usuario",
-          rut: user.rut || "",
+          rut: user.rut || "",  // ← Incluir RUT
         },
       });
     } catch (error) {
@@ -87,7 +87,7 @@ const AuthController = {
   },
 
   /**
-   * Registrar nuevo usuario
+   * Registrar nuevo usuario (incluye RUT)
    */
   register: async (req, res) => {
     try {
@@ -98,6 +98,7 @@ const AuthController = {
         email,
         cargo,
         departamento,
+        rut,  // ← Agregar RUT
         rol = "usuario",
       } = req.body;
 
@@ -107,6 +108,7 @@ const AuthController = {
         email,
         cargo,
         departamento,
+        rut
       });
 
       if (!usuario || !password || !nombre || !email) {
@@ -154,6 +156,7 @@ const AuthController = {
         email,
         cargo: cargo || null,
         departamento: departamento || null,
+        rut: rut || null,  // ← Guardar RUT
         rol,
       });
 
@@ -166,7 +169,7 @@ const AuthController = {
           rol: newUser.rol || "usuario",
         },
         JWT_SECRET,
-        { expiresIn: "24h" },
+        { expiresIn: "7d" },
       );
 
       res.status(201).json({
@@ -181,7 +184,7 @@ const AuthController = {
           cargo: newUser.cargo || "",
           departamento: newUser.departamento || "",
           rol: newUser.rol || "usuario",
-          rut: newUser.rut || "",
+          rut: newUser.rut || "",  // ← Incluir RUT en respuesta
         },
       });
     } catch (error) {
@@ -205,7 +208,7 @@ const AuthController = {
   },
 
   /**
-   * Verificar token
+   * Verificar token (incluye RUT)
    */
   verifyToken: async (req, res) => {
     try {
@@ -243,7 +246,7 @@ const AuthController = {
           cargo: user.cargo || "",
           departamento: user.departamento || "",
           rol: user.rol || "usuario",
-          rut: user.rut || "",
+          rut: user.rut || "",  // ← Incluir RUT
         },
       });
     } catch (error) {
@@ -289,7 +292,7 @@ const AuthController = {
    */
   changePassword: async (req, res) => {
     try {
-      const { password_actual, password_nueva } = req.body;
+      const { currentPassword, newPassword } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -299,14 +302,14 @@ const AuthController = {
         });
       }
 
-      if (!password_actual || !password_nueva) {
+      if (!currentPassword || !newPassword) {
         return res.status(400).json({
           success: false,
           message: "Contraseña actual y nueva son requeridas",
         });
       }
 
-      if (password_nueva.length < 6) {
+      if (newPassword.length < 6) {
         return res.status(400).json({
           success: false,
           message: "La nueva contraseña debe tener al menos 6 caracteres",
@@ -323,7 +326,7 @@ const AuthController = {
       }
 
       const isValidPassword = await usuarioModel.comparePassword(
-        password_actual,
+        currentPassword,
         user.contraseña,
       );
 
@@ -335,7 +338,7 @@ const AuthController = {
       }
 
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password_nueva, salt);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
 
       await usuarioModel.updatePassword(userId, hashedPassword);
 
@@ -355,12 +358,14 @@ const AuthController = {
   },
 
   /**
-   * Actualizar perfil
+   * Actualizar perfil - CORREGIDO PARA INCLUIR RUT Y NO CERRAR SESIÓN
    */
   updateProfile: async (req, res) => {
     try {
       const userId = req.user?.id;
-      const { nombre, email, cargo, departamento } = req.body;
+      const { nombre, email, cargo, departamento, rut } = req.body;  // ← Incluir rut
+
+      console.log('📝 Actualizando perfil:', { userId, nombre, email, cargo, departamento, rut });
 
       if (!userId) {
         return res.status(401).json({
@@ -400,6 +405,7 @@ const AuthController = {
         email,
         cargo: cargo || null,
         departamento: departamento || null,
+        rut: rut || user.rut || null,  // ← PERMITIR ACTUALIZAR RUT
       });
 
       console.log("✅ Perfil actualizado para usuario:", updatedUser.usuario);
@@ -415,7 +421,7 @@ const AuthController = {
           cargo: updatedUser.cargo || "",
           departamento: updatedUser.departamento || "",
           rol: updatedUser.rol || "usuario",
-          rut: updatedUser.rut || "",
+          rut: updatedUser.rut || "",  // ← Incluir RUT actualizado
         },
       });
     } catch (error) {

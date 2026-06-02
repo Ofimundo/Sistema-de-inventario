@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN CORREGIDA (SIN ERROR DE REMOVECHILD)
+// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CON CAMBIO DE CONTRASEÑA FUNCIONAL
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -39,6 +39,8 @@ import {
   CssBaseline,
   ThemeProvider,
   createTheme,
+  Stack,
+  Chip
 } from "@mui/material";
 import { alpha, styled } from "@mui/material/styles";
 import {
@@ -63,22 +65,17 @@ import {
   Inventory2 as Inventory2Icon,
   BarChart as BarChartIcon,
   Receipt as ReceiptIcon,
+  Save as SaveIcon,
+  Lock as LockIcon,
+  Email as EmailIcon,
+  Work as WorkIcon,
+  Business as BusinessIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon
 } from "@mui/icons-material";
 import api from "../services/api";
 
 const drawerWidth = 260;
-
-// ============================================
-// MAPA DE ESTADOS
-// ============================================
-const ESTADO_TEXTO = {
-  1: 'DISPONIBLE',
-  2: 'ASIGNADO',
-  3: 'EN MANTENCIÓN',
-  4: 'EN REPARACIÓN',
-  5: 'NO DISPONIBLE',
-  6: 'BAJA'
-};
 
 // ============================================
 // SERVICIO DE PRODUCTOS
@@ -122,6 +119,23 @@ const productosService = {
       bajoStock: productosActivos.filter(p => (p.cantidad || 1) < 5).length,
       valorTotal: productosActivos.reduce((sum, p) => sum + ((p.precio || 0) * (p.cantidad || 1)), 0),
     };
+  },
+  
+  exportExcel: async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const baseURL = api.defaults.baseURL || 'https://sistema-inventario-backend-p3xg.onrender.com/api';
+      const exportUrl = `${baseURL}/export/productos`;
+      const response = await fetch(exportUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Error al generar el reporte');
+      return await response.blob();
+    } catch (error) {
+      console.error("Error exporting Excel:", error);
+      throw error;
+    }
   },
   
   search: async (term, productos) => {
@@ -168,15 +182,100 @@ const prestamosService = {
   }
 };
 
+// ============================================
+// AUTH SERVICE
+// ============================================
 const authService = {
   getCurrentUser: () => {
     try {
       const user = localStorage.getItem("user");
-      return user ? JSON.parse(user) : null;
+      if (!user) return null;
+      return JSON.parse(user);
     } catch {
       return null;
     }
   },
+  
+  updateProfile: async (userData) => {
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      return { success: false, message: 'Usuario no encontrado' };
+    }
+    
+    const updatedUser = { 
+      ...currentUser, 
+      nombre: userData.nombre || currentUser.nombre,
+      email: userData.email || currentUser.email,
+      cargo: userData.cargo || currentUser.cargo,
+      departamento: userData.departamento || currentUser.departamento,
+    };
+    
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    
+    try {
+      await api.put('/auth/profile', {
+        nombre: userData.nombre,
+        email: userData.email,
+        cargo: userData.cargo || '',
+        departamento: userData.departamento || '',
+      });
+    } catch (error) {
+      console.warn('Error en backend, datos guardados localmente');
+    }
+    
+    return { 
+      success: true, 
+      usuario: updatedUser, 
+      message: 'Perfil actualizado correctamente' 
+    };
+  },
+  
+  changePassword: async (currentPassword, newPassword) => {
+    try {
+      console.log('🔐 Cambiando contraseña...');
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        return { success: false, message: 'No hay sesión activa' };
+      }
+      
+      const response = await api.post('/auth/change-password', {
+        currentPassword: currentPassword,
+        newPassword: newPassword
+      });
+      
+      console.log('📥 Respuesta:', response.data);
+      
+      if (response.data && response.data.success) {
+        return { 
+          success: true, 
+          message: response.data.message || 'Contraseña cambiada correctamente' 
+        };
+      }
+      
+      return { 
+        success: false, 
+        message: response.data?.message || 'Error al cambiar contraseña' 
+      };
+    } catch (error) {
+      console.error('❌ Error en changePassword:', error);
+      
+      let errorMessage = 'Error de conexión';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Contraseña actual incorrecta';
+      } else if (error.response?.status === 400) {
+        errorMessage = error.response.data?.message || 'La nueva contraseña debe tener al menos 6 caracteres';
+      }
+      
+      return { 
+        success: false, 
+        message: errorMessage 
+      };
+    }
+  },
+  
   logout: () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
@@ -240,63 +339,342 @@ const ScrollToTopFab = () => {
   );
 };
 
-// Diálogos
-const PerfilDialog = ({ open, onClose, user, showSnackbar }) => {
-  const [formData, setFormData] = useState({ nombre: '', email: '', rut: '', cargo: '', departamento: '' });
+// ============================================
+// DIÁLOGO DE PERFIL
+// ============================================
+const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) => {
+  const [formData, setFormData] = useState({ 
+    nombre: '', 
+    email: '', 
+    cargo: '', 
+    departamento: ''
+  });
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open && user) {
       setFormData({
-        nombre: user.nombre || '',
-        email: user.email || '',
-        rut: user.rut || '',
-        cargo: user.cargo || '',
-        departamento: user.departamento || ''
+        nombre: user?.nombre || '',
+        email: user?.email || '',
+        cargo: user?.cargo || '',
+        departamento: user?.departamento || ''
       });
+      setErrors({});
     }
   }, [open, user]);
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.nombre?.trim()) newErrors.nombre = 'El nombre es requerido';
+    if (!formData.email?.trim()) newErrors.email = 'El email es requerido';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Email inválido';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    if (!validate()) return;
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const result = await authService.updateProfile({
+        nombre: formData.nombre,
+        email: formData.email,
+        cargo: formData.cargo,
+        departamento: formData.departamento
+      });
+      
+      if (result.success) {
+        showSnackbar('Perfil actualizado correctamente', 'success');
+        if (onProfileUpdate) onProfileUpdate(result.usuario);
+        onClose();
+      } else {
+        showSnackbar(result.message || 'Error al actualizar perfil', 'error');
+      }
+    } catch (error) {
+      showSnackbar('Error al actualizar perfil', 'error');
+    } finally {
       setLoading(false);
-      showSnackbar('Perfil actualizado', 'success');
-      onClose();
-    }, 500);
+    }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Mi Perfil</DialogTitle>
+      <DialogTitle sx={{ 
+        borderBottom: 1, 
+        borderColor: 'divider',
+        background: `linear-gradient(135deg, ${alpha('#2563EB', 0.02)} 0%, ${alpha('#7C3AED', 0.02)} 100%)`
+      }}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <PersonIcon sx={{ color: '#2563EB' }} />
+          <Typography variant="h6">Editar Perfil</Typography>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Actualiza tu información personal
+        </Typography>
+      </DialogTitle>
       <DialogContent dividers>
-        <Grid container spacing={2}>
-          <Grid item xs={12}><TextField fullWidth label="Nombre Completo" value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} disabled={loading} /></Grid>
-          <Grid item xs={12}><TextField fullWidth label="Email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={loading} /></Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="RUT" value={formData.rut} onChange={(e) => setFormData({ ...formData, rut: e.target.value })} disabled={loading} /></Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth label="Cargo" value={formData.cargo} onChange={(e) => setFormData({ ...formData, cargo: e.target.value })} disabled={loading} /></Grid>
-          <Grid item xs={12}><TextField fullWidth label="Departamento" value={formData.departamento} onChange={(e) => setFormData({ ...formData, departamento: e.target.value })} disabled={loading} /></Grid>
-        </Grid>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
+          <TextField
+            fullWidth
+            label="Nombre completo"
+            name="nombre"
+            value={formData.nombre}
+            onChange={handleChange}
+            error={!!errors.nombre}
+            helperText={errors.nombre}
+            disabled={loading}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><PersonIcon sx={{ color: '#667eea' }} /></InputAdornment>
+            }}
+          />
+          
+          <TextField
+            fullWidth
+            label="Correo electrónico"
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            error={!!errors.email}
+            helperText={errors.email}
+            disabled={loading}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><EmailIcon sx={{ color: '#667eea' }} /></InputAdornment>
+            }}
+          />
+          
+          <TextField
+            fullWidth
+            label="Cargo"
+            name="cargo"
+            value={formData.cargo}
+            onChange={handleChange}
+            disabled={loading}
+            placeholder="Ej: Administrador, Técnico, etc."
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><WorkIcon sx={{ color: '#667eea' }} /></InputAdornment>
+            }}
+          />
+          
+          <TextField
+            fullWidth
+            label="Departamento"
+            name="departamento"
+            value={formData.departamento}
+            onChange={handleChange}
+            disabled={loading}
+            placeholder="Ej: TI, Logística, Ventas, etc."
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ color: '#667eea' }} /></InputAdornment>
+            }}
+          />
+        </Stack>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} variant="outlined">Cancelar</Button>
-        <Button onClick={handleSubmit} variant="contained" disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <Button onClick={onClose} variant="outlined" disabled={loading}>
+          Cancelar
+        </Button>
+        <Button 
+          onClick={handleSubmit} 
+          variant="contained" 
+          disabled={loading} 
+          startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
+        >
+          {loading ? 'Guardando...' : 'Guardar Cambios'}
+        </Button>
       </DialogActions>
     </Dialog>
   );
 };
 
+// ============================================
+// DIÁLOGO DE CAMBIO DE CONTRASEÑA - FUNCIONAL
+// ============================================
+const CambiarPasswordDialog = ({ open, onClose, showSnackbar }) => {
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    if (!passwordData.currentPassword) {
+      newErrors.currentPassword = 'La contraseña actual es requerida';
+    }
+    if (!passwordData.newPassword) {
+      newErrors.newPassword = 'La nueva contraseña es requerida';
+    } else if (passwordData.newPassword.length < 6) {
+      newErrors.newPassword = 'La contraseña debe tener al menos 6 caracteres';
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    
+    try {
+      console.log('🔐 Enviando cambio de contraseña...');
+      
+      const result = await authService.changePassword(
+        passwordData.currentPassword,
+        passwordData.newPassword
+      );
+      
+      if (result.success) {
+        showSnackbar('Contraseña cambiada correctamente', 'success');
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+        onClose();
+      } else {
+        showSnackbar(result.message || 'Error al cambiar contraseña', 'error');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      showSnackbar('Error al cambiar contraseña', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ 
+        borderBottom: 1, 
+        borderColor: 'divider',
+        background: `linear-gradient(135deg, ${alpha('#2563EB', 0.02)} 0%, ${alpha('#7C3AED', 0.02)} 100%)`
+      }}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <LockIcon sx={{ color: '#2563EB' }} />
+          <Typography variant="h6">Cambiar Contraseña</Typography>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Ingresa tu contraseña actual y la nueva contraseña
+        </Typography>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={3} sx={{ mt: 1 }}>
+          <TextField
+            fullWidth
+            type={showPassword ? "text" : "password"}
+            label="Contraseña actual"
+            name="currentPassword"
+            value={passwordData.currentPassword}
+            onChange={handleChange}
+            error={!!errors.currentPassword}
+            helperText={errors.currentPassword}
+            disabled={loading}
+          />
+          
+          <TextField
+            fullWidth
+            type={showPassword ? "text" : "password"}
+            label="Nueva contraseña"
+            name="newPassword"
+            value={passwordData.newPassword}
+            onChange={handleChange}
+            error={!!errors.newPassword}
+            helperText={errors.newPassword || "Mínimo 6 caracteres"}
+            disabled={loading}
+          />
+          
+          <TextField
+            fullWidth
+            type={showPassword ? "text" : "password"}
+            label="Confirmar nueva contraseña"
+            name="confirmPassword"
+            value={passwordData.confirmPassword}
+            onChange={handleChange}
+            error={!!errors.confirmPassword}
+            helperText={errors.confirmPassword}
+            disabled={loading}
+          />
+          
+          <Button
+            variant="outlined"
+            startIcon={showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+            onClick={() => setShowPassword(!showPassword)}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {showPassword ? 'Ocultar' : 'Mostrar'} contraseñas
+          </Button>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <Button onClick={onClose} variant="outlined" disabled={loading}>
+          Cancelar
+        </Button>
+        <Button 
+          onClick={handleSubmit} 
+          variant="contained" 
+          disabled={loading || !passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
+          startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
+        >
+          {loading ? 'Cambiando...' : 'Cambiar Contraseña'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// ============================================
+// DIÁLOGO DE CONFIGURACIÓN
+// ============================================
 const ConfiguracionDialog = ({ open, onClose, darkMode, setDarkMode }) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle>Configuración</DialogTitle>
+    <DialogTitle sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider',
+      background: `linear-gradient(135deg, ${alpha('#2563EB', 0.02)} 0%, ${alpha('#7C3AED', 0.02)} 100%)`
+    }}>
+      <Box display="flex" alignItems="center" gap={1}>
+        <SettingsIcon sx={{ color: '#2563EB' }} />
+        <Typography variant="h6">Configuración</Typography>
+      </Box>
+    </DialogTitle>
     <DialogContent dividers>
-      <List>
-        <ListItemButton>
-          <ListItemIcon>{darkMode ? <DarkModeIcon /> : <LightModeIcon />}</ListItemIcon>
-          <ListItemText primary="Modo Oscuro" secondary="Activar tema oscuro" />
+      <Paper variant="outlined" sx={{ p: 3 }}>
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Box display="flex" alignItems="center" gap={2}>
+            {darkMode ? <DarkModeIcon sx={{ fontSize: 40 }} /> : <LightModeIcon sx={{ fontSize: 40 }} />}
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600}>
+                {darkMode ? 'Modo Oscuro' : 'Modo Claro'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {darkMode 
+                  ? 'Fondo oscuro para reducir la fatiga visual' 
+                  : 'Fondo claro para mejor visibilidad en ambientes iluminados'}
+              </Typography>
+            </Box>
+          </Box>
           <Switch checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} />
-        </ListItemButton>
-      </List>
+        </Box>
+      </Paper>
     </DialogContent>
     <DialogActions>
       <Button onClick={onClose}>Cerrar</Button>
@@ -311,7 +689,7 @@ const Dashboard = () => {
 
   const [user, setUser] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [stats, setStats] = useState({
     totalProductos: 0, dadosDeBaja: 0, totalActivos: 0,
     disponibles: 0, asignados: 0, enMantencion: 0, enReparacion: 0, bajoStock: 0, valorTotal: 0,
@@ -326,11 +704,12 @@ const Dashboard = () => {
   const [searching, setSearching] = useState(false);
   const [openConfig, setOpenConfig] = useState(false);
   const [openPerfil, setOpenPerfil] = useState(false);
+  const [openCambiarPassword, setOpenCambiarPassword] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [apiError, setApiError] = useState(false);
   const [productosCache, setProductosCache] = useState([]);
   const [bodegasCache, setBodegasCache] = useState([]);
-  const refreshTimeoutRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
   const isMountedRef = useRef(true);
 
   const menuItems = [
@@ -349,7 +728,32 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Función para cargar todos los datos
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    showSnackbar("Generando reporte...", "info");
+    try {
+      const blob = await productosService.exportExcel();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `reporte_inventario_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      showSnackbar("Reporte generado exitosamente", "success");
+    } catch (error) {
+      console.error("Error generando reporte:", error);
+      showSnackbar("Error al generar el reporte", "error");
+    } finally {
+      setExporting(false);
+    }
+  }, [showSnackbar]);
+
   const fetchDashboardData = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
       setRefreshing(true);
@@ -359,22 +763,18 @@ const Dashboard = () => {
     setApiError(false);
 
     try {
-      // Cargar productos
       const productos = await productosService.getProductos();
       if (!isMountedRef.current) return;
       setProductosCache(productos);
       
-      // Calcular estadísticas de productos
       const newStats = await productosService.getStats(productos);
       if (!isMountedRef.current) return;
       setStats(newStats);
       
-      // Cargar estadísticas de préstamos
       const prestamosStats = await prestamosService.getStatsPrestamos();
       if (!isMountedRef.current) return;
       setStatsPrestamos(prestamosStats);
       
-      // Cargar bodegas para búsqueda
       const bodegas = await bodegasService.getBodegas();
       if (!isMountedRef.current) return;
       setBodegasCache(bodegas);
@@ -396,7 +796,6 @@ const Dashboard = () => {
     }
   }, [showSnackbar]);
 
-  // Búsqueda
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchTerm && searchTerm.trim()) {
@@ -406,12 +805,12 @@ const Dashboard = () => {
           const bodegas = bodegasCache.filter(b => 
             (b.nombre?.toLowerCase() || '').includes(searchTerm.toLowerCase())
           );
-          setSearchResults([
-            ...productos.map(p => ({ ...p, tipo: "producto" })),
-            ...bodegas.map(b => ({ ...b, tipo: "bodega" }))
-          ]);
+          const productosConTipo = productos.map(p => ({ ...p, tipo: "producto" }));
+          const bodegasConTipo = bodegas.map(b => ({ ...b, tipo: "bodega" }));
+          setSearchResults([...productosConTipo, ...bodegasConTipo]);
         } catch (error) {
           console.error("Error en búsqueda:", error);
+          setSearchResults([]);
         } finally {
           setSearching(false);
         }
@@ -422,7 +821,6 @@ const Dashboard = () => {
     return () => clearTimeout(timer);
   }, [searchTerm, productosCache, bodegasCache]);
 
-  // Auto-refresh cada 60 segundos
   useEffect(() => {
     const intervalo = setInterval(() => {
       if (!loading && !refreshing && isMountedRef.current) {
@@ -432,26 +830,74 @@ const Dashboard = () => {
     return () => clearInterval(intervalo);
   }, [loading, refreshing, fetchDashboardData]);
 
-  // Cargar datos iniciales
+  // INICIALIZACIÓN PRINCIPAL
   useEffect(() => {
     isMountedRef.current = true;
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) { 
-      navigate("/login"); 
-      return; 
-    }
-    setUser(currentUser);
-    fetchDashboardData();
+    
+    const initializeUser = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+        
+        const localUserStr = localStorage.getItem('user');
+        if (localUserStr) {
+          try {
+            const localUser = JSON.parse(localUserStr);
+            setUser(localUser);
+          } catch (e) {
+            console.error('Error parsing user:', e);
+          }
+        }
+        
+        try {
+          const response = await api.get('/auth/me');
+          if (response.data && response.data.success) {
+            const backendUser = response.data.usuario || response.data.user;
+            if (backendUser) {
+              const userData = {
+                id: backendUser.id,
+                nombre: backendUser.nombre || 'Usuario',
+                usuario: backendUser.usuario || '',
+                email: backendUser.email || '',
+                cargo: backendUser.cargo || '',
+                departamento: backendUser.departamento || '',
+              };
+              localStorage.setItem('user', JSON.stringify(userData));
+              setUser(userData);
+            }
+          }
+        } catch (backendError) {
+          console.warn('No se pudo sincronizar con backend');
+        }
+        
+        await fetchDashboardData();
+        
+      } catch (error) {
+        console.error('Error en inicialización:', error);
+        if (!localStorage.getItem('token')) {
+          navigate("/login");
+        }
+      }
+    };
+    
+    initializeUser();
     
     return () => {
       isMountedRef.current = false;
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
   }, [fetchDashboardData, navigate]);
 
   useEffect(() => {
     setDrawerOpen(!isMobile);
   }, [isMobile]);
+
+  const handleProfileUpdate = (updatedUser) => {
+    setUser(updatedUser);
+    showSnackbar('Perfil actualizado correctamente', 'success');
+  };
 
   const theme = createTheme({
     palette: {
@@ -467,18 +913,48 @@ const Dashboard = () => {
     navigate("/login"); 
   };
 
+  if (!user && loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   const drawer = (
-    <Drawer variant={isMobile ? "temporary" : "persistent"} open={drawerOpen} onClose={() => setDrawerOpen(false)}
-      sx={{ width: drawerWidth, flexShrink: 0, "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box", bgcolor: "background.paper" } }}>
+    <Drawer 
+      variant={isMobile ? "temporary" : "persistent"} 
+      open={drawerOpen} 
+      onClose={() => setDrawerOpen(false)}
+      sx={{ 
+        width: drawerWidth, 
+        flexShrink: 0, 
+        '& .MuiDrawer-paper': { 
+          width: drawerWidth, 
+          boxSizing: "border-box", 
+          bgcolor: "background.paper" 
+        } 
+      }}
+    >
       <Toolbar sx={{ justifyContent: "space-between" }}>
         <Typography variant="h6" sx={{ fontWeight: 700 }}>StockMaster</Typography>
-        {isMobile && <IconButton onClick={() => setDrawerOpen(false)}><ChevronLeftIcon /></IconButton>}
+        {isMobile && (
+          <IconButton onClick={() => setDrawerOpen(false)}>
+            <ChevronLeftIcon />
+          </IconButton>
+        )}
       </Toolbar>
       <Divider />
       <List>
         {menuItems.map((item) => (
-          <ListItemButton key={item.text} onClick={() => { navigate(item.path); if (isMobile) setDrawerOpen(false); }}
-            selected={window.location.pathname === item.path}>
+          <ListItemButton 
+            key={item.path}
+            onClick={() => { 
+              navigate(item.path); 
+              if (isMobile) setDrawerOpen(false); 
+            }}
+            selected={window.location.pathname === item.path}
+          >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.text} />
           </ListItemButton>
@@ -523,7 +999,10 @@ const Dashboard = () => {
 
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
                 <MenuItem onClick={() => { setOpenPerfil(true); setAnchorEl(null); }}>
-                  <PersonIcon sx={{ mr: 1 }} />Perfil
+                  <PersonIcon sx={{ mr: 1 }} />Mi Perfil
+                </MenuItem>
+                <MenuItem onClick={() => { setOpenCambiarPassword(true); setAnchorEl(null); }}>
+                  <LockIcon sx={{ mr: 1 }} />Cambiar Contraseña
                 </MenuItem>
                 <MenuItem onClick={() => { setOpenConfig(true); setAnchorEl(null); }}>
                   <SettingsIcon sx={{ mr: 1 }} />Configuración
@@ -534,7 +1013,6 @@ const Dashboard = () => {
                 </MenuItem>
               </Menu>
 
-              {/* Diálogo de búsqueda */}
               <Dialog open={searchOpen} onClose={() => setSearchOpen(false)} maxWidth="md" fullWidth>
                 <DialogTitle>Buscar</DialogTitle>
                 <DialogContent>
@@ -550,22 +1028,28 @@ const Dashboard = () => {
                   {searching && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', my: 2 }} />}
                   {!searching && searchResults.length > 0 && (
                     <List>
-                      {searchResults.map((result, idx) => (
-                        <ListItemButton key={`${result.tipo}-${result.id}-${idx}`} onClick={() => {
-                          if (result.tipo === 'producto') navigate('/productos');
-                          else if (result.tipo === 'bodega') navigate('/bodegas');
-                          setSearchOpen(false);
-                        }}>
-                          <ListItemIcon>
-                            {result.tipo === 'producto' && <InventoryIcon />}
-                            {result.tipo === 'bodega' && <WarehouseIcon />}
-                          </ListItemIcon>
-                          <ListItemText 
-                            primary={result.nombre || result.descripcion}
-                            secondary={result.tipo === 'producto' ? `Stock: ${result.cantidad || 0}` : result.ubicacion}
-                          />
-                        </ListItemButton>
-                      ))}
+                      {searchResults.map((result, idx) => {
+                        const uniqueKey = `search-result-${result.tipo || 'item'}-${result.id || idx}-${result.nombre || result.descripcion || idx}`;
+                        return (
+                          <ListItemButton 
+                            key={uniqueKey} 
+                            onClick={() => {
+                              if (result.tipo === 'producto') navigate('/productos');
+                              else if (result.tipo === 'bodega') navigate('/bodegas');
+                              setSearchOpen(false);
+                            }}
+                          >
+                            <ListItemIcon>
+                              {result.tipo === 'producto' && <InventoryIcon />}
+                              {result.tipo === 'bodega' && <WarehouseIcon />}
+                            </ListItemIcon>
+                            <ListItemText 
+                              primary={result.nombre || result.descripcion}
+                              secondary={result.tipo === 'producto' ? `Stock: ${result.cantidad || 0}` : result.ubicacion}
+                            />
+                          </ListItemButton>
+                        );
+                      })}
                     </List>
                   )}
                   {!searching && searchTerm && searchResults.length === 0 && (
@@ -590,20 +1074,40 @@ const Dashboard = () => {
               </Alert>
             )}
 
-            {/* Tarjeta de bienvenida */}
             <Paper sx={{ p: { xs: 3, md: 5 }, mb: 4, borderRadius: 4, background: "linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)", color: "white" }}>
               <Typography variant={isMobile ? "h5" : "h4"} fontWeight={800} gutterBottom>
                 ¡Bienvenido, {user?.nombre || user?.usuario || "Usuario"}!
               </Typography>
+              
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                {user?.cargo && (
+                  <Chip label={`Cargo: ${user.cargo}`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} />
+                )}
+                {user?.departamento && (
+                  <Chip label={`Departamento: ${user.departamento}`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} />
+                )}
+              </Stack>
+              
+              <Typography sx={{ opacity: 0.9, mb: 2 }}>
+                ✉️ Email: {user?.email || 'No disponible'}
+              </Typography>
+              
               <Typography sx={{ opacity: 0.9, mb: 3 }}>
                 {!loading && stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
                 {!loading && stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
                 {!loading && statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
                 {loading && `Cargando datos del inventario...`}
               </Typography>
+              
               <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
-                <Button variant="contained" startIcon={<AssessmentIcon />} sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}>
-                  Reporte Excel
+                <Button 
+                  variant="contained" 
+                  startIcon={exporting ? <CircularProgress size={20} /> : <AssessmentIcon />} 
+                  onClick={handleExportExcel}
+                  disabled={exporting}
+                  sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}
+                >
+                  {exporting ? 'Generando...' : 'Reporte Excel'}
                 </Button>
                 <Button variant="outlined" startIcon={<BarChartIcon />} onClick={() => navigate("/stock")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
                   Ver Stock
@@ -614,7 +1118,6 @@ const Dashboard = () => {
               </Box>
             </Paper>
 
-            {/* Stats Grid */}
             <Grid container spacing={{ xs: 2, sm: 3 }}>
               <Grid item xs={6} sm={6} md={3}>
                 <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading} />
@@ -630,7 +1133,6 @@ const Dashboard = () => {
               </Grid>
             </Grid>
 
-            {/* Tarjetas de Navegación */}
             <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: 2 }}>
               <Grid item xs={6} sm={6} md={3}>
                 <NavigationCard icon={InventoryIcon} title="Productos" description="Gestiona inventario" onClick={() => navigate("/productos")} color="#2563EB" />
@@ -649,14 +1151,48 @@ const Dashboard = () => {
 
           <ScrollToTopFab />
           
-          <PerfilDialog open={openPerfil} onClose={() => setOpenPerfil(false)} user={user} showSnackbar={showSnackbar} />
-          <ConfiguracionDialog open={openConfig} onClose={() => setOpenConfig(false)} darkMode={darkMode} setDarkMode={setDarkMode} />
+          <PerfilDialog 
+            open={openPerfil} 
+            onClose={() => setOpenPerfil(false)} 
+            user={user} 
+            onProfileUpdate={handleProfileUpdate}
+            showSnackbar={showSnackbar}
+          />
           
-          <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-            <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
+          <CambiarPasswordDialog
+            open={openCambiarPassword}
+            onClose={() => setOpenCambiarPassword(false)}
+            showSnackbar={showSnackbar}
+          />
+          
+          <ConfiguracionDialog 
+            open={openConfig} 
+            onClose={() => setOpenConfig(false)} 
+            darkMode={darkMode} 
+            setDarkMode={setDarkMode}
+          />
+          
+          <Snackbar 
+            open={snackbar.open} 
+            autoHideDuration={4000} 
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          >
+            <Alert 
+              severity={snackbar.severity} 
+              onClose={() => setSnackbar({ ...snackbar, open: false })}
+              variant="filled"
+            >
+              {snackbar.message}
+            </Alert>
           </Snackbar>
 
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          <style>{`
+            @keyframes spin { 
+              from { transform: rotate(0deg); } 
+              to { transform: rotate(360deg); } 
+            }
+          `}</style>
         </Box>
       </Box>
     </ThemeProvider>

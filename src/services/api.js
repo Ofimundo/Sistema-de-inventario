@@ -5,20 +5,16 @@ import axios from 'axios';
  * Obtiene la URL base según las variables de entorno
  */
 const getBaseURL = () => {
-    // 🔥 IMPORTANTE: Vite usa import.meta.env, Create React App usa process.env
-    // Primero intentar con Vite
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         console.log('✅ Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
         return import.meta.env.VITE_API_URL;
     }
     
-    // Luego intentar con Create React App
     if (process.env && process.env.REACT_APP_API_URL) {
         console.log('✅ Usando REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
         return process.env.REACT_APP_API_URL;
     }
     
-    // Fallback para desarrollo local
     console.log('⚠️ No se encontraron variables de entorno, usando fallback: http://localhost:98/api');
     return 'http://localhost:98/api';
 };
@@ -27,7 +23,6 @@ const API_URL = getBaseURL();
 
 console.log('🚀 API URL configurada:', API_URL);
 
-// Crear instancia de axios
 const api = axios.create({
     baseURL: API_URL,
     headers: {
@@ -67,7 +62,7 @@ api.interceptors.request.use(
 );
 
 // ============================================
-// INTERCEPTOR DE RESPUESTAS
+// INTERCEPTOR DE RESPUESTAS - ACTUALIZADO (NO REDIRIGE EN ERRORES DE PERFIL)
 // ============================================
 api.interceptors.response.use(
     (response) => {
@@ -95,8 +90,12 @@ api.interceptors.response.use(
         console.error(`   🔴 Status: ${status}`);
         console.error('   📄 Data:', data);
         
-        // Manejo de token expirado (401)
-        if (status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/login')) {
+        // Detectar si es un endpoint de perfil
+        const isProfileEndpoint = originalRequest.url?.includes('/profile') || 
+                                  originalRequest.url?.includes('/perfil');
+        
+        // Manejo de token expirado (401) - EXCEPTO PARA ENDPOINTS DE PERFIL
+        if (status === 401 && !originalRequest._retry && !isProfileEndpoint && !originalRequest.url?.includes('/login')) {
             originalRequest._retry = true;
             
             console.log('   🔐 Token expirado, limpiando sesión...');
@@ -115,6 +114,17 @@ api.interceptors.response.use(
             });
         }
         
+        // Para errores en endpoints de perfil, NO redirigir
+        if (status === 401 && isProfileEndpoint) {
+            console.warn('   ⚠️ Error 401 en endpoint de perfil, pero NO se redirige al login');
+            return Promise.reject({
+                success: false,
+                message: data.message || 'Error de autenticación al actualizar perfil',
+                status,
+                isProfileError: true
+            });
+        }
+        
         const errorResponse = {
             success: false,
             message: data.message || data.error || `Error ${status}`,
@@ -127,12 +137,9 @@ api.interceptors.response.use(
 );
 
 // ============================================
-// SERVICIO DE AUTENTICACIÓN
+// SERVICIO DE AUTENTICACIÓN - ACTUALIZADO CON RUT
 // ============================================
 export const authService = {
-    /**
-     * Iniciar sesión
-     */
     login: async (usuario, password) => {
         try {
             console.log('🔐 Intentando login...');
@@ -159,11 +166,11 @@ export const authService = {
                     cargo: data.usuario?.cargo || '',
                     departamento: data.usuario?.departamento || '',
                     rol: data.usuario?.rol || 'usuario',
-                    rut: data.usuario?.rut || ''
+                    rut: data.usuario?.rut || '',
                 };
                 
                 localStorage.setItem('user', JSON.stringify(userToStore));
-                console.log('✅ Usuario guardado en localStorage:', userToStore);
+                console.log('✅ Usuario guardado en localStorage (RUT:', userToStore.rut, ')');
                 
                 return {
                     success: true,
@@ -191,9 +198,6 @@ export const authService = {
         }
     },
     
-    /**
-     * Registrar usuario
-     */
     register: async (userData) => {
         try {
             console.log('📝 Registrando usuario...');
@@ -216,12 +220,17 @@ export const authService = {
                 password: userData.contraseña,
                 nombre: userData.nombre.trim(),
                 email: userData.email.trim().toLowerCase(),
-                cargo: userData.cargo?.trim() || '',
-                departamento: userData.departamento?.trim() || '',
+                rut: userData.rut?.trim() || null,
+                cargo: userData.cargo?.trim() || null,
+                departamento: userData.departamento?.trim() || null,
                 rol: 'usuario'
             };
             
+            console.log('📦 Datos a enviar:', { ...datosRegistro, password: '***' });
+            
             const response = await api.post('/auth/register', datosRegistro);
+            
+            console.log('📥 Respuesta del servidor:', response.data);
             
             if (response.data && response.data.success) {
                 if (response.data.token) {
@@ -229,22 +238,24 @@ export const authService = {
                 }
                 
                 const userToStore = {
-                    id: response.data.user?.id,
+                    id: response.data.user?.id || response.data.usuario?.id,
                     usuario: userData.usuario.trim(),
                     nombre: userData.nombre.trim(),
                     email: userData.email.trim().toLowerCase(),
+                    rut: userData.rut?.trim() || '',
                     cargo: userData.cargo?.trim() || '',
                     departamento: userData.departamento?.trim() || '',
-                    rol: response.data.user?.rol || 'usuario',
-                    rut: response.data.user?.rut || ''
+                    rol: response.data.user?.rol || response.data.usuario?.rol || 'usuario'
                 };
                 
                 localStorage.setItem('user', JSON.stringify(userToStore));
+                console.log('✅ Usuario guardado en localStorage (RUT:', userToStore.rut, ')');
                 
                 return {
                     success: true,
                     message: response.data.message || 'Usuario registrado exitosamente',
-                    data: response.data
+                    data: response.data,
+                    usuario: userToStore
                 };
             }
             
@@ -262,9 +273,106 @@ export const authService = {
         }
     },
     
-    /**
-     * Cerrar sesión
-     */
+    updateProfile: async (userData) => {
+        try {
+            console.log('📝 Actualizando perfil de usuario...', { ...userData, rut: userData.rut });
+            
+            // Usar el endpoint correcto /auth/profile (no /auth/perfil)
+            const response = await api.put('/auth/profile', {
+                nombre: userData.nombre,
+                email: userData.email,
+                cargo: userData.cargo || '',
+                departamento: userData.departamento || '',
+                rut: userData.rut || ''
+            });
+            
+            console.log('📥 Respuesta del servidor:', response.data);
+            
+            if (response.data && response.data.success) {
+                const currentUser = authService.getCurrentUser();
+                
+                const updatedUser = {
+                    ...currentUser,
+                    id: currentUser?.id,
+                    usuario: currentUser?.usuario,
+                    nombre: response.data.user?.nombre || userData.nombre,
+                    email: response.data.user?.email || userData.email,
+                    rut: response.data.user?.rut || userData.rut || currentUser?.rut,
+                    cargo: response.data.user?.cargo || userData.cargo || currentUser?.cargo || '',
+                    departamento: response.data.user?.departamento || userData.departamento || currentUser?.departamento || '',
+                    rol: currentUser?.rol || 'usuario'
+                };
+                
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                console.log('✅ Perfil actualizado en localStorage (RUT:', updatedUser.rut, ')');
+                
+                return {
+                    success: true,
+                    message: response.data.message || 'Perfil actualizado correctamente',
+                    usuario: updatedUser
+                };
+            }
+            
+            return {
+                success: false,
+                message: response.data?.message || 'Error al actualizar perfil'
+            };
+            
+        } catch (error) {
+            console.error('❌ Error actualizando perfil:', error);
+            
+            // Si hay error, guardar localmente como fallback (NO cerrar sesión)
+            const currentUser = authService.getCurrentUser();
+            if (currentUser) {
+                const updatedUser = { ...currentUser, ...userData };
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                console.log('⚠️ Perfil guardado SOLO en localStorage (RUT:', updatedUser.rut, ')');
+                return {
+                    success: true,
+                    message: 'Perfil actualizado localmente',
+                    usuario: updatedUser
+                };
+            }
+            
+            return {
+                success: false,
+                message: error.response?.data?.message || error.message || 'Error de conexión'
+            };
+        }
+    },
+    
+    changePassword: async (currentPassword, newPassword) => {
+        try {
+            console.log('🔐 Cambiando contraseña...');
+            
+            const response = await api.post('/auth/change-password', {
+                currentPassword,
+                newPassword
+            });
+            
+            console.log('📥 Respuesta del servidor:', response.data);
+            
+            if (response.data && response.data.success) {
+                return {
+                    success: true,
+                    message: response.data.message || 'Contraseña cambiada correctamente'
+                };
+            }
+            
+            return {
+                success: false,
+                message: response.data?.message || 'Error al cambiar contraseña'
+            };
+            
+        } catch (error) {
+            console.error('❌ Error cambiando contraseña:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || error.message || 'Error de conexión'
+            };
+        }
+    },
+    
     logout: async () => {
         try {
             console.log('🚪 Cerrando sesión...');
@@ -286,9 +394,6 @@ export const authService = {
         }
     },
     
-    /**
-     * Verificar si está autenticado
-     */
     isAuthenticated: () => {
         const token = localStorage.getItem('token');
         if (!token) return false;
@@ -310,36 +415,30 @@ export const authService = {
         }
     },
     
-    /**
-     * Obtener usuario actual
-     */
     getCurrentUser: () => {
         const userStr = localStorage.getItem('user');
         try {
             if (userStr) {
-                return JSON.parse(userStr);
+                const user = JSON.parse(userStr);
+                console.log('👤 Usuario actual desde localStorage (RUT:', user.rut, ')');
+                return user;
             }
             return null;
-        } catch {
+        } catch (error) {
+            console.error('Error parsing user from localStorage:', error);
             return null;
         }
     },
     
-    /**
-     * Obtener token actual
-     */
     getToken: () => {
         return localStorage.getItem('token');
     }
 };
 
 // ============================================
-// SERVICIO DE ASIGNACIONES (ENDPOINTS FALTANTES)
+// SERVICIO DE ASIGNACIONES
 // ============================================
 export const asignacionesService = {
-    /**
-     * Obtener todas las asignaciones
-     */
     getAll: async (params = {}) => {
         try {
             const response = await api.get('/asignaciones', { params });
@@ -350,16 +449,12 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Obtener asignaciones activas (sin fecha_devolucion)
-     */
     getActivas: async () => {
         try {
             const response = await api.get('/asignaciones/activas');
             return response.data;
         } catch (error) {
             console.error('Error obteniendo asignaciones activas:', error);
-            // Si el endpoint no existe, intentar filtrar localmente
             try {
                 const todas = await asignacionesService.getAll();
                 if (todas.success && todas.data) {
@@ -373,9 +468,6 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Obtener una asignación por ID
-     */
     getById: async (id) => {
         try {
             const response = await api.get(`/asignaciones/${id}`);
@@ -386,9 +478,6 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Crear una nueva asignación
-     */
     create: async (data) => {
         try {
             const response = await api.post('/asignaciones', data);
@@ -399,9 +488,6 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Crear un préstamo (sin firma digital)
-     */
     createPrestamo: async (data) => {
         try {
             const response = await api.post('/asignaciones/prestamo', data);
@@ -412,9 +498,6 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Recibir un producto (registrar devolución)
-     */
     recibir: async (id, data) => {
         try {
             const response = await api.post(`/asignaciones/${id}/recibir`, data);
@@ -425,9 +508,16 @@ export const asignacionesService = {
         }
     },
     
-    /**
-     * Obtener estadísticas de préstamos
-     */
+    finalizar: async (id, data) => {
+        try {
+            const response = await api.put(`/asignaciones/${id}/finalizar`, data);
+            return response.data;
+        } catch (error) {
+            console.error(`Error finalizando asignación ${id}:`, error);
+            throw error;
+        }
+    },
+    
     getStatsPrestamos: async () => {
         try {
             const response = await asignacionesService.getActivas();
@@ -450,12 +540,9 @@ export const asignacionesService = {
 };
 
 // ============================================
-// SERVICIO DE PRODUCTOS (endpoints adicionales)
+// SERVICIO DE PRODUCTOS
 // ============================================
 export const productosService = {
-    /**
-     * Obtener todos los productos
-     */
     getAll: async (params = {}) => {
         try {
             const response = await api.get('/productos', { params });
@@ -466,9 +553,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Obtener un producto por ID
-     */
     getById: async (id) => {
         try {
             const response = await api.get(`/productos/${id}`);
@@ -479,9 +563,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Crear un nuevo producto
-     */
     create: async (data) => {
         try {
             const response = await api.post('/productos', data);
@@ -492,9 +573,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Actualizar un producto
-     */
     update: async (id, data) => {
         try {
             const response = await api.put(`/productos/${id}`, data);
@@ -505,9 +583,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Eliminar un producto
-     */
     delete: async (id) => {
         try {
             const response = await api.delete(`/productos/${id}`);
@@ -518,9 +593,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Obtener productos con stock bajo
-     */
     getBajoStock: async (limite = 5) => {
         try {
             const response = await productosService.getAll();
@@ -535,9 +607,6 @@ export const productosService = {
         }
     },
     
-    /**
-     * Exportar productos a Excel
-     */
     exportExcel: async () => {
         try {
             const token = localStorage.getItem('token');
@@ -561,9 +630,6 @@ export const productosService = {
 // SERVICIO DE BODEGAS
 // ============================================
 export const bodegasService = {
-    /**
-     * Obtener todas las bodegas
-     */
     getAll: async () => {
         try {
             const response = await api.get('/bodegas');
@@ -574,9 +640,6 @@ export const bodegasService = {
         }
     },
     
-    /**
-     * Obtener una bodega por ID
-     */
     getById: async (id) => {
         try {
             const response = await api.get(`/bodegas/${id}`);
@@ -587,9 +650,6 @@ export const bodegasService = {
         }
     },
     
-    /**
-     * Crear una nueva bodega
-     */
     create: async (data) => {
         try {
             const response = await api.post('/bodegas', data);
@@ -600,9 +660,6 @@ export const bodegasService = {
         }
     },
     
-    /**
-     * Actualizar una bodega
-     */
     update: async (id, data) => {
         try {
             const response = await api.put(`/bodegas/${id}`, data);
@@ -613,9 +670,6 @@ export const bodegasService = {
         }
     },
     
-    /**
-     * Eliminar una bodega
-     */
     delete: async (id) => {
         try {
             const response = await api.delete(`/bodegas/${id}`);
@@ -631,9 +685,6 @@ export const bodegasService = {
 // SERVICIO DE COLABORADORES
 // ============================================
 export const colaboradoresService = {
-    /**
-     * Obtener todos los colaboradores
-     */
     getAll: async (params = {}) => {
         try {
             const response = await api.get('/colaboradores', { params });
@@ -644,9 +695,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Obtener un colaborador por ID
-     */
     getById: async (id) => {
         try {
             const response = await api.get(`/colaboradores/${id}`);
@@ -657,9 +705,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Crear un nuevo colaborador
-     */
     create: async (data) => {
         try {
             const response = await api.post('/colaboradores', data);
@@ -670,9 +715,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Actualizar un colaborador
-     */
     update: async (id, data) => {
         try {
             const response = await api.put(`/colaboradores/${id}`, data);
@@ -683,9 +725,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Eliminar un colaborador
-     */
     delete: async (id) => {
         try {
             const response = await api.delete(`/colaboradores/${id}`);
@@ -696,9 +735,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Obtener productos asignados a un colaborador
-     */
     getProductosAsignados: async (id) => {
         try {
             const response = await api.get(`/colaboradores/${id}/asignaciones`);
@@ -709,9 +745,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Obtener estadísticas de colaboradores
-     */
     getStats: async () => {
         try {
             const response = await colaboradoresService.getAll();
@@ -747,9 +780,6 @@ export const colaboradoresService = {
         }
     },
     
-    /**
-     * Obtener departamentos únicos
-     */
     getDepartamentos: async () => {
         try {
             const response = await colaboradoresService.getAll();
@@ -769,9 +799,6 @@ export const colaboradoresService = {
 // SERVICIO DE HISTORIAL
 // ============================================
 export const historialService = {
-    /**
-     * Obtener últimos movimientos
-     */
     getUltimosMovimientos: async (limit = 10) => {
         try {
             const response = await asignacionesService.getAll({ limit, sort: '-fecha_asignacion' });
@@ -791,9 +818,6 @@ export const historialService = {
         }
     },
     
-    /**
-     * Buscar en historial
-     */
     search: async (termino) => {
         try {
             const response = await asignacionesService.getAll({ search: termino });

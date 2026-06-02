@@ -1,8 +1,9 @@
-// backend/routes/productoRoutes.js - VERSIÓN COMPLETA Y CORREGIDA
+// backend/routes/productoRoutes.js - VERSIÓN COMPLETA CON LABORATORIO COMO DISPOSICIÓN
 
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
+const productoController = require('../controllers/productoController');
 
 // Mapa de estados (id_estado_equipo)
 const ESTADOS = {
@@ -10,7 +11,8 @@ const ESTADOS = {
     ASIGNADO: 2,
     EN_MANTENCION: 3,
     EN_REPARACION: 4,
-    NO_DISPONIBLE: 5
+    NO_DISPONIBLE: 5,
+    BAJA: 6
 };
 
 // Mapa inverso para convertir texto a ID
@@ -19,7 +21,8 @@ const ESTADO_TEXTO_A_ID = {
     'ASIGNADO': 2,
     'EN MANTENCIÓN': 3,
     'EN REPARACIÓN': 4,
-    'NO DISPONIBLE': 5
+    'NO DISPONIBLE': 5,
+    'BAJA': 6
 };
 
 // Función para convertir id_estado_equipo a texto
@@ -29,7 +32,8 @@ function getEstadoTexto(idEstado) {
         2: 'ASIGNADO',
         3: 'EN MANTENCIÓN',
         4: 'EN REPARACIÓN',
-        5: 'NO DISPONIBLE'
+        5: 'NO DISPONIBLE',
+        6: 'BAJA'
     };
     return map[idEstado] || 'DISPONIBLE';
 }
@@ -43,7 +47,7 @@ router.get('/marcas', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request()
-            .query(`SELECT DISTINCT marca FROM INV.productos WHERE marca IS NOT NULL AND marca != '' AND id_estado_equipo != 5 ORDER BY marca`);
+            .query(`SELECT DISTINCT marca FROM INV.productos WHERE marca IS NOT NULL AND marca != '' AND id_estado_equipo != 6 ORDER BY marca`);
         res.json({ success: true, data: result.recordset.map(r => r.marca) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -69,7 +73,7 @@ router.get('/stats', async (req, res) => {
                     COUNT(CASE WHEN id_estado_equipo = 4 THEN 1 END) as enReparacion,
                     COUNT(CASE WHEN id_estado_equipo = 5 THEN 1 END) as noDisponibles
                 FROM INV.productos
-                WHERE id_estado_equipo != 5
+                WHERE id_estado_equipo != 6
             `);
         
         const bajasCount = await pool.request()
@@ -77,6 +81,9 @@ router.get('/stats', async (req, res) => {
         
         const donacionesCount = await pool.request()
             .query(`SELECT COUNT(*) as total FROM INV.disposicion_donacion`);
+        
+        const laboratorioCount = await pool.request()
+            .query(`SELECT COUNT(*) as total FROM INV.disposicion_laboratorio`);
         
         const stats = statsResult.recordset[0] || {};
         stats.totalProductos = stats.totalProductos || 0;
@@ -89,6 +96,7 @@ router.get('/stats', async (req, res) => {
         stats.noDisponibles = stats.noDisponibles || 0;
         stats.dadosDeBaja = bajasCount.recordset[0]?.total || 0;
         stats.donados = donacionesCount.recordset[0]?.total || 0;
+        stats.enviadosLaboratorio = laboratorioCount.recordset[0]?.total || 0;
         
         res.json({ success: true, data: stats });
         
@@ -98,7 +106,7 @@ router.get('/stats', async (req, res) => {
     }
 });
 
-// GET - Obtener historial de disposiciones (bajas y donaciones)
+// GET - Obtener historial de disposiciones (bajas, donaciones y laboratorio)
 router.get('/disposiciones', async (req, res) => {
     try {
         console.log('📊 GET /api/productos/disposiciones');
@@ -139,11 +147,32 @@ router.get('/disposiciones', async (req, res) => {
                 ORDER BY dd.fecha_entrega DESC
             `);
         
+        // Obtener envíos a laboratorio
+        const laboratorioResult = await pool.request()
+            .query(`
+                SELECT 
+                    dl.id, dl.producto_id,
+                    p.nombre as producto_nombre,
+                    p.numero_serie,
+                    dl.laboratorio_nombre,
+                    dl.contacto,
+                    dl.autorizado_por,
+                    dl.motivo,
+                    dl.fecha_envio,
+                    dl.descripcion,
+                    dl.observaciones,
+                    'LABORATORIO' as tipo
+                FROM INV.disposicion_laboratorio dl
+                INNER JOIN INV.productos p ON dl.producto_id = p.id
+                ORDER BY dl.fecha_envio DESC
+            `);
+        
         res.json({ 
             success: true, 
             data: {
                 bajas: bajasResult.recordset,
-                donaciones: donacionesResult.recordset
+                donaciones: donacionesResult.recordset,
+                laboratorio: laboratorioResult.recordset
             }
         });
         
@@ -169,7 +198,7 @@ router.get('/bodega/:bodegaId', async (req, res) => {
                     b.id as bodega_id, b.nombre as bodega_nombre
                 FROM INV.productos p
                 LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                WHERE p.bodega_id = @bodega_id AND p.id_estado_equipo != 5
+                WHERE p.bodega_id = @bodega_id AND p.id_estado_equipo != 6
                 ORDER BY p.nombre
             `);
         
@@ -210,8 +239,8 @@ router.post('/baja', async (req, res) => {
         
         const producto = productoInfo.recordset[0];
         
-        // Verificar si el producto ya está dado de baja (estado 5)
-        if (producto.id_estado_equipo === ESTADOS.NO_DISPONIBLE) {
+        // Verificar si el producto ya está dado de baja (estado 6)
+        if (producto.id_estado_equipo === ESTADOS.BAJA) {
             return res.status(400).json({ success: false, message: 'El producto ya está dado de baja' });
         }
         
@@ -230,10 +259,10 @@ router.post('/baja', async (req, res) => {
                 )
             `);
         
-        // Actualizar estado del producto a NO_DISPONIBLE (5) - SIN tocar bodega_id
+        // Actualizar estado del producto a BAJA (6)
         await pool.request()
             .input('id', sql.Int, producto_id)
-            .input('id_estado_equipo', sql.Int, ESTADOS.NO_DISPONIBLE)
+            .input('id_estado_equipo', sql.Int, ESTADOS.BAJA)
             .query(`
                 UPDATE INV.productos 
                 SET id_estado_equipo = @id_estado_equipo
@@ -296,8 +325,8 @@ router.post('/donar', async (req, res) => {
         
         const producto = productoInfo.recordset[0];
         
-        // Verificar si el producto ya está dado de baja (estado 5)
-        if (producto.id_estado_equipo === ESTADOS.NO_DISPONIBLE) {
+        // Verificar si el producto ya está dado de baja (estado 6)
+        if (producto.id_estado_equipo === ESTADOS.BAJA) {
             return res.status(400).json({ success: false, message: 'El producto ya está dado de baja' });
         }
         
@@ -316,10 +345,10 @@ router.post('/donar', async (req, res) => {
                 )
             `);
         
-        // Actualizar estado del producto a NO_DISPONIBLE (5) - SIN tocar bodega_id
+        // Actualizar estado del producto a BAJA (6)
         await pool.request()
             .input('id', sql.Int, producto_id)
-            .input('id_estado_equipo', sql.Int, ESTADOS.NO_DISPONIBLE)
+            .input('id_estado_equipo', sql.Int, ESTADOS.BAJA)
             .query(`
                 UPDATE INV.productos 
                 SET id_estado_equipo = @id_estado_equipo
@@ -350,6 +379,9 @@ router.post('/donar', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
+// POST - REGISTRAR ENVÍO A LABORATORIO
+router.post('/disposicion/laboratorio', productoController.registrarLaboratorio);
 
 // ============================================
 // MÉTODOS DE MANTENCIÓN
@@ -519,7 +551,7 @@ router.get('/', async (req, res) => {
             FROM INV.productos p
             LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
             WHERE 1=1
-                AND p.id_estado_equipo != 5
+                AND p.id_estado_equipo != 6
         `;
         
         const request = pool.request();

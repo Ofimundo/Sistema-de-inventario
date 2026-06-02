@@ -23,7 +23,6 @@ router.get('/empresas', authenticateToken, async (req, res) => {
                 ORDER BY empresa
             `);
         
-        // Si no hay empresas en la tabla, devolver las opciones por defecto
         const empresas = result.recordset.map(r => r.nombre);
         if (empresas.length === 0) {
             return res.json({ 
@@ -36,7 +35,6 @@ router.get('/empresas', authenticateToken, async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en GET /colaboradores/empresas:', error);
-        // Devolver opciones por defecto en caso de error
         res.json({ 
             success: true, 
             data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'] 
@@ -155,12 +153,6 @@ router.get('/', authenticateToken, async (req, res) => {
         query += ` ORDER BY c.nombre`;
         
         const result = await request.query(query);
-        
-        // Verificar Adan Moris
-        const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
-        if (adan) {
-            console.log(`🔴 ADAN MORIS: Empresa=${adan.empresa}, Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
-        }
         
         res.json({ success: true, data: result.recordset });
         
@@ -377,9 +369,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
             .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
             .query(`
                 UPDATE INV.colaboradores SET
-                    nombre = @nombre, email = @email, rut = @rut, cargo = @cargo,
-                    departamento = @departamento, telefono = @telefono, direccion = @direccion,
-                    fecha_nacimiento = @fecha_nacimiento, estado = @estado, empresa = @empresa
+                    nombre = @nombre, 
+                    email = @email, 
+                    rut = @rut, 
+                    cargo = @cargo,
+                    departamento = @departamento, 
+                    telefono = @telefono, 
+                    direccion = @direccion,
+                    fecha_nacimiento = @fecha_nacimiento, 
+                    estado = @estado, 
+                    empresa = @empresa
                 WHERE id = @id
             `);
         
@@ -391,7 +390,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// DELETE - Eliminar colaborador
+// DELETE - Eliminar colaborador (ELIMINA PRIMERO LAS ASIGNACIONES)
 router.delete('/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -399,36 +398,113 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         
         const idNum = parseInt(id);
         if (isNaN(idNum)) {
-            return res.status(400).json({ success: false, message: 'ID inválido' });
-        }
-        
-        const pool = await getConnection();
-        
-        // Verificar si tiene productos asignados activos
-        const productosAsignados = await pool.request()
-            .input('colaborador_id', sql.Int, idNum)
-            .query(`
-                SELECT COUNT(*) as total 
-                FROM INV.asignaciones 
-                WHERE colaborador_id = @colaborador_id AND fecha_devolucion IS NULL
-            `);
-        
-        if (productosAsignados.recordset[0].total > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: `No se puede eliminar el colaborador porque tiene ${productosAsignados.recordset[0].total} productos asignados activos` 
+                message: 'ID de colaborador inválido' 
             });
         }
         
-        await pool.request()
-            .input('id', sql.Int, idNum)
-            .query(`DELETE FROM INV.colaboradores WHERE id = @id`);
+        const pool = await getConnection();
+        const transaction = pool.transaction();
+        await transaction.begin();
         
-        res.json({ success: true, message: 'Colaborador eliminado' });
+        try {
+            // Verificar si el colaborador existe
+            const colaboradorExistente = await transaction.request()
+                .input('id', sql.Int, idNum)
+                .query(`
+                    SELECT id, nombre, email 
+                    FROM INV.colaboradores 
+                    WHERE id = @id
+                `);
+            
+            if (colaboradorExistente.recordset.length === 0) {
+                await transaction.rollback();
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Colaborador no encontrado' 
+                });
+            }
+            
+            const colaborador = colaboradorExistente.recordset[0];
+            
+            // 1. Primero, obtener todas las asignaciones del colaborador
+            const asignaciones = await transaction.request()
+                .input('colaborador_id', sql.Int, idNum)
+                .query(`
+                    SELECT id, producto_id 
+                    FROM INV.asignaciones 
+                    WHERE colaborador_id = @colaborador_id
+                `);
+            
+            console.log(`📊 Encontradas ${asignaciones.recordset.length} asignaciones para eliminar`);
+            
+            // 2. Para cada asignación, actualizar el estado del producto a DISPONIBLE (1)
+            for (const asignacion of asignaciones.recordset) {
+                await transaction.request()
+                    .input('producto_id', sql.Int, asignacion.producto_id)
+                    .input('id_estado_equipo', sql.Int, 1)
+                    .query(`
+                        UPDATE INV.productos 
+                        SET id_estado_equipo = @id_estado_equipo
+                        WHERE id = @producto_id
+                    `);
+                console.log(`✅ Producto ${asignacion.producto_id} actualizado a DISPONIBLE`);
+            }
+            
+            // 3. Eliminar todas las asignaciones del colaborador
+            await transaction.request()
+                .input('colaborador_id', sql.Int, idNum)
+                .query(`
+                    DELETE FROM INV.asignaciones 
+                    WHERE colaborador_id = @colaborador_id
+                `);
+            
+            console.log(`✅ Eliminadas ${asignaciones.recordset.length} asignaciones`);
+            
+            // 4. Finalmente, eliminar el colaborador
+            await transaction.request()
+                .input('id', sql.Int, idNum)
+                .query(`
+                    DELETE FROM INV.colaboradores 
+                    WHERE id = @id
+                `);
+            
+            await transaction.commit();
+            
+            console.log(`✅ Colaborador ${colaborador.nombre} (ID: ${idNum}) eliminado exitosamente junto con ${asignaciones.recordset.length} asignaciones`);
+            
+            res.json({ 
+                success: true, 
+                message: `Colaborador "${colaborador.nombre}" eliminado exitosamente. Se liberaron ${asignaciones.recordset.length} productos.`,
+                data: {
+                    colaborador: colaborador,
+                    asignacionesEliminadas: asignaciones.recordset.length
+                }
+            });
+            
+        } catch (error) {
+            await transaction.rollback();
+            console.error('❌ Error en transacción:', error);
+            throw error;
+        }
         
     } catch (error) {
         console.error('❌ Error en DELETE /colaboradores/:id:', error);
-        res.status(500).json({ success: false, message: error.message });
+        
+        // Manejar específicamente el error de foreign key
+        if (error.message && (error.message.includes('FK_') || error.message.includes('REFERENCE'))) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'No se puede eliminar el colaborador porque tiene asignaciones relacionadas. Intente nuevamente.',
+                errorType: 'FOREIGN_KEY_CONSTRAINT'
+            });
+        }
+        
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
     }
 });
 

@@ -1,4 +1,4 @@
-// backend/controllers/productoController.js - VERSIÓN SIN producto_bodega
+// backend/controllers/productoController.js - VERSIÓN CON LABORATORIO
 const { getConnection, sql } = require('../config/database');
 
 // Función auxiliar para obtener texto de estado
@@ -19,9 +19,6 @@ const productoController = {
     // MÉTODOS PRINCIPALES
     // ============================================
     
-    /**
-     * Obtener todos los productos (SIN producto_bodega)
-     */
     getProductos: async (req, res) => {
         try {
             console.log('📥 GET /api/productos - Solicitando productos');
@@ -31,7 +28,6 @@ const productoController = {
             
             const pool = await getConnection();
             
-            // Mapa de estados para convertir texto a ID
             const estadoMap = {
                 'DISPONIBLE': 1,
                 'ASIGNADO': 2,
@@ -68,54 +64,38 @@ const productoController = {
             
             const request = pool.request();
             
-            // Filtro por búsqueda
             if (search && search.trim()) {
                 query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search)`;
                 request.input('search', sql.NVarChar, `%${search.trim()}%`);
-                console.log('🔍 Filtro search:', search);
             }
             
-            // Filtro por marca
             if (marca && marca.trim()) {
                 query += ` AND p.marca = @marca`;
                 request.input('marca', sql.NVarChar, marca);
-                console.log('🏷️ Filtro marca:', marca);
             }
             
-            // Filtro por estado - CONVERTIR TEXTO A ID
             if (estado && estado.trim()) {
                 const estadoId = estadoMap[estado];
                 if (estadoId) {
                     query += ` AND p.id_estado_equipo = @estadoId`;
                     request.input('estadoId', sql.Int, estadoId);
-                    console.log('📊 Filtro estado:', estado, '-> ID:', estadoId);
-                } else {
-                    console.log('⚠️ Estado no reconocido:', estado);
                 }
             }
             
-            // Filtro por condición
             if (condicion && condicion.trim()) {
                 query += ` AND p.condicion = @condicion`;
                 request.input('condicion', sql.NVarChar, condicion);
-                console.log('🔧 Filtro condición:', condicion);
             }
             
-            // Filtro por bodega (ahora directamente usando bodega_id)
             if (bodega_id && !isNaN(parseInt(bodega_id))) {
                 query += ` AND p.bodega_id = @bodegaId`;
                 request.input('bodegaId', sql.Int, parseInt(bodega_id));
-                console.log('📦 Filtro bodega_id:', bodega_id);
             }
             
             query += ` ORDER BY p.fecha_creacion DESC`;
             
-            console.log('📝 Query SQL:', query);
-            
             const result = await request.query(query);
-            console.log(`✅ ${result.recordset.length} productos encontrados`);
             
-            // Agregar estado en texto a cada producto
             const productos = result.recordset.map(producto => ({
                 ...producto,
                 estado: getEstadoTexto(producto.id_estado_equipo)
@@ -136,9 +116,6 @@ const productoController = {
         }
     },
 
-    /**
-     * Obtener producto por ID (SIN producto_bodega)
-     */
     getProductoById: async (req, res) => {
         try {
             const { id } = req.params;
@@ -183,7 +160,6 @@ const productoController = {
             const producto = productoResult.recordset[0];
             producto.estado = getEstadoTexto(producto.id_estado_equipo);
 
-            // Obtener mantenciones
             const mantencionesResult = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .query(`
@@ -193,7 +169,6 @@ const productoController = {
                     ORDER BY fecha_inicio DESC
                 `);
 
-            // Obtener historial de uso
             const historialResult = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .query(`
@@ -220,13 +195,9 @@ const productoController = {
         }
     },
 
-    /**
-     * Crear nuevo producto (SIN producto_bodega)
-     */
     createProducto: async (req, res) => {
         try {
             console.log('📥 POST /api/productos - Creando producto');
-            console.log('📥 Body recibido:', req.body);
             
             const { 
                 nombre, precio, oc_numero, factura_numero,
@@ -270,8 +241,6 @@ const productoController = {
             const nuevoProducto = productoResult.recordset[0];
             nuevoProducto.estado = getEstadoTexto(nuevoProducto.id_estado_equipo);
 
-            console.log('✅ Producto creado:', nuevoProducto);
-
             res.json({ success: true, message: 'Producto creado exitosamente', data: nuevoProducto });
 
         } catch (error) {
@@ -280,14 +249,9 @@ const productoController = {
         }
     },
 
-    /**
-     * Actualizar producto (SIN producto_bodega)
-     */
     updateProducto: async (req, res) => {
         try {
             const { id } = req.params;
-            console.log(`📤 PUT /api/productos/${id} - Actualizando producto`);
-            console.log('📥 Body recibido:', req.body);
             
             const { 
                 nombre, precio, oc_numero, factura_numero,
@@ -301,7 +265,6 @@ const productoController = {
 
             const pool = await getConnection();
 
-            // Verificar si el producto existe
             const existeProducto = await pool.request()
                 .input('id', sql.Int, id)
                 .query('SELECT id FROM [INV].[productos] WHERE id = @id');
@@ -345,8 +308,6 @@ const productoController = {
             const productoActualizado = result.recordset[0];
             productoActualizado.estado = getEstadoTexto(productoActualizado.id_estado_equipo);
 
-            console.log('✅ Producto actualizado:', productoActualizado);
-
             res.json({ success: true, message: 'Producto actualizado exitosamente', data: productoActualizado });
 
         } catch (error) {
@@ -355,9 +316,6 @@ const productoController = {
         }
     },
 
-    /**
-     * Eliminar producto (SIN producto_bodega)
-     */
     deleteProducto: async (req, res) => {
         try {
             const { id } = req.params;
@@ -371,17 +329,14 @@ const productoController = {
             await transaction.begin();
 
             try {
-                // Eliminar historial de uso
                 await transaction.request()
                     .input('producto_id', sql.Int, id)
                     .query('DELETE FROM [INV].[producto_uso] WHERE producto_id = @producto_id');
 
-                // Eliminar mantenciones
                 await transaction.request()
                     .input('producto_id', sql.Int, id)
                     .query('DELETE FROM [INV].[mantenciones] WHERE producto_id = @producto_id');
 
-                // Eliminar producto (ya no hay producto_bodega)
                 await transaction.request()
                     .input('id', sql.Int, id)
                     .query('DELETE FROM [INV].[productos] WHERE id = @id');
@@ -422,12 +377,14 @@ const productoController = {
                 WHERE id_estado_equipo != 6
             `);
 
-            // Obtener bajas y donaciones
             const bajasCount = await pool.request()
                 .query('SELECT COUNT(*) as total FROM INV.disposicion_baja');
             
             const donacionesCount = await pool.request()
                 .query('SELECT COUNT(*) as total FROM INV.disposicion_donacion');
+            
+            const laboratoriosCount = await pool.request()
+                .query('SELECT COUNT(*) as total FROM INV.disposicion_laboratorio');
 
             const stats = result.recordset[0] || {};
             
@@ -443,7 +400,8 @@ const productoController = {
                     enReparacion: stats.enReparacion || 0,
                     noDisponibles: stats.noDisponibles || 0,
                     dadosDeBaja: bajasCount.recordset[0]?.total || 0,
-                    donados: donacionesCount.recordset[0]?.total || 0
+                    donados: donacionesCount.recordset[0]?.total || 0,
+                    enviadosLaboratorio: laboratoriosCount.recordset[0]?.total || 0
                 }
             });
 
@@ -500,7 +458,6 @@ const productoController = {
 
             const pool = await getConnection();
             
-            // Cambiar estado del producto a EN MANTENCIÓN (3) o EN REPARACIÓN (4)
             const nuevoEstado = tipo === 'REPARACION' ? 4 : 3;
             
             await pool.request()
@@ -544,7 +501,6 @@ const productoController = {
 
             const pool = await getConnection();
             
-            // Obtener el producto_id de la mantención
             const mantencionResult = await pool.request()
                 .input('id', sql.Int, id)
                 .query('SELECT producto_id FROM [INV].[mantenciones] WHERE id = @id');
@@ -555,7 +511,6 @@ const productoController = {
             
             const producto_id = mantencionResult.recordset[0].producto_id;
             
-            // Finalizar mantención
             const result = await pool.request()
                 .input('id', sql.Int, id)
                 .input('fecha_fin', sql.DateTime, new Date(fecha_fin))
@@ -566,7 +521,6 @@ const productoController = {
                     WHERE id = @id
                 `);
             
-            // Cambiar estado del producto a DISPONIBLE (1)
             await pool.request()
                 .input('producto_id', sql.Int, producto_id)
                 .input('id_estado_equipo', sql.Int, 1)
@@ -609,16 +563,12 @@ const productoController = {
         }
     },
 
-    /**
-     * Obtener historial de disposiciones (bajas y donaciones)
-     */
     getHistorialDisposiciones: async (req, res) => {
         try {
             console.log('📥 GET /api/productos/disposiciones');
             
             const pool = await getConnection();
             
-            // Obtener bajas
             const bajasResult = await pool.request()
                 .query(`
                     SELECT 
@@ -636,7 +586,6 @@ const productoController = {
                     ORDER BY db.fecha_baja DESC
                 `);
             
-            // Obtener donaciones
             const donacionesResult = await pool.request()
                 .query(`
                     SELECT 
@@ -654,11 +603,32 @@ const productoController = {
                     ORDER BY dd.fecha_entrega DESC
                 `);
             
+            const laboratorioResult = await pool.request()
+                .query(`
+                    SELECT 
+                        dl.id,
+                        dl.producto_id,
+                        p.nombre as producto_nombre,
+                        p.numero_serie,
+                        dl.laboratorio_nombre,
+                        dl.contacto,
+                        dl.autorizado_por,
+                        dl.motivo,
+                        dl.descripcion,
+                        dl.observaciones,
+                        dl.fecha_envio as fecha,
+                        'LABORATORIO' as tipo
+                    FROM INV.disposicion_laboratorio dl
+                    INNER JOIN INV.productos p ON dl.producto_id = p.id
+                    ORDER BY dl.fecha_envio DESC
+                `);
+            
             res.json({
                 success: true,
                 data: {
                     bajas: bajasResult.recordset,
-                    donaciones: donacionesResult.recordset
+                    donaciones: donacionesResult.recordset,
+                    laboratorio: laboratorioResult.recordset
                 }
             });
 
@@ -667,14 +637,11 @@ const productoController = {
             res.status(500).json({
                 success: false,
                 message: error.message,
-                data: { bajas: [], donaciones: [] }
+                data: { bajas: [], donaciones: [], laboratorio: [] }
             });
         }
     },
 
-    /**
-     * Registrar baja de producto (SIN producto_bodega)
-     */
     registrarBaja: async (req, res) => {
         try {
             const { producto_id, motivo_baja, autorizado_por, observaciones } = req.body;
@@ -688,7 +655,6 @@ const productoController = {
             await transaction.begin();
 
             try {
-                // Insertar en disposicion_baja
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('motivo_baja', sql.NVarChar, motivo_baja || 'No especificado')
@@ -700,10 +666,9 @@ const productoController = {
                         VALUES (@producto_id, @motivo_baja, @fecha_baja, @autorizado_por, @observaciones)
                     `);
 
-                // Actualizar estado a NO DISPONIBLE (5) y limpiar bodega
                 await transaction.request()
                     .input('id', sql.Int, producto_id)
-                    .input('id_estado_equipo', sql.Int, 5)
+                    .input('id_estado_equipo', sql.Int, 6)
                     .query(`
                         UPDATE [INV].[productos] 
                         SET id_estado_equipo = @id_estado_equipo,
@@ -726,9 +691,6 @@ const productoController = {
         }
     },
 
-    /**
-     * Registrar donación de producto (SIN producto_bodega)
-     */
     registrarDonacion: async (req, res) => {
         try {
             const { producto_id, beneficiario, direccion, observaciones } = req.body;
@@ -742,7 +704,6 @@ const productoController = {
             await transaction.begin();
 
             try {
-                // Insertar en disposicion_donacion
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('beneficiario', sql.NVarChar, beneficiario || 'No especificado')
@@ -754,10 +715,9 @@ const productoController = {
                         VALUES (@producto_id, @beneficiario, @direccion, @fecha_entrega, @observaciones)
                     `);
 
-                // Actualizar estado a NO DISPONIBLE (5) y limpiar bodega
                 await transaction.request()
                     .input('id', sql.Int, producto_id)
-                    .input('id_estado_equipo', sql.Int, 5)
+                    .input('id_estado_equipo', sql.Int, 6)
                     .query(`
                         UPDATE [INV].[productos] 
                         SET id_estado_equipo = @id_estado_equipo,
@@ -776,6 +736,135 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en registrarDonacion:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    // ============================================
+    // NUEVO MÉTODO - REGISTRAR ENVÍO A LABORATORIO
+    // ============================================
+    registrarLaboratorio: async (req, res) => {
+        try {
+            console.log('📥 POST /api/productos/disposicion/laboratorio');
+            console.log('Body:', req.body);
+            
+            const { 
+                producto_id, 
+                laboratorio_nombre, 
+                autorizado_por, 
+                motivo, 
+                contacto, 
+                descripcion, 
+                observaciones 
+            } = req.body;
+            
+            if (!producto_id || !laboratorio_nombre || !autorizado_por) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Faltan campos requeridos: producto_id, laboratorio_nombre y autorizado_por' 
+                });
+            }
+            
+            const pool = await getConnection();
+            const transaction = pool.transaction();
+            await transaction.begin();
+            
+            try {
+                // Verificar producto
+                const productoInfo = await transaction.request()
+                    .input('id', sql.Int, producto_id)
+                    .query(`
+                        SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo, bodega_id
+                        FROM INV.productos WHERE id = @id
+                    `);
+                
+                if (productoInfo.recordset.length === 0) {
+                    await transaction.rollback();
+                    return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+                }
+                
+                const producto = productoInfo.recordset[0];
+                
+                // Crear tabla si no existe
+                try {
+                    await transaction.request().query(`
+                        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='disposicion_laboratorio' AND xtype='U')
+                        CREATE TABLE INV.disposicion_laboratorio (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            producto_id INT NOT NULL,
+                            laboratorio_nombre NVARCHAR(255) NOT NULL,
+                            contacto NVARCHAR(255) NULL,
+                            autorizado_por NVARCHAR(255) NOT NULL,
+                            motivo NVARCHAR(500) NULL,
+                            descripcion NVARCHAR(MAX) NULL,
+                            observaciones NVARCHAR(MAX) NULL,
+                            documento_respaldo NVARCHAR(500) NULL,
+                            fecha_envio DATETIME DEFAULT GETDATE(),
+                            FOREIGN KEY (producto_id) REFERENCES INV.productos(id)
+                        )
+                    `);
+                } catch (tableError) {
+                    console.log('⚠️ Tabla ya existe o error:', tableError.message);
+                }
+                
+                // Insertar en disposicion_laboratorio
+                await transaction.request()
+                    .input('producto_id', sql.Int, producto_id)
+                    .input('laboratorio_nombre', sql.NVarChar, laboratorio_nombre)
+                    .input('contacto', sql.NVarChar, contacto || null)
+                    .input('autorizado_por', sql.NVarChar, autorizado_por)
+                    .input('motivo', sql.NVarChar, motivo || 'Envío a laboratorio para análisis')
+                    .input('descripcion', sql.NVarChar, descripcion || null)
+                    .input('observaciones', sql.NVarChar, observaciones || null)
+                    .query(`
+                        INSERT INTO INV.disposicion_laboratorio (
+                            producto_id, laboratorio_nombre, contacto, autorizado_por, 
+                            motivo, descripcion, observaciones, fecha_envio
+                        ) VALUES (
+                            @producto_id, @laboratorio_nombre, @contacto, @autorizado_por,
+                            @motivo, @descripcion, @observaciones, GETDATE()
+                        )
+                    `);
+                
+                // Cambiar estado a NO DISPONIBLE (5) - igual que baja y donación
+                await transaction.request()
+                    .input('id', sql.Int, producto_id)
+                    .input('id_estado_equipo', sql.Int, 5)
+                    .query(`
+                        UPDATE INV.productos 
+                        SET id_estado_equipo = @id_estado_equipo,
+                            bodega_id = NULL
+                        WHERE id = @id
+                    `);
+                
+                // Registrar en historial
+                await transaction.request()
+                    .input('producto_id', sql.Int, producto_id)
+                    .input('accion', sql.NVarChar, 'LABORATORIO')
+                    .input('detalles', sql.NVarChar, `Producto enviado a laboratorio: ${laboratorio_nombre}. Autorizado por: ${autorizado_por}`)
+                    .input('fecha_hora', sql.DateTime, new Date())
+                    .query(`
+                        INSERT INTO INV.historial (producto_id, accion, detalles, fecha_hora)
+                        VALUES (@producto_id, @accion, @detalles, @fecha_hora)
+                    `);
+                
+                await transaction.commit();
+                
+                console.log(`✅ Producto ${producto_id} enviado a laboratorio exitosamente`);
+                
+                res.json({ 
+                    success: true, 
+                    message: `Producto enviado a laboratorio: ${laboratorio_nombre}`,
+                    data: producto 
+                });
+                
+            } catch (error) {
+                await transaction.rollback();
+                throw error;
+            }
+            
+        } catch (error) {
+            console.error('❌ Error en registrarLaboratorio:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     },
@@ -978,7 +1067,6 @@ const productoController = {
 
             const pool = await getConnection();
             
-            // Finalizar mantención activa del producto
             const result = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .input('fecha_fin', sql.DateTime, new Date(fecha_fin))
@@ -989,7 +1077,6 @@ const productoController = {
                     WHERE producto_id = @producto_id AND fecha_fin IS NULL
                 `);
             
-            // Cambiar estado del producto a DISPONIBLE (1)
             await pool.request()
                 .input('producto_id', sql.Int, id)
                 .input('id_estado_equipo', sql.Int, 1)

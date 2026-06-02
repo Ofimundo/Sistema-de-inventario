@@ -6,10 +6,9 @@ const colaboradorController = {
         try {
             console.log('📥 GET /api/colaboradores');
             
-            const { estado, departamento, empresa, search } = req.query; // NUEVO: empresa
+            const { estado, departamento, empresa, search } = req.query;
             const pool = await getConnection();
             
-            // Consulta incluyendo empresa
             let query = `
                 SELECT 
                     c.id,
@@ -30,7 +29,6 @@ const colaboradorController = {
                 LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
             `;
             
-            // Construir condiciones WHERE
             const conditions = [];
             const request = pool.request();
             
@@ -44,7 +42,7 @@ const colaboradorController = {
                 request.input('departamento', sql.NVarChar, departamento);
             }
             
-            if (empresa) { // NUEVO: filtro por empresa
+            if (empresa) {
                 conditions.push('c.empresa = @empresa');
                 request.input('empresa', sql.NVarChar, empresa);
             }
@@ -66,7 +64,6 @@ const colaboradorController = {
             
             console.log(`✅ ${result.recordset.length} colaboradores encontrados`);
             
-            // Verificar Adan Moris específicamente
             const adan = result.recordset.find(c => c.nombre === 'Adan Moris');
             if (adan) {
                 console.log(`🔴 ADAN MORIS: Empresa=${adan.empresa}, Total=${adan.total_asignaciones}, Activas=${adan.asignaciones_activas}`);
@@ -74,7 +71,6 @@ const colaboradorController = {
                 console.log('🔴 No se encontró a Adan Moris en los resultados');
             }
             
-            // Mostrar estadísticas
             const conAsignaciones = result.recordset.filter(c => c.total_asignaciones > 0);
             console.log(`📊 ${conAsignaciones.length} colaboradores tienen asignaciones`);
             conAsignaciones.slice(0, 10).forEach(col => {
@@ -135,7 +131,6 @@ const colaboradorController = {
 
             const colaborador = result.recordset[0];
             
-            // Obtener productos asignados
             const productos = await pool.request()
                 .input('colaborador_id', sql.Int, id)
                 .query(`
@@ -230,7 +225,7 @@ const colaboradorController = {
             const { 
                 rut, nombre, email, telefono, cargo, departamento, 
                 fecha_ingreso, estado, direccion, fecha_nacimiento, 
-                empresa  // NUEVO: empresa
+                empresa
             } = req.body;
 
             if (!rut || !nombre || !email) {
@@ -275,7 +270,7 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
-                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO') // NUEVO: empresa
+                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
                 .input('creado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     INSERT INTO [INV].[colaboradores] (
@@ -311,7 +306,7 @@ const colaboradorController = {
             const { 
                 rut, nombre, email, telefono, cargo, departamento, 
                 fecha_ingreso, estado, direccion, fecha_nacimiento,
-                empresa  // NUEVO: empresa
+                empresa
             } = req.body;
 
             const pool = await getConnection();
@@ -367,7 +362,7 @@ const colaboradorController = {
                 .input('estado', sql.NVarChar, estado || 'ACTIVO')
                 .input('direccion', sql.NVarChar, direccion || null)
                 .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
-                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO') // NUEVO: empresa
+                .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
                 .input('actualizado_por', sql.Int, req.user?.id || 1)
                 .query(`
                     UPDATE [INV].[colaboradores]
@@ -406,44 +401,99 @@ const colaboradorController = {
     deleteColaborador: async (req, res) => {
         try {
             const { id } = req.params;
+            console.log(`📥 DELETE /api/colaboradores/${id}`);
+            
+            const idNum = parseInt(id);
+            if (isNaN(idNum)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'ID de colaborador inválido' 
+                });
+            }
+
             const pool = await getConnection();
 
-            const checkResult = await pool.request()
-                .input('id', sql.Int, id)
+            // Verificar asignaciones activas (sin fecha_devolucion)
+            const asignacionesActivas = await pool.request()
+                .input('colaborador_id', sql.Int, idNum)
                 .query(`
                     SELECT COUNT(*) as total 
                     FROM [INV].[asignaciones] 
-                    WHERE colaborador_id = @id AND fecha_devolucion IS NULL
+                    WHERE colaborador_id = @colaborador_id 
+                      AND fecha_devolucion IS NULL
                 `);
 
-            if (checkResult.recordset[0].total > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: `No se puede eliminar. Tiene ${checkResult.recordset[0].total} productos asignados.`
+            const activasCount = asignacionesActivas.recordset[0].total;
+            
+            if (activasCount > 0) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `❌ No se puede eliminar el colaborador porque tiene ${activasCount} producto(s) asignado(s) activos. Primero debe liberar las asignaciones.`,
+                    tieneAsignacionesActivas: true,
+                    totalActivas: activasCount
                 });
             }
 
+            // Verificar asignaciones históricas (con fecha_devolucion)
+            const asignacionesHistoricas = await pool.request()
+                .input('colaborador_id', sql.Int, idNum)
+                .query(`
+                    SELECT COUNT(*) as total 
+                    FROM [INV].[asignaciones] 
+                    WHERE colaborador_id = @colaborador_id 
+                      AND fecha_devolucion IS NOT NULL
+                `);
+
+            const historicasCount = asignacionesHistoricas.recordset[0].total;
+
+            if (historicasCount > 0) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `⚠️ No se puede eliminar el colaborador porque tiene ${historicasCount} asignaciones históricas. El colaborador tiene un registro de productos que ha usado en el pasado.`,
+                    tieneAsignacionesHistoricas: true,
+                    totalHistoricas: historicasCount
+                });
+            }
+
+            // Si no tiene asignaciones, proceder con la eliminación
             const result = await pool.request()
-                .input('id', sql.Int, id)
-                .query('DELETE FROM [INV].[colaboradores] OUTPUT DELETED.* WHERE id = @id');
+                .input('id', sql.Int, idNum)
+                .query(`
+                    DELETE FROM [INV].[colaboradores] 
+                    OUTPUT DELETED.* 
+                    WHERE id = @id
+                `);
 
             if (result.recordset.length === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Colaborador no encontrado'
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Colaborador no encontrado' 
                 });
             }
 
-            res.json({
-                success: true,
+            console.log(`✅ Colaborador ${result.recordset[0].nombre} eliminado exitosamente`);
+
+            res.json({ 
+                success: true, 
                 message: 'Colaborador eliminado exitosamente',
                 data: result.recordset[0]
             });
+
         } catch (error) {
             console.error('❌ Error en deleteColaborador:', error);
-            res.status(500).json({
-                success: false,
-                message: error.message
+            
+            // Manejar específicamente el error de foreign key
+            if (error.message && (error.message.includes('FK_asignaciones_colaboradores') || error.message.includes('REFERENCE'))) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'No se puede eliminar el colaborador porque tiene asignaciones registradas en el sistema. Primero debe eliminar o finalizar sus asignaciones.',
+                    errorType: 'FOREIGN_KEY_CONSTRAINT'
+                });
+            }
+            
+            res.status(500).json({ 
+                success: false, 
+                message: error.message 
             });
         }
     },
@@ -509,7 +559,6 @@ const colaboradorController = {
         }
     },
 
-    // NUEVO: Obtener empresas únicas
     getEmpresas: async (req, res) => {
         try {
             const pool = await getConnection();
@@ -521,7 +570,6 @@ const colaboradorController = {
                     ORDER BY empresa
                 `);
 
-            // Si no hay empresas en la tabla, devolver las opciones por defecto
             const empresas = result.recordset.map(r => r.empresa);
             if (empresas.length === 0) {
                 return res.json({
@@ -536,7 +584,6 @@ const colaboradorController = {
             });
         } catch (error) {
             console.error('❌ Error en getEmpresas:', error);
-            // Devolver opciones por defecto en caso de error
             res.json({
                 success: true,
                 data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO']
