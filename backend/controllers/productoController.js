@@ -1,4 +1,4 @@
-// backend/controllers/productoController.js - VERSIÓN CON LABORATORIO
+// backend/controllers/productoController.js - VERSIÓN CORREGIDA CON LABORATORIO
 const { getConnection, sql } = require('../config/database');
 
 // Función auxiliar para obtener texto de estado
@@ -611,10 +611,8 @@ const productoController = {
                         p.nombre as producto_nombre,
                         p.numero_serie,
                         dl.laboratorio_nombre,
-                        dl.contacto,
                         dl.autorizado_por,
                         dl.motivo,
-                        dl.descripcion,
                         dl.observaciones,
                         dl.fecha_envio as fecha,
                         'LABORATORIO' as tipo
@@ -741,7 +739,7 @@ const productoController = {
     },
 
     // ============================================
-    // NUEVO MÉTODO - REGISTRAR ENVÍO A LABORATORIO
+    // MÉTODO CORREGIDO - REGISTRAR ENVÍO A LABORATORIO
     // ============================================
     registrarLaboratorio: async (req, res) => {
         try {
@@ -753,8 +751,6 @@ const productoController = {
                 laboratorio_nombre, 
                 autorizado_por, 
                 motivo, 
-                contacto, 
-                descripcion, 
                 observaciones 
             } = req.body;
             
@@ -774,7 +770,7 @@ const productoController = {
                 const productoInfo = await transaction.request()
                     .input('id', sql.Int, producto_id)
                     .query(`
-                        SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo, bodega_id
+                        SELECT id, nombre, numero_serie, precio, marca, modelo, condicion, id_estado_equipo
                         FROM INV.productos WHERE id = @id
                     `);
                 
@@ -785,7 +781,7 @@ const productoController = {
                 
                 const producto = productoInfo.recordset[0];
                 
-                // Crear tabla si no existe
+                // Crear tabla si no existe (sin campo contacto ni descripcion)
                 try {
                     await transaction.request().query(`
                         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='disposicion_laboratorio' AND xtype='U')
@@ -793,10 +789,8 @@ const productoController = {
                             id INT IDENTITY(1,1) PRIMARY KEY,
                             producto_id INT NOT NULL,
                             laboratorio_nombre NVARCHAR(255) NOT NULL,
-                            contacto NVARCHAR(255) NULL,
                             autorizado_por NVARCHAR(255) NOT NULL,
                             motivo NVARCHAR(500) NULL,
-                            descripcion NVARCHAR(MAX) NULL,
                             observaciones NVARCHAR(MAX) NULL,
                             documento_respaldo NVARCHAR(500) NULL,
                             fecha_envio DATETIME DEFAULT GETDATE(),
@@ -807,33 +801,30 @@ const productoController = {
                     console.log('⚠️ Tabla ya existe o error:', tableError.message);
                 }
                 
-                // Insertar en disposicion_laboratorio
+                // Insertar en disposicion_laboratorio (sin contacto ni descripcion)
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('laboratorio_nombre', sql.NVarChar, laboratorio_nombre)
-                    .input('contacto', sql.NVarChar, contacto || null)
                     .input('autorizado_por', sql.NVarChar, autorizado_por)
                     .input('motivo', sql.NVarChar, motivo || 'Envío a laboratorio para análisis')
-                    .input('descripcion', sql.NVarChar, descripcion || null)
                     .input('observaciones', sql.NVarChar, observaciones || null)
                     .query(`
                         INSERT INTO INV.disposicion_laboratorio (
-                            producto_id, laboratorio_nombre, contacto, autorizado_por, 
-                            motivo, descripcion, observaciones, fecha_envio
+                            producto_id, laboratorio_nombre, autorizado_por, 
+                            motivo, observaciones, fecha_envio
                         ) VALUES (
-                            @producto_id, @laboratorio_nombre, @contacto, @autorizado_por,
-                            @motivo, @descripcion, @observaciones, GETDATE()
+                            @producto_id, @laboratorio_nombre, @autorizado_por,
+                            @motivo, @observaciones, GETDATE()
                         )
                     `);
                 
-                // Cambiar estado a NO DISPONIBLE (5) - igual que baja y donación
+                // Cambiar estado a NO DISPONIBLE (5) - SIN tocar bodega_id
                 await transaction.request()
                     .input('id', sql.Int, producto_id)
                     .input('id_estado_equipo', sql.Int, 5)
                     .query(`
                         UPDATE INV.productos 
-                        SET id_estado_equipo = @id_estado_equipo,
-                            bodega_id = NULL
+                        SET id_estado_equipo = @id_estado_equipo
                         WHERE id = @id
                     `);
                 
