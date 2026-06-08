@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CON CAMBIO DE CONTRASEÑA FUNCIONAL
+// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CORREGIDA Y ACTUALIZADA
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -183,7 +183,7 @@ const prestamosService = {
 };
 
 // ============================================
-// AUTH SERVICE
+// AUTH SERVICE - CORREGIDO
 // ============================================
 const authService = {
   getCurrentUser: () => {
@@ -232,11 +232,11 @@ const authService = {
   
   changePassword: async (currentPassword, newPassword) => {
     try {
-      console.log('🔐 Cambiando contraseña...');
+      console.log('🔐 Enviando solicitud de cambio de contraseña...');
       
       const token = localStorage.getItem('token');
       if (!token) {
-        return { success: false, message: 'No hay sesión activa' };
+        return { success: false, message: 'No hay sesión activa.' };
       }
       
       const response = await api.post('/auth/change-password', {
@@ -244,12 +244,16 @@ const authService = {
         newPassword: newPassword
       });
       
-      console.log('📥 Respuesta:', response.data);
+      console.log('📥 Respuesta del servidor:', response.data);
       
       if (response.data && response.data.success) {
+        if (response.data.token) {
+          localStorage.setItem('token', response.data.token);
+        }
+        
         return { 
           success: true, 
-          message: response.data.message || 'Contraseña cambiada correctamente' 
+          message: response.data.message || 'Contraseña cambiada correctamente'
         };
       }
       
@@ -260,18 +264,29 @@ const authService = {
     } catch (error) {
       console.error('❌ Error en changePassword:', error);
       
-      let errorMessage = 'Error de conexión';
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Contraseña actual incorrecta';
-      } else if (error.response?.status === 400) {
-        errorMessage = error.response.data?.message || 'La nueva contraseña debe tener al menos 6 caracteres';
+      let errorMessage = 'Error de conexión con el servidor';
+      
+      if (error.response) {
+        switch (error.response.status) {
+          case 400:
+            errorMessage = error.response.data?.message || 'La nueva contraseña debe tener al menos 6 caracteres';
+            break;
+          case 401:
+            errorMessage = 'Contraseña actual incorrecta';
+            break;
+          case 404:
+            errorMessage = 'Endpoint no disponible. Contacta al administrador.';
+            break;
+          default:
+            errorMessage = error.response.data?.message || 'Error al cambiar contraseña';
+        }
+      } else if (error.request) {
+        errorMessage = 'No se pudo conectar con el servidor';
       }
       
       return { 
         success: false, 
-        message: errorMessage 
+        message: errorMessage
       };
     }
   },
@@ -495,9 +510,9 @@ const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) =>
 };
 
 // ============================================
-// DIÁLOGO DE CAMBIO DE CONTRASEÑA - FUNCIONAL
+// DIÁLOGO DE CAMBIO DE CONTRASEÑA - CORREGIDO
 // ============================================
-const CambiarPasswordDialog = ({ open, onClose, showSnackbar }) => {
+const CambiarPasswordDialog = ({ open, onClose, showSnackbar, onLogout }) => {
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -526,6 +541,9 @@ const CambiarPasswordDialog = ({ open, onClose, showSnackbar }) => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       newErrors.confirmPassword = 'Las contraseñas no coinciden';
     }
+    if (passwordData.newPassword === passwordData.currentPassword) {
+      newErrors.newPassword = 'La nueva contraseña debe ser diferente a la actual';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -535,27 +553,34 @@ const CambiarPasswordDialog = ({ open, onClose, showSnackbar }) => {
     setLoading(true);
     
     try {
-      console.log('🔐 Enviando cambio de contraseña...');
-      
       const result = await authService.changePassword(
         passwordData.currentPassword,
         passwordData.newPassword
       );
       
       if (result.success) {
-        showSnackbar('Contraseña cambiada correctamente', 'success');
+        showSnackbar('¡Contraseña cambiada correctamente!', 'success');
+        
         setPasswordData({
           currentPassword: '',
           newPassword: '',
           confirmPassword: ''
         });
+        
         onClose();
+        
+        setTimeout(() => {
+          showSnackbar('Por favor, inicia sesión nuevamente con tu nueva contraseña', 'info');
+          setTimeout(() => {
+            if (onLogout) onLogout();
+          }, 2000);
+        }, 1000);
       } else {
         showSnackbar(result.message || 'Error al cambiar contraseña', 'error');
       }
     } catch (error) {
-      console.error('Error:', error);
-      showSnackbar('Error al cambiar contraseña', 'error');
+      console.error('Error en cambio de contraseña:', error);
+      showSnackbar('Error al cambiar contraseña. Intenta nuevamente.', 'error');
     } finally {
       setLoading(false);
     }
@@ -727,6 +752,11 @@ const Dashboard = () => {
       setSnackbar({ open: true, message, severity });
     }
   }, []);
+
+  const handleLogout = useCallback(() => { 
+    authService.logout(); 
+    navigate("/login"); 
+  }, [navigate]);
 
   const handleExportExcel = useCallback(async () => {
     setExporting(true);
@@ -907,11 +937,6 @@ const Dashboard = () => {
     },
     shape: { borderRadius: 14 },
   });
-
-  const handleLogout = () => { 
-    authService.logout(); 
-    navigate("/login"); 
-  };
 
   if (!user && loading) {
     return (
@@ -1163,6 +1188,7 @@ const Dashboard = () => {
             open={openCambiarPassword}
             onClose={() => setOpenCambiarPassword(false)}
             showSnackbar={showSnackbar}
+            onLogout={handleLogout}
           />
           
           <ConfiguracionDialog 

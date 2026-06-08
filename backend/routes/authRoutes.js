@@ -1,10 +1,16 @@
-// backend/routes/authRoutes.js
+// backend/routes/authRoutes.js - VERSIÓN CON LOGS DE DEPURACIÓN
 const express = require('express');
 const router = express.Router();
 const AuthController = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 
 console.log('🔧 Inicializando authRoutes.js...');
+
+// Middleware de depuración para todas las rutas auth
+router.use((req, res, next) => {
+    console.log(`   🔐 [authRoutes] ${req.method} ${req.path}`);
+    next();
+});
 
 router.post('/register', async (req, res) => {
     console.log('📥 POST /api/auth/register');
@@ -57,11 +63,12 @@ router.put('/profile', authenticateToken, async (req, res) => {
 });
 
 router.post('/change-password', authenticateToken, async (req, res) => {
-    console.log('📥 POST /api/auth/change-password');
+    console.log('🔥🔥🔥 POST /api/auth/change-password - EJECUTANDO CONTROLADOR 🔥🔥🔥');
+    console.log('📝 req.user:', req.user);
     try {
         await AuthController.changePassword(req, res);
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Error en change-password:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

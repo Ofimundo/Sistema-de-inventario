@@ -1,4 +1,4 @@
-// backend/models/usuarioModel.js
+// backend/models/usuarioModel.js - VERSIÓN CORREGIDA PARA TU TABLA
 const { getConnection, sql } = require('../config/database');
 const bcrypt = require('bcryptjs');
 
@@ -34,8 +34,12 @@ class UsuarioModel {
                 .input('rut', sql.NVarChar, userData.rut || '')
                 .input('activo', sql.Bit, userData.activo !== false)
                 .query(`
-                    INSERT INTO INV.usuarios (usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo, fecha_creacion)
-                    VALUES (@usuario, @contraseña, @nombre, @email, @cargo, @departamento, @rol, @rut, @activo, GETDATE());
+                    INSERT INTO INV.usuarios (
+                        usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo, fecha_creacion
+                    )
+                    VALUES (
+                        @usuario, @contraseña, @nombre, @email, @cargo, @departamento, @rol, @rut, @activo, GETDATE()
+                    );
                     SELECT SCOPE_IDENTITY() as id;
                 `);
 
@@ -67,9 +71,14 @@ class UsuarioModel {
             const result = await pool.request()
                 .input('usuario', sql.NVarChar, usuario)
                 .query(`
-                    SELECT id, usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo
+                    SELECT 
+                        id, usuario, contraseña, nombre, email, cargo, 
+                        departamento, rol, rut, activo, telefono, 
+                        fecha_nacimiento, nacionalidad, estado_civil,
+                        fecha_ingreso, domicilio, comuna, ciudad,
+                        ultimo_acceso, fecha_creacion, fecha_actualizacion
                     FROM INV.usuarios
-                    WHERE usuario = @usuario AND (activo = 1 OR activo IS NULL)
+                    WHERE usuario = @usuario AND activo = 1
                 `);
             
             if (result.recordset.length === 0) {
@@ -104,7 +113,12 @@ class UsuarioModel {
             const result = await pool.request()
                 .input('id', sql.Int, id)
                 .query(`
-                    SELECT id, usuario, contraseña, nombre, email, cargo, departamento, rol, rut, activo
+                    SELECT 
+                        id, usuario, contraseña, nombre, email, cargo, 
+                        departamento, rol, rut, activo, telefono, 
+                        fecha_nacimiento, nacionalidad, estado_civil,
+                        fecha_ingreso, domicilio, comuna, ciudad,
+                        ultimo_acceso, fecha_creacion, fecha_actualizacion
                     FROM INV.usuarios
                     WHERE id = @id
                 `);
@@ -143,7 +157,7 @@ class UsuarioModel {
                 .query(`
                     SELECT id, usuario, nombre, email, cargo, departamento, rol, rut, activo
                     FROM INV.usuarios
-                    WHERE email = @email AND (activo = 1 OR activo IS NULL)
+                    WHERE email = @email AND activo = 1
                 `);
             
             if (result.recordset.length === 0) {
@@ -176,28 +190,68 @@ class UsuarioModel {
     }
 
     /**
-     * Actualizar contraseña - CORREGIDO CON MÁS LOGS
+     * Actualizar contraseña - VERSIÓN CORREGIDA
      */
     async updatePassword(userId, hashedPassword) {
         try {
-            console.log('📝 updatePassword - Usuario ID:', userId);
-            console.log('📝 Nueva contraseña hasheada:', hashedPassword.substring(0, 20) + '...');
+            console.log('=================================');
+            console.log('🔐 updatePassword - INICIANDO');
+            console.log(`📝 Usuario ID: ${userId}`);
+            console.log(`📝 Hash nuevo: ${hashedPassword.substring(0, 30)}...`);
+            
+            if (!userId || !hashedPassword) {
+                throw new Error('ID de usuario y contraseña son requeridos');
+            }
             
             const pool = await getConnection();
             
-            const result = await pool.request()
+            // PRIMERO: Verificar que el usuario existe
+            const userCheck = await pool.request()
                 .input('id', sql.Int, userId)
-                .input('contraseña', sql.NVarChar, hashedPassword)
                 .query(`
-                    UPDATE INV.usuarios 
-                    SET contraseña = @contraseña
+                    SELECT id, usuario, LEN(contraseña) as longitud_actual
+                    FROM INV.usuarios 
                     WHERE id = @id
                 `);
             
-            console.log('📊 Filas afectadas:', result.rowsAffected);
+            if (userCheck.recordset.length === 0) {
+                console.error('❌ Usuario no encontrado');
+                throw new Error('Usuario no encontrado');
+            }
+            
+            console.log(`✅ Usuario encontrado: ${userCheck.recordset[0].usuario}`);
+            console.log(`📏 Longitud del hash actual: ${userCheck.recordset[0].longitud_actual}`);
+            
+            // SEGUNDO: Actualizar la contraseña
+            const result = await pool.request()
+                .input('id', sql.Int, userId)
+                .input('contraseña', sql.NVarChar(255), hashedPassword)
+                .query(`
+                    UPDATE INV.usuarios 
+                    SET contraseña = @contraseña,
+                        fecha_actualizacion = GETDATE()
+                    WHERE id = @id
+                `);
+            
+            console.log(`📊 Filas afectadas: ${result.rowsAffected[0]}`);
             
             if (result.rowsAffected && result.rowsAffected[0] > 0) {
+                // TERCERO: Verificar que se actualizó correctamente
+                const verifyResult = await pool.request()
+                    .input('id', sql.Int, userId)
+                    .query(`
+                        SELECT LEN(contraseña) as nueva_longitud,
+                               SUBSTRING(contraseña, 1, 20) as hash_inicio,
+                               fecha_actualizacion
+                        FROM INV.usuarios 
+                        WHERE id = @id
+                    `);
+                
+                console.log(`✅ NUEVA longitud del hash: ${verifyResult.recordset[0]?.nueva_longitud}`);
+                console.log(`📝 Hash nuevo (inicio): ${verifyResult.recordset[0]?.hash_inicio}...`);
+                console.log(`📅 Fecha actualización: ${verifyResult.recordset[0]?.fecha_actualizacion}`);
                 console.log('✅ Contraseña actualizada correctamente');
+                console.log('=================================');
                 return true;
             } else {
                 console.error('❌ No se actualizó ninguna fila');
@@ -205,6 +259,8 @@ class UsuarioModel {
             }
         } catch (error) {
             console.error('❌ Error en updatePassword:', error);
+            console.error('❌ Stack:', error.stack);
+            console.log('=================================');
             throw error;
         }
     }
@@ -228,13 +284,15 @@ class UsuarioModel {
                 .input('cargo', sql.NVarChar, userData.cargo !== undefined ? userData.cargo : currentUser.cargo)
                 .input('departamento', sql.NVarChar, userData.departamento !== undefined ? userData.departamento : currentUser.departamento)
                 .input('rut', sql.NVarChar, userData.rut !== undefined ? userData.rut : currentUser.rut)
+                .input('fecha_actualizacion', sql.DateTime, new Date())
                 .query(`
                     UPDATE INV.usuarios 
                     SET nombre = @nombre,
                         email = @email,
                         cargo = @cargo,
                         departamento = @departamento,
-                        rut = @rut
+                        rut = @rut,
+                        fecha_actualizacion = @fecha_actualizacion
                     WHERE id = @id
                 `);
             
@@ -260,14 +318,37 @@ class UsuarioModel {
             const pool = await getConnection();
             await pool.request()
                 .input('id', sql.Int, userId)
+                .input('fecha_actualizacion', sql.DateTime, new Date())
                 .query(`
                     UPDATE INV.usuarios 
-                    SET activo = 0
+                    SET activo = 0,
+                        fecha_actualizacion = @fecha_actualizacion
                     WHERE id = @id
                 `);
             return true;
         } catch (error) {
             console.error('❌ Error en deactivate:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Actualizar último acceso
+     */
+    async updateLastAccess(userId) {
+        try {
+            const pool = await getConnection();
+            await pool.request()
+                .input('id', sql.Int, userId)
+                .input('ultimo_acceso', sql.DateTime, new Date())
+                .query(`
+                    UPDATE INV.usuarios 
+                    SET ultimo_acceso = @ultimo_acceso
+                    WHERE id = @id
+                `);
+            return true;
+        } catch (error) {
+            console.error('❌ Error en updateLastAccess:', error);
             throw error;
         }
     }

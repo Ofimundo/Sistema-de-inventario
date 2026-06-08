@@ -390,7 +390,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// DELETE - Eliminar colaborador (ELIMINA PRIMERO LAS ASIGNACIONES)
+// DELETE - Eliminar colaborador (ELIMINA PRIMERO TODAS LAS ASIGNACIONES)
 router.delete('/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -405,43 +405,40 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         }
         
         const pool = await getConnection();
-        const transaction = pool.transaction();
-        await transaction.begin();
         
-        try {
-            // Verificar si el colaborador existe
-            const colaboradorExistente = await transaction.request()
-                .input('id', sql.Int, idNum)
-                .query(`
-                    SELECT id, nombre, email 
-                    FROM INV.colaboradores 
-                    WHERE id = @id
-                `);
-            
-            if (colaboradorExistente.recordset.length === 0) {
-                await transaction.rollback();
-                return res.status(404).json({ 
-                    success: false, 
-                    message: 'Colaborador no encontrado' 
-                });
-            }
-            
-            const colaborador = colaboradorExistente.recordset[0];
-            
-            // 1. Primero, obtener todas las asignaciones del colaborador
-            const asignaciones = await transaction.request()
-                .input('colaborador_id', sql.Int, idNum)
-                .query(`
-                    SELECT id, producto_id 
-                    FROM INV.asignaciones 
-                    WHERE colaborador_id = @colaborador_id
-                `);
-            
-            console.log(`📊 Encontradas ${asignaciones.recordset.length} asignaciones para eliminar`);
-            
-            // 2. Para cada asignación, actualizar el estado del producto a DISPONIBLE (1)
-            for (const asignacion of asignaciones.recordset) {
-                await transaction.request()
+        // Primero, verificar si el colaborador existe
+        const colaboradorExistente = await pool.request()
+            .input('id', sql.Int, idNum)
+            .query(`
+                SELECT id, nombre, email 
+                FROM INV.colaboradores 
+                WHERE id = @id
+            `);
+        
+        if (colaboradorExistente.recordset.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Colaborador no encontrado' 
+            });
+        }
+        
+        const colaborador = colaboradorExistente.recordset[0];
+        
+        // Obtener todas las asignaciones del colaborador
+        const asignaciones = await pool.request()
+            .input('colaborador_id', sql.Int, idNum)
+            .query(`
+                SELECT id, producto_id 
+                FROM INV.asignaciones 
+                WHERE colaborador_id = @colaborador_id
+            `);
+        
+        console.log(`📊 Encontradas ${asignaciones.recordset.length} asignaciones para eliminar`);
+        
+        // Actualizar los productos a estado DISPONIBLE (1)
+        for (const asignacion of asignaciones.recordset) {
+            if (asignacion.producto_id) {
+                await pool.request()
                     .input('producto_id', sql.Int, asignacion.producto_id)
                     .input('id_estado_equipo', sql.Int, 1)
                     .query(`
@@ -451,43 +448,37 @@ router.delete('/:id', authenticateToken, async (req, res) => {
                     `);
                 console.log(`✅ Producto ${asignacion.producto_id} actualizado a DISPONIBLE`);
             }
-            
-            // 3. Eliminar todas las asignaciones del colaborador
-            await transaction.request()
+        }
+        
+        // Eliminar todas las asignaciones del colaborador
+        if (asignaciones.recordset.length > 0) {
+            await pool.request()
                 .input('colaborador_id', sql.Int, idNum)
                 .query(`
                     DELETE FROM INV.asignaciones 
                     WHERE colaborador_id = @colaborador_id
                 `);
-            
             console.log(`✅ Eliminadas ${asignaciones.recordset.length} asignaciones`);
-            
-            // 4. Finalmente, eliminar el colaborador
-            await transaction.request()
-                .input('id', sql.Int, idNum)
-                .query(`
-                    DELETE FROM INV.colaboradores 
-                    WHERE id = @id
-                `);
-            
-            await transaction.commit();
-            
-            console.log(`✅ Colaborador ${colaborador.nombre} (ID: ${idNum}) eliminado exitosamente junto con ${asignaciones.recordset.length} asignaciones`);
-            
-            res.json({ 
-                success: true, 
-                message: `Colaborador "${colaborador.nombre}" eliminado exitosamente. Se liberaron ${asignaciones.recordset.length} productos.`,
-                data: {
-                    colaborador: colaborador,
-                    asignacionesEliminadas: asignaciones.recordset.length
-                }
-            });
-            
-        } catch (error) {
-            await transaction.rollback();
-            console.error('❌ Error en transacción:', error);
-            throw error;
         }
+        
+        // Finalmente, eliminar el colaborador
+        await pool.request()
+            .input('id', sql.Int, idNum)
+            .query(`
+                DELETE FROM INV.colaboradores 
+                WHERE id = @id
+            `);
+        
+        console.log(`✅ Colaborador ${colaborador.nombre} (ID: ${idNum}) eliminado exitosamente`);
+        
+        res.json({ 
+            success: true, 
+            message: `Colaborador "${colaborador.nombre}" eliminado exitosamente. Se liberaron ${asignaciones.recordset.length} productos.`,
+            data: {
+                colaborador: colaborador,
+                asignacionesEliminadas: asignaciones.recordset.length
+            }
+        });
         
     } catch (error) {
         console.error('❌ Error en DELETE /colaboradores/:id:', error);

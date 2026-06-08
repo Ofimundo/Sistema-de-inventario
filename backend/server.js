@@ -1,4 +1,4 @@
-// backend/server.js - VERSIÓN COMPLETA CORREGIDA (RUTA PRODUCTOS EN PLURAL)
+// backend/server.js - VERSIÓN COMPLETA CORREGIDA CON LOGS DE DEPURACIÓN
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -59,10 +59,26 @@ app.use((req, res, next) => {
                 const logBody = { ...req.body };
                 if (logBody.password) logBody.password = '***';
                 if (logBody.contraseña) logBody.contraseña = '***';
+                if (logBody.currentPassword) logBody.currentPassword = '***';
+                if (logBody.newPassword) logBody.newPassword = '***';
                 console.log('📦 Body:', logBody);
             }
         }
     }
+    next();
+});
+
+// ============================================
+// MIDDLEWARE DE DEPURACIÓN ESPECÍFICO PARA CHANGE-PASSWORD
+// ============================================
+app.use('/api/auth/change-password', (req, res, next) => {
+    console.log('🔥🔥🔥 [DEPURACIÓN] Petición a /api/auth/change-password 🔥🔥🔥');
+    console.log('📝 Method:', req.method);
+    console.log('📝 Authorization Header:', req.headers.authorization ? 'PRESENTE' : 'AUSENTE');
+    if (req.headers.authorization) {
+        console.log('📝 Token (primeros 30 chars):', req.headers.authorization.substring(0, 30) + '...');
+    }
+    console.log('📝 Body:', req.body);
     next();
 });
 
@@ -86,7 +102,7 @@ app.get('/api/health', (req, res) => {
     res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString(), database: 'connected' });
 });
 
-// 🔥 RUTA BASE PARA /api - CORREGIDO
+// RUTA BASE PARA /api
 app.get('/api', (req, res) => {
     res.json({ 
         success: true, 
@@ -97,7 +113,8 @@ app.get('/api', (req, res) => {
             colaboradores: '/api/colaboradores',
             asignaciones: '/api/asignaciones',
             auth: '/api/auth',
-            export: '/api/export'
+            export: '/api/export',
+            'change-password': '/api/auth/change-password'
         }
     });
 });
@@ -106,7 +123,7 @@ app.get('/api', (req, res) => {
 // IMPORTAR RUTAS
 // ============================================
 const authRoutes = require('./routes/authRoutes');
-const productosRoutes = require('./routes/productoRoutes');  // ← Renombrado a productosRoutes (plural)
+const productosRoutes = require('./routes/productoRoutes');
 const bodegaRoutes = require('./routes/bodegaRoutes');
 const historialRoutes = require('./routes/historialRoutes');
 const asignacionRoutes = require('./routes/asignacionRoutes');
@@ -120,7 +137,9 @@ const colaboradorController = require('./controllers/colaboradorController');
 // ============================================
 // RUTAS DE AUTENTICACIÓN (públicas - SIN authenticateToken)
 // ============================================
+console.log('🔧 Montando rutas de autenticación en /api/auth');
 app.use('/api/auth', authRoutes);
+console.log('✅ Rutas de autenticación montadas correctamente');
 
 // ============================================
 // MIDDLEWARE DE AUTENTICACIÓN (para rutas protegidas)
@@ -133,7 +152,7 @@ const { authenticateToken } = require('./middleware/auth');
 console.log('📌 Configurando rutas protegidas...');
 
 app.use('/api/asignaciones', authenticateToken, asignacionRoutes);
-app.use('/api/productos', authenticateToken, productosRoutes);      // ← AHORA EN PLURAL /api/productos
+app.use('/api/productos', authenticateToken, productosRoutes);
 app.use('/api/bodegas', authenticateToken, bodegaRoutes);
 app.use('/api/historial', authenticateToken, historialRoutes);
 app.use('/api/export', authenticateToken, exportRoutes);
@@ -145,10 +164,30 @@ app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
 // Ruta adicional para empresas
 app.get('/api/colaboradores/empresas', authenticateToken, colaboradorController.getEmpresas);
 
+console.log('✅ Todas las rutas protegidas configuradas');
+
+// ============================================
+// RUTA DE PRUEBA PARA VERIFICAR QUE EL ENDPOINT EXISTE
+// ============================================
+app.post('/api/auth/change-password-test', (req, res) => {
+    console.log('🔥🔥🔥 [TEST] Endpoint de prueba change-password-test funcionando 🔥🔥🔥');
+    console.log('📝 Body:', req.body);
+    console.log('📝 Authorization Header:', req.headers.authorization);
+    res.json({ 
+        success: true, 
+        message: 'Endpoint de prueba funciona correctamente',
+        recibido: {
+            body: req.body,
+            authHeader: req.headers.authorization ? 'PRESENTE' : 'AUSENTE'
+        }
+    });
+});
+
 // ============================================
 // MANEJO DE ERRORES 404
 // ============================================
 app.use('*', (req, res) => {
+    console.log(`❌ Ruta no encontrada: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ 
         success: false, 
         message: 'Ruta no encontrada', 
@@ -182,6 +221,8 @@ getConnection().then(() => {
         console.log(`   - /api/bodegas (bodegas)`);
         console.log(`   - /api/colaboradores (colaboradores)`);
         console.log(`   - /api/asignaciones (asignaciones)`);
+        console.log(`   - /api/auth/change-password (cambiar contraseña)`);
+        console.log(`   - /api/auth/change-password-test (test)`);
         console.log('=================================\n');
     });
 }).catch(err => {

@@ -33,22 +33,27 @@ const api = axios.create({
 });
 
 // ============================================
-// INTERCEPTOR DE PETICIONES
+// INTERCEPTOR DE PETICIONES - CORREGIDO
 // ============================================
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
         
+        console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`);
+        
         if (token) {
             const tokenFormatted = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
             config.headers.Authorization = tokenFormatted;
+            console.log('   🔑 Token agregado a la petición');
+        } else {
+            console.warn('   ⚠️ No hay token disponible');
         }
-        
-        console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
         
         if (config.data && config.method !== 'get') {
             const logData = { ...config.data };
             if (logData.password) logData.password = '***';
+            if (logData.currentPassword) logData.currentPassword = '***';
+            if (logData.newPassword) logData.newPassword = '***';
             if (logData.contraseña) logData.contraseña = '***';
             console.log('   📦 Body:', logData);
         }
@@ -62,7 +67,7 @@ api.interceptors.request.use(
 );
 
 // ============================================
-// INTERCEPTOR DE RESPUESTAS - ACTUALIZADO (NO REDIRIGE EN ERRORES DE PERFIL)
+// INTERCEPTOR DE RESPUESTAS - CORREGIDO
 // ============================================
 api.interceptors.response.use(
     (response) => {
@@ -90,12 +95,13 @@ api.interceptors.response.use(
         console.error(`   🔴 Status: ${status}`);
         console.error('   📄 Data:', data);
         
-        // Detectar si es un endpoint de perfil
+        // Detectar si es un endpoint de perfil o cambio de contraseña
         const isProfileEndpoint = originalRequest.url?.includes('/profile') || 
                                   originalRequest.url?.includes('/perfil');
+        const isChangePasswordEndpoint = originalRequest.url?.includes('/change-password');
         
-        // Manejo de token expirado (401) - EXCEPTO PARA ENDPOINTS DE PERFIL
-        if (status === 401 && !originalRequest._retry && !isProfileEndpoint && !originalRequest.url?.includes('/login')) {
+        // Manejo de token expirado (401) - EXCEPTO PARA ENDPOINTS DE PERFIL Y CAMBIO DE CONTRASEÑA
+        if (status === 401 && !originalRequest._retry && !isProfileEndpoint && !isChangePasswordEndpoint && !originalRequest.url?.includes('/login')) {
             originalRequest._retry = true;
             
             console.log('   🔐 Token expirado, limpiando sesión...');
@@ -114,12 +120,12 @@ api.interceptors.response.use(
             });
         }
         
-        // Para errores en endpoints de perfil, NO redirigir
-        if (status === 401 && isProfileEndpoint) {
-            console.warn('   ⚠️ Error 401 en endpoint de perfil, pero NO se redirige al login');
+        // Para errores en endpoints de perfil o cambio de contraseña, NO redirigir
+        if (status === 401 && (isProfileEndpoint || isChangePasswordEndpoint)) {
+            console.warn(`   ⚠️ Error 401 en endpoint ${isChangePasswordEndpoint ? 'cambio de contraseña' : 'perfil'}, pero NO se redirige al login`);
             return Promise.reject({
                 success: false,
-                message: data.message || 'Error de autenticación al actualizar perfil',
+                message: data.message || (isChangePasswordEndpoint ? 'Contraseña actual incorrecta' : 'Error de autenticación'),
                 status,
                 isProfileError: true
             });
@@ -137,7 +143,7 @@ api.interceptors.response.use(
 );
 
 // ============================================
-// SERVICIO DE AUTENTICACIÓN - ACTUALIZADO CON RUT
+// SERVICIO DE AUTENTICACIÓN - COMPLETO CORREGIDO
 // ============================================
 export const authService = {
     login: async (usuario, password) => {
@@ -277,7 +283,6 @@ export const authService = {
         try {
             console.log('📝 Actualizando perfil de usuario...', { ...userData, rut: userData.rut });
             
-            // Usar el endpoint correcto /auth/profile (no /auth/perfil)
             const response = await api.put('/auth/profile', {
                 nombre: userData.nombre,
                 email: userData.email,
@@ -321,7 +326,6 @@ export const authService = {
         } catch (error) {
             console.error('❌ Error actualizando perfil:', error);
             
-            // Si hay error, guardar localmente como fallback (NO cerrar sesión)
             const currentUser = authService.getCurrentUser();
             if (currentUser) {
                 const updatedUser = { ...currentUser, ...userData };
@@ -341,34 +345,84 @@ export const authService = {
         }
     },
     
+    /**
+     * Cambiar contraseña - VERSIÓN CORREGIDA CON FETCH
+     */
     changePassword: async (currentPassword, newPassword) => {
         try {
             console.log('🔐 Cambiando contraseña...');
+            console.log('   📡 Enviando a:', `${API_URL}/auth/change-password`);
             
-            const response = await api.post('/auth/change-password', {
-                currentPassword,
-                newPassword
+            const token = localStorage.getItem('token');
+            console.log('   🔑 Token existe:', token ? 'Sí' : 'No');
+            
+            if (!token) {
+                return {
+                    success: false,
+                    message: 'No hay sesión activa. Por favor, inicia sesión nuevamente.'
+                };
+            }
+            
+            if (token) {
+                console.log('   🔑 Token (primeros 20 chars):', token.substring(0, 20) + '...');
+            }
+            
+            // Usar fetch directamente para asegurar el envío del token
+            const response = await fetch(`${API_URL}/auth/change-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    currentPassword: currentPassword,
+                    newPassword: newPassword
+                })
             });
             
-            console.log('📥 Respuesta del servidor:', response.data);
+            const data = await response.json();
+            console.log('📥 Respuesta del servidor:', data);
+            console.log('📥 Status:', response.status);
             
-            if (response.data && response.data.success) {
+            if (response.ok && data.success === true) {
+                console.log('✅ Contraseña cambiada exitosamente');
+                
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    console.log('   🔑 Token actualizado');
+                }
+                
                 return {
                     success: true,
-                    message: response.data.message || 'Contraseña cambiada correctamente'
+                    message: data.message || 'Contraseña cambiada correctamente'
+                };
+            }
+            
+            // Manejar errores específicos
+            if (response.status === 401) {
+                return {
+                    success: false,
+                    message: data.message || 'Contraseña actual incorrecta o sesión expirada'
+                };
+            }
+            
+            if (response.status === 400) {
+                return {
+                    success: false,
+                    message: data.message || 'La nueva contraseña debe tener al menos 6 caracteres'
                 };
             }
             
             return {
                 success: false,
-                message: response.data?.message || 'Error al cambiar contraseña'
+                message: data.message || 'Error al cambiar contraseña'
             };
             
         } catch (error) {
             console.error('❌ Error cambiando contraseña:', error);
             return {
                 success: false,
-                message: error.response?.data?.message || error.message || 'Error de conexión'
+                message: error.message || 'Error de conexión con el servidor'
             };
         }
     },
