@@ -1,9 +1,12 @@
-// backend/controllers/authController.js
+// backend/controllers/authController.js - VERSIÓN COMPLETA CORREGIDA
 const usuarioModel = require("../models/usuarioModel");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 
-const JWT_SECRET = process.env.JWT_SECRET || "ofimundo123";
+// Usar variable de entorno o valor por defecto
+const JWT_SECRET = process.env.JWT_SECRET || 'ofimundo123';
+
+console.log('🔐 [AuthController] JWT_SECRET inicializado:', JWT_SECRET === 'ofimundo123' ? 'Usando valor por defecto' : 'Usando variable de entorno');
 
 const AuthController = {
   /**
@@ -59,8 +62,11 @@ const AuthController = {
           rol: user.rol || "usuario",
         },
         JWT_SECRET,
-        { expiresIn: "7d" },  // Token válido por 7 días
+        { expiresIn: "7d" },
       );
+
+      console.log(`🔑 Token generado para usuario ID: ${user.id}`);
+      console.log(`🔑 Token (primeros 30 chars): ${token.substring(0, 30)}...`);
 
       res.json({
         success: true,
@@ -74,7 +80,7 @@ const AuthController = {
           cargo: user.cargo || "",
           departamento: user.departamento || "",
           rol: user.rol || "usuario",
-          rut: user.rut || "",  // ← Incluir RUT
+          rut: user.rut || "",
         },
       });
     } catch (error) {
@@ -98,7 +104,7 @@ const AuthController = {
         email,
         cargo,
         departamento,
-        rut,  // ← Agregar RUT
+        rut,
         rol = "usuario",
       } = req.body;
 
@@ -156,7 +162,7 @@ const AuthController = {
         email,
         cargo: cargo || null,
         departamento: departamento || null,
-        rut: rut || null,  // ← Guardar RUT
+        rut: rut || null,
         rol,
       });
 
@@ -184,7 +190,7 @@ const AuthController = {
           cargo: newUser.cargo || "",
           departamento: newUser.departamento || "",
           rol: newUser.rol || "usuario",
-          rut: newUser.rut || "",  // ← Incluir RUT en respuesta
+          rut: newUser.rut || "",
         },
       });
     } catch (error) {
@@ -246,7 +252,7 @@ const AuthController = {
           cargo: user.cargo || "",
           departamento: user.departamento || "",
           rol: user.rol || "usuario",
-          rut: user.rut || "",  // ← Incluir RUT
+          rut: user.rut || "",
         },
       });
     } catch (error) {
@@ -288,14 +294,20 @@ const AuthController = {
   },
 
   /**
-   * Cambiar contraseña
+   * Cambiar contraseña - VERSIÓN CORREGIDA
    */
   changePassword: async (req, res) => {
     try {
+      console.log('🔄 [changePassword] Iniciando cambio de contraseña...');
+      console.log('📝 req.user:', req.user);
+      
       const { currentPassword, newPassword } = req.body;
       const userId = req.user?.id;
 
+      console.log(`📝 Usuario ID desde token: ${userId}`);
+
       if (!userId) {
+        console.log('❌ No hay userId en req.user');
         return res.status(401).json({
           success: false,
           message: "Usuario no autenticado",
@@ -352,7 +364,7 @@ const AuthController = {
       console.error("❌ Error cambiando contraseña:", error);
       res.status(500).json({
         success: false,
-        message: "Error al cambiar contraseña",
+        message: "Error al cambiar contraseña: " + error.message,
       });
     }
   },
@@ -363,7 +375,7 @@ const AuthController = {
   updateProfile: async (req, res) => {
     try {
       const userId = req.user?.id;
-      const { nombre, email, cargo, departamento, rut } = req.body;  // ← Incluir rut
+      const { nombre, email, cargo, departamento, rut } = req.body;
 
       console.log('📝 Actualizando perfil:', { userId, nombre, email, cargo, departamento, rut });
 
@@ -405,7 +417,7 @@ const AuthController = {
         email,
         cargo: cargo || null,
         departamento: departamento || null,
-        rut: rut || user.rut || null,  // ← PERMITIR ACTUALIZAR RUT
+        rut: rut || user.rut || null,
       });
 
       console.log("✅ Perfil actualizado para usuario:", updatedUser.usuario);
@@ -421,7 +433,7 @@ const AuthController = {
           cargo: updatedUser.cargo || "",
           departamento: updatedUser.departamento || "",
           rol: updatedUser.rol || "usuario",
-          rut: updatedUser.rut || "",  // ← Incluir RUT actualizado
+          rut: updatedUser.rut || "",
         },
       });
     } catch (error) {

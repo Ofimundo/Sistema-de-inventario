@@ -1,7 +1,10 @@
-// backend/middleware/auth.js - VERSIÓN CORREGIDA CON MÁS LOGS
+// backend/middleware/auth.js - VERSIÓN CORREGIDA (SIN DUPLICACIÓN)
 const jwt = require('jsonwebtoken');
 
+// Usar variable de entorno o valor por defecto
 const JWT_SECRET = process.env.JWT_SECRET || 'ofimundo123';
+
+console.log('🔐 [Middleware] JWT_SECRET inicializado:', JWT_SECRET === 'ofimundo123' ? 'Usando valor por defecto' : 'Usando variable de entorno');
 
 // Lista de rutas que no requieren autenticación
 const publicRoutes = [
@@ -52,7 +55,7 @@ const authenticateToken = (req, res, next) => {
     console.log(`   🔑 Longitud del token: ${token.length} caracteres`);
     
     try {
-        // Verificar el token usando el mismo JWT_SECRET
+        // Verificar el token usando el JWT_SECRET
         const decoded = jwt.verify(token, JWT_SECRET);
         console.log('   ✅ Token verificado exitosamente');
         console.log('   📦 Payload decodificado:', decoded);
@@ -67,6 +70,7 @@ const authenticateToken = (req, res, next) => {
         
     } catch (error) {
         console.log(`   ❌ Error verificando token: ${error.message}`);
+        console.log(`   🔑 JWT_SECRET usado para verificar: ${JWT_SECRET}`);
         
         if (error.name === 'TokenExpiredError') {
             console.log('   ⏰ Token expirado');
