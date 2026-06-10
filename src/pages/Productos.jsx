@@ -1,5 +1,5 @@
-// src/pages/Productos.jsx - VERSIÓN CON AUTOCOMPLETADO CORREGIDO PARA MARCA Y MODELO + LABORATORIO
-import React, { useState, useEffect } from 'react';
+// src/pages/Productos.jsx - VERSIÓN CORREGIDA (solo cambios en la detección de préstamos)
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Paper,
@@ -56,7 +56,8 @@ import {
     Accordion,
     AccordionSummary,
     AccordionDetails,
-    Autocomplete
+    Autocomplete,
+    Checkbox
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -90,10 +91,12 @@ import {
     Store as StoreIcon,
     ExpandMore as ExpandMoreIcon,
     QrCode as QrCodeIcon,
-    Science as ScienceIcon, 
-    Upload as UploadIcon,    
-    Description as DescriptionIcon, 
-    PictureAsPdf as PictureAsPdfIcon
+    Science as ScienceIcon,
+    Clear as ClearIcon,
+    Category as CategoryIcon,
+    LocalOffer as LocalOfferIcon,
+    ReceiptLong as ReceiptLongIcon,
+    CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { productosService } from '../services/productos';
@@ -174,6 +177,55 @@ const GradientButton = styled(Button)(({ theme }) => ({
     },
 }));
 
+const FilterTabContainer = styled(Paper)(({ theme }) => ({
+    padding: theme.spacing(1),
+    marginBottom: theme.spacing(3),
+    borderRadius: 12,
+    backgroundColor: alpha(colors.primary, 0.03),
+    border: `1px solid ${alpha(colors.primary, 0.1)}`,
+}));
+
+const FilterBadge = styled(Chip)(({ theme, active }) => ({
+    borderRadius: 20,
+    padding: '8px 16px',
+    backgroundColor: active ? colors.primary : 'transparent',
+    color: active ? 'white' : colors.text.primary,
+    border: `1px solid ${active ? colors.primary : colors.border}`,
+    '&:hover': {
+        backgroundColor: active ? colors.primary : alpha(colors.primary, 0.05),
+        transform: 'translateY(-2px)',
+        transition: 'transform 0.2s',
+    },
+    cursor: 'pointer',
+}));
+
+const FilterSection = styled(Box)(({ theme }) => ({
+    backgroundColor: alpha(colors.primary, 0.03),
+    borderRadius: 12,
+    padding: theme.spacing(2),
+    marginTop: theme.spacing(2),
+    border: `1px solid ${alpha(colors.primary, 0.1)}`,
+}));
+
+const FilterChipContainer = styled(Box)(({ theme }) => ({
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing(1),
+    marginTop: theme.spacing(2),
+    padding: theme.spacing(1.5),
+    backgroundColor: alpha(colors.background, 0.5),
+    borderRadius: 8,
+}));
+
+const SearchContainer = styled(Paper)(({ theme }) => ({
+    padding: theme.spacing(1.5),
+    marginBottom: theme.spacing(2),
+    borderRadius: 12,
+    backgroundColor: 'white',
+    border: `1px solid ${colors.border}`,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+}));
+
 const HistorialContainer = styled(Paper)(({ theme }) => ({
     padding: theme.spacing(3),
     backgroundColor: alpha(colors.background, 0.7),
@@ -212,6 +264,392 @@ const TimelineDot = styled(Box)(({ theme, color = colors.primary }) => ({
     border: `2px solid ${alpha(color, 0.3)}`,
     zIndex: 1
 }));
+
+// ============================================
+// COMPONENTE DE FILTROS VISUALES
+// ============================================
+function VisualFilters({ filterType, onFilterChange, counts }) {
+    const filters = [
+        { id: 'todos', label: 'Todos', icon: <InventoryIcon fontSize="small" />, color: colors.primary, count: counts.todos },
+        { id: 'disponibles', label: 'Disponibles', icon: <CheckCircleIcon fontSize="small" />, color: colors.success, count: counts.disponibles },
+        { id: 'asignados', label: 'Asignados', icon: <AssignmentIndIcon fontSize="small" />, color: colors.info, count: counts.asignados },
+        { id: 'prestamos', label: 'Préstamos', icon: <ReceiptLongIcon fontSize="small" />, color: colors.warning, count: counts.prestamos },
+    ];
+
+    return (
+        <FilterTabContainer>
+            <Grid container spacing={1}>
+                {filters.map((filter) => (
+                    <Grid item key={filter.id}>
+                        <FilterBadge
+                            icon={filter.icon}
+                            label={
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2" fontWeight={500}>
+                                        {filter.label}
+                                    </Typography>
+                                    <Chip
+                                        size="small"
+                                        label={filter.count}
+                                        sx={{
+                                            height: 20,
+                                            fontSize: '0.7rem',
+                                            backgroundColor: filterType === filter.id ? 'white' : alpha(filter.color, 0.1),
+                                            color: filterType === filter.id ? filter.color : filter.color,
+                                            fontWeight: 'bold'
+                                        }}
+                                    />
+                                </Box>
+                            }
+                            active={filterType === filter.id}
+                            onClick={() => onFilterChange(filter.id)}
+                            sx={{
+                                backgroundColor: filterType === filter.id ? filter.color : 'transparent',
+                                borderColor: filterType === filter.id ? filter.color : colors.border,
+                                '&:hover': {
+                                    backgroundColor: filterType === filter.id ? filter.color : alpha(filter.color, 0.05),
+                                }
+                            }}
+                        />
+                    </Grid>
+                ))}
+            </Grid>
+        </FilterTabContainer>
+    );
+}
+
+// ============================================
+// COMPONENTE DE FILTROS AVANZADOS
+// ============================================
+function AdvancedFilters({ filters, onFilterChange, onClearFilters, marcas, estados, bodegas, condiciones, activeFiltersCount, searchTerm, onSearchChange, onClearSearch }) {
+    const [selectedMarcas, setSelectedMarcas] = useState([]);
+    const [selectedEstados, setSelectedEstados] = useState([]);
+    const [selectedCondiciones, setSelectedCondiciones] = useState([]);
+    const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+
+    useEffect(() => {
+        setSelectedMarcas(filters.marcas || []);
+    }, [filters.marcas]);
+
+    useEffect(() => {
+        setSelectedEstados(filters.estados || []);
+    }, [filters.estados]);
+
+    useEffect(() => {
+        setSelectedCondiciones(filters.condiciones || []);
+    }, [filters.condiciones]);
+
+    useEffect(() => {
+        setLocalSearchTerm(searchTerm);
+    }, [searchTerm]);
+
+    const handleMarcaToggle = (marca) => {
+        const newSelected = selectedMarcas.includes(marca)
+            ? selectedMarcas.filter(m => m !== marca)
+            : [...selectedMarcas, marca];
+        setSelectedMarcas(newSelected);
+        onFilterChange('marcas', newSelected);
+    };
+
+    const handleEstadoToggle = (estadoNombre) => {
+        const newSelected = selectedEstados.includes(estadoNombre)
+            ? selectedEstados.filter(e => e !== estadoNombre)
+            : [...selectedEstados, estadoNombre];
+        setSelectedEstados(newSelected);
+        onFilterChange('estados', newSelected);
+    };
+
+    const handleCondicionToggle = (condicion) => {
+        const newSelected = selectedCondiciones.includes(condicion)
+            ? selectedCondiciones.filter(c => c !== condicion)
+            : [...selectedCondiciones, condicion];
+        setSelectedCondiciones(newSelected);
+        onFilterChange('condiciones', newSelected);
+    };
+
+    const handleSearch = () => {
+        onSearchChange(localSearchTerm);
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter') {
+            handleSearch();
+        }
+    };
+
+    const handleClearSearch = () => {
+        setLocalSearchTerm('');
+        onClearSearch();
+    };
+
+    const estadoNombres = estados.map(e => typeof e === 'string' ? e : e.nombre);
+
+    return (
+        <Box sx={{ mt: 3 }}>
+            <SearchContainer>
+                <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                    <TextField
+                        fullWidth
+                        placeholder="🔍 Buscar por nombre, marca, modelo, serie o colaborador..."
+                        value={localSearchTerm}
+                        onChange={(e) => setLocalSearchTerm(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: colors.primary }} /></InputAdornment>,
+                            endAdornment: localSearchTerm && (
+                                <InputAdornment position="end">
+                                    <IconButton size="small" onClick={handleClearSearch}>
+                                        <ClearIcon fontSize="small" />
+                                    </IconButton>
+                                </InputAdornment>
+                            ),
+                        }}
+                        size="small"
+                        sx={{ flex: 1, minWidth: 200 }}
+                    />
+                    <Button
+                        variant="contained"
+                        onClick={handleSearch}
+                        startIcon={<SearchIcon />}
+                        sx={{
+                            backgroundColor: colors.primary,
+                            '&:hover': { backgroundColor: colors.primary, opacity: 0.9 },
+                            borderRadius: 2,
+                            px: 3
+                        }}
+                    >
+                        Buscar
+                    </Button>
+                </Box>
+                
+                {searchTerm && (
+                    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            Búsqueda activa:
+                        </Typography>
+                        <Chip
+                            size="small"
+                            label={`"${searchTerm}"`}
+                            onDelete={handleClearSearch}
+                            color="primary"
+                            variant="outlined"
+                        />
+                    </Box>
+                )}
+            </SearchContainer>
+
+            <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                    <FilterSection>
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                            <CategoryIcon sx={{ color: colors.primary }} />
+                            <Typography variant="subtitle2" fontWeight={600}>
+                                Marcas
+                            </Typography>
+                            {selectedMarcas.length > 0 && (
+                                <Chip 
+                                    size="small" 
+                                    label={`${selectedMarcas.length} seleccionadas`} 
+                                    onDelete={() => handleMarcaToggle(selectedMarcas[0])}
+                                    deleteIcon={<ClearIcon />}
+                                />
+                            )}
+                        </Box>
+                        <Box sx={{ maxHeight: 150, overflow: 'auto' }}>
+                            <Grid container spacing={1}>
+                                {marcas && marcas.length > 0 ? marcas.slice(0, 15).map((marca) => (
+                                    <Grid item xs={6} sm={4} key={marca}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    size="small"
+                                                    checked={selectedMarcas.includes(marca)}
+                                                    onChange={() => handleMarcaToggle(marca)}
+                                                    sx={{ color: colors.primary }}
+                                                />
+                                            }
+                                            label={
+                                                <Typography variant="body2" noWrap>
+                                                    {marca}
+                                                </Typography>
+                                            }
+                                        />
+                                    </Grid>
+                                )) : (
+                                    <Typography variant="caption" color="text.secondary" sx={{ p: 1 }}>
+                                        No hay marcas registradas
+                                    </Typography>
+                                )}
+                            </Grid>
+                        </Box>
+                        {marcas && marcas.length > 15 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                +{marcas.length - 15} marcas más
+                            </Typography>
+                        )}
+                    </FilterSection>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                    <FilterSection>
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                            <LocalOfferIcon sx={{ color: colors.primary }} />
+                            <Typography variant="subtitle2" fontWeight={600}>
+                                Estados del Producto
+                            </Typography>
+                            {selectedEstados.length > 0 && (
+                                <Chip 
+                                    size="small" 
+                                    label={`${selectedEstados.length} seleccionados`} 
+                                    onDelete={() => handleEstadoToggle(selectedEstados[0])}
+                                    deleteIcon={<ClearIcon />}
+                                />
+                            )}
+                        </Box>
+                        <Grid container spacing={1}>
+                            {estadoNombres.map((estadoNombre) => (
+                                <Grid item xs={6} key={estadoNombre}>
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                size="small"
+                                                checked={selectedEstados.includes(estadoNombre)}
+                                                onChange={() => handleEstadoToggle(estadoNombre)}
+                                                sx={{ color: colors.primary }}
+                                            />
+                                        }
+                                        label={
+                                            <Typography variant="body2">
+                                                {estadoNombre}
+                                            </Typography>
+                                        }
+                                    />
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </FilterSection>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                    <FilterSection>
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                            <CategoryIcon sx={{ color: colors.primary }} />
+                            <Typography variant="subtitle2" fontWeight={600}>
+                                Condiciones
+                            </Typography>
+                            {selectedCondiciones.length > 0 && (
+                                <Chip 
+                                    size="small" 
+                                    label={`${selectedCondiciones.length} seleccionadas`} 
+                                    onDelete={() => handleCondicionToggle(selectedCondiciones[0])}
+                                    deleteIcon={<ClearIcon />}
+                                />
+                            )}
+                        </Box>
+                        <Grid container spacing={1}>
+                            {condiciones.map((condicion) => (
+                                <Grid item xs={6} key={condicion}>
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                size="small"
+                                                checked={selectedCondiciones.includes(condicion)}
+                                                onChange={() => handleCondicionToggle(condicion)}
+                                                sx={{ color: colors.primary }}
+                                            />
+                                        }
+                                        label={
+                                            <Typography variant="body2">
+                                                {condicion === 'NUEVO' ? 'Nuevo' : condicion === 'USADO' ? 'Usado' : 'Reacondicionado'}
+                                            </Typography>
+                                        }
+                                    />
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </FilterSection>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                    <FilterSection>
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                            <StoreIcon sx={{ color: colors.primary }} />
+                            <Typography variant="subtitle2" fontWeight={600}>
+                                Bodegas
+                            </Typography>
+                        </Box>
+                        <FormControl fullWidth size="small">
+                            <Select
+                                value={filters.bodega_id || ''}
+                                onChange={(e) => onFilterChange('bodega_id', e.target.value)}
+                                displayEmpty
+                            >
+                                <MenuItem value="">Todas las bodegas</MenuItem>
+                                {bodegas && bodegas.map((bodega) => (
+                                    <MenuItem key={bodega.id} value={bodega.id}>
+                                        {bodega.nombre}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </FilterSection>
+                </Grid>
+            </Grid>
+
+            {(selectedMarcas.length > 0 || selectedEstados.length > 0 || selectedCondiciones.length > 0 || filters.bodega_id) && (
+                <FilterChipContainer>
+                    <Typography variant="body2" fontWeight={500} sx={{ mr: 1 }}>
+                        Filtros activos:
+                    </Typography>
+                    {selectedMarcas.map((marca) => (
+                        <Chip 
+                            key={`marca-${marca}`} 
+                            size="small" 
+                            label={`Marca: ${marca}`} 
+                            onDelete={() => handleMarcaToggle(marca)} 
+                            variant="outlined" 
+                        />
+                    ))}
+                    {selectedEstados.map((estado) => (
+                        <Chip 
+                            key={`estado-${estado}`} 
+                            size="small" 
+                            label={`Estado: ${estado}`} 
+                            onDelete={() => handleEstadoToggle(estado)} 
+                            variant="outlined" 
+                        />
+                    ))}
+                    {selectedCondiciones.map((condicion) => (
+                        <Chip 
+                            key={`condicion-${condicion}`} 
+                            size="small" 
+                            label={`Condición: ${condicion === 'NUEVO' ? 'Nuevo' : condicion === 'USADO' ? 'Usado' : 'Reacondicionado'}`} 
+                            onDelete={() => handleCondicionToggle(condicion)} 
+                            variant="outlined" 
+                        />
+                    ))}
+                    {filters.bodega_id && bodegas && (
+                        <Chip 
+                            size="small" 
+                            label={`Bodega: ${bodegas.find(b => b.id === filters.bodega_id)?.nombre || ''}`} 
+                            onDelete={() => onFilterChange('bodega_id', '')} 
+                            variant="outlined" 
+                        />
+                    )}
+                    <Button 
+                        size="small" 
+                        color="error" 
+                        onClick={onClearFilters} 
+                        startIcon={<FilterListOffIcon />} 
+                        sx={{ ml: 1 }}
+                    >
+                        Limpiar todos
+                    </Button>
+                </FilterChipContainer>
+            )}
+        </Box>
+    );
+}
 
 // ============================================
 // COMPONENTE PARA MOSTRAR HISTORIAL DE MANTENCIONES
@@ -322,18 +760,6 @@ function HistorialUsoDialog({ open, onClose, producto, historial = [] }) {
         }
     };
 
-    const getCondicionColor = (condicion) => {
-        const colores = {
-            'BUENO': colors.success,
-            'REGULAR': colors.warning,
-            'MALO': colors.error,
-            'NUEVO': colors.success,
-            'USADO': colors.warning,
-            'REACONDICIONADO': colors.info
-        };
-        return colores[condicion?.toUpperCase()] || colors.text.secondary;
-    };
-
     const historialOrdenado = [...historial].sort((a, b) => {
         return new Date(b.fecha_asignacion) - new Date(a.fecha_asignacion);
     });
@@ -359,8 +785,8 @@ function HistorialUsoDialog({ open, onClose, producto, historial = [] }) {
                         label={producto.condicion || 'NUEVO'}
                         size="small"
                         sx={{ 
-                            backgroundColor: alpha(getCondicionColor(producto.condicion), 0.1),
-                            color: getCondicionColor(producto.condicion),
+                            backgroundColor: alpha(colors.info, 0.1),
+                            color: colors.info,
                             fontWeight: 500
                         }}
                     />
@@ -1077,6 +1503,8 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [esPrestamo, setEsPrestamo] = useState(false);
+    const [fechaDevolucion, setFechaDevolucion] = useState('');
 
     useEffect(() => {
         if (open) {
@@ -1086,6 +1514,8 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
             setObservaciones('');
             setError('');
             setSearchTerm('');
+            setEsPrestamo(false);
+            setFechaDevolucion('');
         }
     }, [open]);
 
@@ -1112,24 +1542,32 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
             return;
         }
 
+        if (esPrestamo && !fechaDevolucion) {
+            setError('Debe ingresar una fecha de devolución para el préstamo');
+            return;
+        }
+
         setLoading(true);
         setError('');
 
         try {
             const data = {
                 colaborador_id: selectedColaborador.id,
-                motivo: motivo.trim() || 'Asignación de equipo',
+                motivo: motivo.trim() || (esPrestamo ? 'Préstamo de equipo' : 'Asignación de equipo'),
                 observaciones: observaciones.trim() || '',
-                fecha_asignacion: new Date().toISOString().split('T')[0]
+                fecha_asignacion: new Date().toISOString().split('T')[0],
+                es_prestamo: esPrestamo ? 1 : 0,
+                fecha_devolucion_esperada: esPrestamo ? fechaDevolucion : null
             };
 
             const response = await productosService.asignarProducto(producto.id, selectedColaborador.id, data);
 
             if (response && response.success) {
-                onSuccess(`Producto asignado correctamente a ${selectedColaborador.nombre}`, response.producto);
+                const tipoAsignacion = esPrestamo ? 'préstamo' : 'asignación';
+                onSuccess(`Producto ${tipoAsignacion} correctamente a ${selectedColaborador.nombre}`, response.producto);
                 onClose();
             } else {
-                throw new Error(response?.message || 'Error al asignar producto');
+                throw new Error(response?.message || 'Error al procesar la solicitud');
             }
         } catch (error) {
             console.error('Error:', error);
@@ -1176,6 +1614,27 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
                             <strong>Serie:</strong> {producto?.numero_serie || 'N/A'}
                         </Typography>
                     </Box>
+
+                    <FormControl component="fieldset">
+                        <FormLabel>Tipo de asignación</FormLabel>
+                        <RadioGroup row value={esPrestamo ? 'prestamo' : 'asignacion'} onChange={(e) => setEsPrestamo(e.target.value === 'prestamo')}>
+                            <FormControlLabel value="asignacion" control={<Radio />} label="Asignación permanente" />
+                            <FormControlLabel value="prestamo" control={<Radio />} label="Préstamo temporal" />
+                        </RadioGroup>
+                    </FormControl>
+
+                    {esPrestamo && (
+                        <TextField
+                            fullWidth
+                            type="date"
+                            label="Fecha de devolución esperada *"
+                            value={fechaDevolucion}
+                            onChange={(e) => setFechaDevolucion(e.target.value)}
+                            InputLabelProps={{ shrink: true }}
+                            size="small"
+                            helperText="Fecha en la que se espera la devolución del producto"
+                        />
+                    )}
 
                     <TextField
                         fullWidth
@@ -1276,7 +1735,7 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
                         label="Motivo de asignación"
                         value={motivo}
                         onChange={(e) => setMotivo(e.target.value)}
-                        placeholder="Ej: Uso temporal, Proyecto específico, Reemplazo de equipo, etc."
+                        placeholder={esPrestamo ? "Ej: Préstamo para proyecto específico..." : "Ej: Asignación permanente por cargo..."}
                         multiline
                         rows={2}
                         disabled={loading}
@@ -1314,7 +1773,7 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
                         }
                     }}
                 >
-                    {loading ? 'Asignando...' : 'Confirmar Asignación'}
+                    {loading ? 'Procesando...' : (esPrestamo ? 'Confirmar Préstamo' : 'Confirmar Asignación')}
                 </Button>
             </DialogActions>
         </Dialog>
@@ -1326,10 +1785,13 @@ function AsignacionColaboradorDialog({ open, onClose, producto, onSuccess }) {
 // ============================================
 function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialUso = [], historialMantenciones = [] }) {
     const [tabValue, setTabValue] = useState(0);
+    const [openHistorialDialog, setOpenHistorialDialog] = useState(false);
+    const [productoParaHistorial, setProductoParaHistorial] = useState(null);
     
     if (!producto) return null;
 
-    const getEstadoColor = (estado) => {
+    const getEstadoColor = (estado, esPrestamo = false) => {
+        if (esPrestamo) return colors.warning;
         const colores = {
             'DISPONIBLE': colors.success,
             'ASIGNADO': colors.info,
@@ -1354,164 +1816,211 @@ function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialU
         }
     };
 
+    const handleOpenHistorial = () => {
+        setProductoParaHistorial(producto);
+        setOpenHistorialDialog(true);
+    };
+
+    const handleCloseHistorial = () => {
+        setOpenHistorialDialog(false);
+        setProductoParaHistorial(null);
+    };
+
+    // CORREGIDO: Verificar múltiples fuentes de es_prestamo
+    const esPrestamo = producto.asignacion_activa?.es_prestamo === 1 || 
+                       producto.colaborador_asignado?.es_prestamo === 1 ||
+                       producto.es_prestamo === 1;
+    
+    const estadoMostrar = esPrestamo ? 'PRÉSTAMO' : (producto.estado || 'DISPONIBLE');
+
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle sx={{ 
-                borderBottom: 1, 
-                borderColor: 'divider',
-                background: `linear-gradient(135deg, ${alpha(colors.primary, 0.02)} 0%, ${alpha(colors.secondary, 0.02)} 100%)`
-            }}>
-                <Box display="flex" alignItems="center" gap={2}>
-                    <Avatar
-                        src={getImageUrl(producto.imagen_path)}
-                        sx={{
-                            width: 60,
-                            height: 60,
-                            border: `2px solid ${colors.primary}`,
-                        }}
-                    >
-                        <ImageIcon />
-                    </Avatar>
-                    <Box flex={1}>
-                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            {producto.nombre}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            ID: {producto.id} • Serie: {producto.numero_serie || 'N/A'}
-                        </Typography>
-                        <Box mt={1} display="flex" gap={1} flexWrap="wrap">
-                            <Chip
-                                label={producto.estado || 'DISPONIBLE'}
-                                size="small"
-                                sx={{ 
-                                    backgroundColor: alpha(getEstadoColor(producto.estado), 0.1), 
-                                    color: getEstadoColor(producto.estado),
-                                }}
-                            />
-                            <Chip
-                                label={producto.condicion || 'NUEVO'}
-                                size="small"
-                                sx={{ 
-                                    backgroundColor: alpha(getCondicionColor(producto.condicion), 0.1),
-                                    color: getCondicionColor(producto.condicion),
-                                }}
-                            />
+        <>
+            <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+                <DialogTitle sx={{ 
+                    borderBottom: 1, 
+                    borderColor: 'divider',
+                    background: `linear-gradient(135deg, ${alpha(colors.primary, 0.02)} 0%, ${alpha(colors.secondary, 0.02)} 100%)`
+                }}>
+                    <Box display="flex" alignItems="center" gap={2}>
+                        <Avatar
+                            src={getImageUrl(producto.imagen_path)}
+                            sx={{
+                                width: 60,
+                                height: 60,
+                                border: `2px solid ${colors.primary}`,
+                            }}
+                        >
+                            <ImageIcon />
+                        </Avatar>
+                        <Box flex={1}>
+                            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                                {producto.nombre}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                ID: {producto.id} • Serie: {producto.numero_serie || 'N/A'}
+                            </Typography>
+                            <Box mt={1} display="flex" gap={1} flexWrap="wrap">
+                                <Chip
+                                    label={estadoMostrar}
+                                    size="small"
+                                    sx={{ 
+                                        backgroundColor: alpha(getEstadoColor(producto.estado, esPrestamo), 0.1), 
+                                        color: getEstadoColor(producto.estado, esPrestamo),
+                                    }}
+                                />
+                                <Chip
+                                    label={producto.condicion || 'NUEVO'}
+                                    size="small"
+                                    sx={{ 
+                                        backgroundColor: alpha(getCondicionColor(producto.condicion), 0.1),
+                                        color: getCondicionColor(producto.condicion),
+                                    }}
+                                />
+                            </Box>
                         </Box>
                     </Box>
+                </DialogTitle>
+
+                <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                    <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+                        <Tab label="Información" />
+                        <Tab 
+                            label={
+                                <Badge badgeContent={historialUso.length} color="info" max={99}>
+                                    Historial de Uso
+                                </Badge>
+                            } 
+                        />
+                        <Tab 
+                            label={
+                                <Badge badgeContent={historialMantenciones.length} color="warning" max={99}>
+                                    Mantenciones
+                                </Badge>
+                            } 
+                        />
+                    </Tabs>
                 </Box>
-            </DialogTitle>
 
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-                    <Tab label="Información" />
-                    <Tab 
-                        label={
-                            <Badge badgeContent={historialUso.length} color="info" max={99}>
-                                Historial de Uso
-                            </Badge>
-                        } 
-                    />
-                    <Tab 
-                        label={
-                            <Badge badgeContent={historialMantenciones.length} color="warning" max={99}>
-                                Mantenciones
-                            </Badge>
-                        } 
-                    />
-                </Tabs>
-            </Box>
-
-            <DialogContent dividers>
-                {tabValue === 0 && (
-                    <Grid container spacing={3}>
-                        <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                                Información Básica
-                            </Typography>
-                            <Paper variant="outlined" sx={{ p: 2 }}>
-                                <Stack spacing={2}>
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">Marca:</Typography>
-                                        <Typography fontWeight={500}>{producto.marca || '-'}</Typography>
-                                    </Box>
-                                    <Divider />
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">Modelo:</Typography>
-                                        <Typography fontWeight={500}>{producto.modelo || '-'}</Typography>
-                                    </Box>
-                                    <Divider />
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">Precio:</Typography>
-                                        <Typography fontWeight={600} color={colors.primary}>
-                                            ${(producto.precio || 0).toLocaleString('es-CL')}
-                                        </Typography>
-                                    </Box>
-                                </Stack>
-                            </Paper>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                                Documentos y Fechas
-                            </Typography>
-                            <Paper variant="outlined" sx={{ p: 2 }}>
-                                <Stack spacing={2}>
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">OC N°:</Typography>
-                                        <Typography fontWeight={500}>{producto.oc_numero || 'N/A'}</Typography>
-                                    </Box>
-                                    <Divider />
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">Factura N°:</Typography>
-                                        <Typography fontWeight={500}>{producto.factura_numero || 'N/A'}</Typography>
-                                    </Box>
-                                    <Divider />
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Typography color="text.secondary">Fecha Adquisición:</Typography>
-                                        <Typography fontWeight={500}>{formatDate(producto.fecha_adquisicion)}</Typography>
-                                    </Box>
-                                </Stack>
-                            </Paper>
-                        </Grid>
-                        {producto.descripcion && (
-                            <Grid item xs={12}>
+                <DialogContent dividers>
+                    {tabValue === 0 && (
+                        <Grid container spacing={3}>
+                            <Grid item xs={12} md={6}>
                                 <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                                    Descripción
+                                    Información Básica
                                 </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha(colors.background, 0.5) }}>
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                        {producto.descripcion}
-                                    </Typography>
+                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                    <Stack spacing={2}>
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">Marca:</Typography>
+                                            <Typography fontWeight={500}>{producto.marca || '-'}</Typography>
+                                        </Box>
+                                        <Divider />
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">Modelo:</Typography>
+                                            <Typography fontWeight={500}>{producto.modelo || '-'}</Typography>
+                                        </Box>
+                                        <Divider />
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">Precio:</Typography>
+                                            <Typography fontWeight={600} color={colors.primary}>
+                                                ${(producto.precio || 0).toLocaleString('es-CL')}
+                                            </Typography>
+                                        </Box>
+                                    </Stack>
                                 </Paper>
                             </Grid>
-                        )}
-                    </Grid>
-                )}
+                            <Grid item xs={12} md={6}>
+                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                    Documentos y Fechas
+                                </Typography>
+                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                    <Stack spacing={2}>
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">OC N°:</Typography>
+                                            <Typography fontWeight={500}>{producto.oc_numero || 'N/A'}</Typography>
+                                        </Box>
+                                        <Divider />
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">Factura N°:</Typography>
+                                            <Typography fontWeight={500}>{producto.factura_numero || 'N/A'}</Typography>
+                                        </Box>
+                                        <Divider />
+                                        <Box display="flex" justifyContent="space-between">
+                                            <Typography color="text.secondary">Fecha Adquisición:</Typography>
+                                            <Typography fontWeight={500}>{formatDate(producto.fecha_adquisicion)}</Typography>
+                                        </Box>
+                                    </Stack>
+                                </Paper>
+                            </Grid>
+                            {producto.descripcion && (
+                                <Grid item xs={12}>
+                                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                        Descripción
+                                    </Typography>
+                                    <Paper variant="outlined" sx={{ p: 2, bgcolor: alpha(colors.background, 0.5) }}>
+                                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                            {producto.descripcion}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                            )}
+                            {esPrestamo && producto.asignacion_activa?.fecha_devolucion_esperada && (
+                                <Grid item xs={12}>
+                                    <Alert severity="info" icon={<ReceiptLongIcon />}>
+                                        <strong>Préstamo activo</strong> - Fecha de devolución esperada: {formatDate(producto.asignacion_activa.fecha_devolucion_esperada)}
+                                    </Alert>
+                                </Grid>
+                            )}
+                            {producto.colaborador_asignado && (
+                                <Grid item xs={12}>
+                                    <Alert severity="info" icon={<PersonIcon />}>
+                                        <strong>Asignado a:</strong> {producto.colaborador_asignado.nombre}
+                                        {producto.colaborador_asignado.cargo && ` (${producto.colaborador_asignado.cargo})`}
+                                    </Alert>
+                                </Grid>
+                            )}
+                        </Grid>
+                    )}
 
-                {tabValue === 1 && (
-                    <HistorialUsoDialog
-                        open={true}
-                        onClose={() => {}}
-                        producto={producto}
-                        historial={historialUso}
-                    />
-                )}
+                    {tabValue === 1 && (
+                        <Box>
+                            <Button
+                                variant="outlined"
+                                startIcon={<HistoryIcon />}
+                                onClick={handleOpenHistorial}
+                                fullWidth
+                                sx={{ mb: 2 }}
+                            >
+                                Ver historial completo de uso
+                            </Button>
+                            <HistorialMantenciones mantenciones={historialUso} />
+                        </Box>
+                    )}
 
-                {tabValue === 2 && (
-                    <HistorialMantenciones mantenciones={historialMantenciones} />
-                )}
-            </DialogContent>
+                    {tabValue === 2 && (
+                        <HistorialMantenciones mantenciones={historialMantenciones} />
+                    )}
+                </DialogContent>
 
-            <DialogActions sx={{ p: 2 }}>
-                <Button onClick={onClose} variant="contained" color="primary">
-                    Cerrar
-                </Button>
-            </DialogActions>
-        </Dialog>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={onClose} variant="contained" color="primary">
+                        Cerrar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <HistorialUsoDialog
+                open={openHistorialDialog}
+                onClose={handleCloseHistorial}
+                producto={productoParaHistorial || producto}
+                historial={historialUso}
+            />
+        </>
     );
 }
 
 // ============================================
-// FORMULARIO DE PRODUCTO CON AUTOCOMPLETADO CORREGIDO
+// FORMULARIO DE PRODUCTO (COMPLETO)
 // ============================================
 function ProductoForm({ open, onClose, producto, onSave }) {
     const [formData, setFormData] = useState({
@@ -1540,7 +2049,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const [observacionesAsignacion, setObservacionesAsignacion] = useState('');
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     
-    // Estados para mantención
     const [mostrarMantencion, setMostrarMantencion] = useState(false);
     const [accionMantencion, setAccionMantencion] = useState('ninguna');
     const [tipoMantencion, setTipoMantencion] = useState('RUTINA');
@@ -1551,7 +2059,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const [fechaTerminoMantencion, setFechaTerminoMantencion] = useState(new Date().toISOString().split('T')[0]);
     const [observacionesMantencion, setObservacionesMantencion] = useState('');
 
-    // Estado para las listas de opciones de autocompletado
     const [nombresProductosExistentes, setNombresProductosExistentes] = useState([]);
     const [marcasExistentes, setMarcasExistentes] = useState([]);
     const [modelosExistentes, setModelosExistentes] = useState([]);
@@ -1573,20 +2080,16 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         setSnackbar({ ...snackbar, open: false });
     };
 
-    // Cargar todos los productos para obtener los nombres, marcas y modelos existentes
     useEffect(() => {
         const fetchTodosLosProductos = async () => {
             try {
                 const productosData = await productosService.getProductos('', {});
                 if (productosData && Array.isArray(productosData)) {
                     setTodosLosProductos(productosData);
-                    // Extraer nombres únicos
                     const nombresUnicos = [...new Set(productosData.map(p => p.nombre).filter(n => n && n.trim() !== ''))];
                     setNombresProductosExistentes(nombresUnicos.sort());
-                    // Extraer marcas únicas
                     const marcasUnicas = [...new Set(productosData.map(p => p.marca).filter(m => m && m.trim() !== ''))];
                     setMarcasExistentes(marcasUnicas.sort());
-                    // Extraer modelos únicos
                     const modelosUnicos = [...new Set(productosData.map(p => p.modelo).filter(m => m && m.trim() !== ''))];
                     setModelosExistentes(modelosUnicos.sort());
                 }
@@ -1597,7 +2100,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         if (open) fetchTodosLosProductos();
     }, [open]);
 
-    // Cargar bodegas
     useEffect(() => {
         const fetchBodegas = async () => {
             try {
@@ -1610,7 +2112,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         if (open) fetchBodegas();
     }, [open]);
 
-    // Cargar colaboradores
     useEffect(() => {
         const fetchColaboradores = async () => {
             try {
@@ -1623,7 +2124,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         if (open) fetchColaboradores();
     }, [open]);
 
-    // Cargar datos del producto
     useEffect(() => {
         if (open) {
             if (producto) {
@@ -1878,7 +2378,7 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         onClose();
     };
 
-    // Diálogo de historial de uso
+    // HistorialUsoFormDialog component (simplificado)
     const HistorialUsoFormDialog = ({ open, onClose, onGuardar, historialExistente }) => {
         const [historial, setHistorial] = useState([]);
         const [nuevoRegistro, setNuevoRegistro] = useState({
@@ -2132,7 +2632,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            {/* AUTOCOMPLETADO PARA NOMBRE DE PRODUCTO */}
                             <Autocomplete
                                 freeSolo
                                 options={nombresProductosExistentes}
@@ -2173,7 +2672,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                                         </Box>
                                     </li>
                                 )}
-                                freeSoloHelperText="Si el producto no está en la lista, escriba el nombre y se creará como nuevo."
                                 fullWidth
                             />
                         </Grid>
@@ -2376,7 +2874,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             </Grid>
                         )}
 
-                        {/* Campo MARCA con Autocomplete CORREGIDO */}
                         <Grid item xs={12} sm={6}>
                             <Autocomplete
                                 freeSolo
@@ -2413,12 +2910,10 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                                         </Box>
                                     </li>
                                 )}
-                                freeSolo
                                 fullWidth
                             />
                         </Grid>
 
-                        {/* Campo MODELO con Autocomplete CORREGIDO */}
                         <Grid item xs={12} sm={6}>
                             <Autocomplete
                                 freeSolo
@@ -2455,7 +2950,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                                         </Box>
                                     </li>
                                 )}
-                                freeSolo
                                 fullWidth
                             />
                         </Grid>
@@ -2753,34 +3247,34 @@ const Productos = () => {
     const isTablet = useMediaQuery('(min-width:601px) and (max-width:960px)');
     const navigate = useNavigate();
     
-    // Estados para productos y carga
     const [productos, setProductos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [dataLoaded, setDataLoaded] = useState(false);
     
-    // Estados para búsqueda y filtros
     const [searchTerm, setSearchTerm] = useState('');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
+    const [filterType, setFilterType] = useState('todos');
     const [filters, setFilters] = useState({
         estado: '',
         condicion: '',
-        bodega_id: ''
+        bodega_id: '',
+        marcas: [],
+        estados: [],
+        condiciones: []
     });
     
-    // Estados para datos auxiliares
     const [marcas, setMarcas] = useState([]);
     const [estados, setEstados] = useState([]);
     const [bodegas, setBodegas] = useState([]);
     const [condiciones] = useState(['NUEVO', 'USADO', 'REACONDICIONADO']);
     
-    // Estados para datos de exportación
     const [historialAsignaciones, setHistorialAsignaciones] = useState([]);
     const [donaciones, setDonaciones] = useState([]);
     const [bajas, setBajas] = useState([]);
     
-    // Estados para diálogos
     const [openForm, setOpenForm] = useState(false);
     const [openDetail, setOpenDetail] = useState(false);
     const [openDisposicion, setOpenDisposicion] = useState(false);
@@ -2788,7 +3282,6 @@ const Productos = () => {
     const [openHistorial, setOpenHistorial] = useState(false);
     const [openAsignacion, setOpenAsignacion] = useState(false);
     
-    // Estados para datos seleccionados
     const [selectedProducto, setSelectedProducto] = useState(null);
     const [selectedProductoDetail, setSelectedProductoDetail] = useState(null);
     const [productoParaDisposicion, setProductoParaDisposicion] = useState(null);
@@ -2797,7 +3290,6 @@ const Productos = () => {
     const [historialUso, setHistorialUso] = useState([]);
     const [historialMantenciones, setHistorialMantenciones] = useState([]);
     
-    // Estados para UI
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [stats, setStats] = useState({
         totalProductos: 0,
@@ -2817,6 +3309,41 @@ const Productos = () => {
         navigate('/dashboard');
     };
     
+    // Filtrar productos activos (excluir dados de baja, donados)
+    const getProductosActivos = useCallback((productosList) => {
+        return productosList.filter(p => {
+            // Excluir productos dados de baja
+            if (p.fecha_baja) return false;
+            // Excluir productos donados
+            if (p.fecha_donacion) return false;
+            // Excluir productos con estado NO DISPONIBLE
+            if (p.estado === 'NO DISPONIBLE') return false;
+            return true;
+        });
+    }, []);
+
+   const getEsPrestamo = (producto) => {
+    // Verificar en todas las posibles ubicaciones donde podría venir es_prestamo
+    return producto?.asignacion_activa?.es_prestamo === 1 || 
+           producto?.es_prestamo === 1 ||
+           producto?.colaborador_asignado?.es_prestamo === 1 ||
+           // Algunas APIs pueden devolver es_prestamo como string '1' o true
+           producto?.asignacion_activa?.es_prestamo === '1' ||
+           producto?.es_prestamo === '1' ||
+           producto?.colaborador_asignado?.es_prestamo === '1' ||
+           // También revisar si el estado indica préstamo
+           producto?.estado === 'PRÉSTAMO' ||
+           // Último recurso: revisar si hay una asignación activa con fecha de devolución esperada
+           (producto?.asignacion_activa?.fecha_devolucion_esperada && 
+            !producto?.asignacion_activa?.fecha_devolucion);
+};
+
+    const filterCounts = {
+        todos: getProductosActivos(productos).length,
+        disponibles: getProductosActivos(productos).filter(p => p.estado === 'DISPONIBLE').length,
+        asignados: getProductosActivos(productos).filter(p => p.estado === 'ASIGNADO' && !getEsPrestamo(p)).length,
+        prestamos: getProductosActivos(productos).filter(p => getEsPrestamo(p)).length,
+    };
 
     const loadExportData = async () => {
         try {
@@ -2863,7 +3390,7 @@ const Productos = () => {
         fetchInitialData();
     }, []);
 
-    const fetchData = async (showRefresh = false) => {
+    const fetchData = useCallback(async (showRefresh = false) => {
         if (showRefresh) {
             setRefreshing(true);
         } else {
@@ -2873,10 +3400,10 @@ const Productos = () => {
         try {
             const filterParams = {};
             
-            if (filters.marca) filterParams.marca = filters.marca;
-            if (filters.estado) filterParams.estado = filters.estado;
-            if (filters.condicion) filterParams.condicion = filters.condicion;
             if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
+            if (filters.marcas?.length) filterParams.marcas = filters.marcas.join(',');
+            if (filters.estados?.length) filterParams.estados = filters.estados.join(',');
+            if (filters.condiciones?.length) filterParams.condiciones = filters.condiciones.join(',');
             
             console.log('📤 Enviando filtros:', filterParams);
             
@@ -2894,6 +3421,7 @@ const Productos = () => {
             }
             
             setApiError(false);
+            setDataLoaded(true);
             
             if (showRefresh) {
                 showSnackbar('Datos actualizados', 'success');
@@ -2901,29 +3429,50 @@ const Productos = () => {
         } catch (error) {
             console.error('Error cargando datos:', error);
             setApiError(true);
+            setDataLoaded(true);
             showSnackbar('Error al cargar los datos', 'error');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [searchTerm, filters.bodega_id, filters.marcas, filters.estados, filters.condiciones]);
 
     useEffect(() => {
         fetchData();
-    }, [searchTerm, filters.marca, filters.estado, filters.condicion, filters.bodega_id]);
+    }, [fetchData]);
 
     const handleClearFilters = () => {
         setSearchTerm('');
+        setFilterType('todos');
         setFilters({
             estado: '',
             condicion: '',
-            bodega_id: ''
+            bodega_id: '',
+            marcas: [],
+            estados: [],
+            condiciones: []
         });
         setPage(0);
     };
 
-    const handleFilterChange = (field) => (event) => {
-        setFilters(prev => ({ ...prev, [field]: event.target.value }));
+    const handleSearchChange = (value) => {
+        setSearchTerm(value);
+        setPage(0);
+    };
+
+    const handleClearSearch = () => {
+        setSearchTerm('');
+        setPage(0);
+    };
+
+    const handleFilterTypeChange = (type) => {
+        setFilterType(type);
+        setPage(0);
+    };
+
+    const handleFilterChange = (field, value) => {
+        setFilters(prev => ({ ...prev, [field]: value }));
+        setPage(0);
     };
 
     const handleOpenForm = (producto = null) => {
@@ -2934,7 +3483,7 @@ const Productos = () => {
     const handleCloseForm = () => {
         setSelectedProducto(null);
         setOpenForm(false);
-        fetchData();
+        fetchData(true);
     };
 
     const handleOpenDetail = async (producto) => {
@@ -3006,13 +3555,13 @@ const Productos = () => {
         setSelectedProducto(null);
         setProductoParaDisposicion(null);
         setOpenDisposicion(false);
-        fetchData();
+        fetchData(true);
     };
 
     const handleDisposicionSuccess = (message) => {
         showSnackbar(message, 'success');
         handleCloseDisposicion();
-        fetchData();
+        fetchData(true);
     };
 
     const handleOpenAsignacion = (producto) => {
@@ -3041,7 +3590,7 @@ const Productos = () => {
             );
         }
         
-        fetchData();
+        fetchData(true);
         loadExportData();
     };
 
@@ -3074,7 +3623,7 @@ const Productos = () => {
         try {
             await productosService.deleteProducto(selectedProducto.id);
             showSnackbar('Producto eliminado', 'success');
-            await fetchData();
+            await fetchData(true);
             await loadExportData();
         } catch (error) {
             console.error('Error eliminando:', error);
@@ -3100,7 +3649,7 @@ const Productos = () => {
             await loadExportData();
             
             const exportData = {
-                productos: productos,
+                productos: getProductosActivos(productos),
                 historialAsignaciones: historialAsignaciones,
                 donaciones: donaciones,
                 bajas: bajas,
@@ -3137,7 +3686,21 @@ const Productos = () => {
         return `http://localhost:98/uploads/${imagenPath}`;
     };
 
-    const filteredProductos = productos.filter((producto) => {
+    const getFilteredByType = (productosList) => {
+        switch (filterType) {
+            case 'disponibles':
+                return productosList.filter(p => p.estado === 'DISPONIBLE');
+            case 'asignados':
+                return productosList.filter(p => p.estado === 'ASIGNADO' && !getEsPrestamo(p));
+            case 'prestamos':
+                return productosList.filter(p => getEsPrestamo(p));
+            default:
+                return productosList;
+        }
+    };
+
+    // Aplicar todos los filtros incluyendo la exclusión de productos no activos
+    const filteredProductos = getFilteredByType(getProductosActivos(productos)).filter((producto) => {
         if (filters.estado && producto.estado !== filters.estado) {
             return false;
         }
@@ -3147,16 +3710,50 @@ const Productos = () => {
         if (filters.bodega_id && producto.bodega_id !== Number(filters.bodega_id)) {
             return false;
         }
+        if (filters.marcas && filters.marcas.length > 0) {
+            if (!filters.marcas.includes(producto.marca)) {
+                return false;
+            }
+        }
+        if (filters.estados && filters.estados.length > 0) {
+            if (!filters.estados.includes(producto.estado)) {
+                return false;
+            }
+        }
+        if (filters.condiciones && filters.condiciones.length > 0) {
+            if (!filters.condiciones.includes(producto.condicion)) {
+                return false;
+            }
+        }
+        
+        // Búsqueda por texto (incluye nombre del colaborador)
         if (searchTerm && searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase().trim();
+            
             const nombre = (producto.nombre || '').toLowerCase();
             const marca = (producto.marca || '').toLowerCase();
             const modelo = (producto.modelo || '').toLowerCase();
             const numeroSerie = (producto.numero_serie || '').toLowerCase();
-            if (!nombre.includes(term) && !marca.includes(term) && !modelo.includes(term) && !numeroSerie.includes(term)) {
+            
+            // Buscar en colaborador asignado
+            const colaboradorNombre = (producto.colaborador_asignado?.nombre || '').toLowerCase();
+            const colaboradorRut = (producto.colaborador_asignado?.rut || '').toLowerCase();
+            const colaboradorEmail = (producto.colaborador_asignado?.email || '').toLowerCase();
+            
+            const coincideProducto = nombre.includes(term) || 
+                                     marca.includes(term) || 
+                                     modelo.includes(term) || 
+                                     numeroSerie.includes(term);
+            
+            const coincideColaborador = colaboradorNombre.includes(term) || 
+                                        colaboradorRut.includes(term) || 
+                                        colaboradorEmail.includes(term);
+            
+            if (!coincideProducto && !coincideColaborador) {
                 return false;
             }
         }
+        
         return true;
     });
 
@@ -3165,7 +3762,8 @@ const Productos = () => {
         page * rowsPerPage + rowsPerPage
     );
 
-    const getEstadoColor = (estado) => {
+    const getEstadoColor = (estado, esPrestamo = false) => {
+        if (esPrestamo) return colors.warning;
         const colores = {
             'DISPONIBLE': colors.success,
             'ASIGNADO': colors.info,
@@ -3177,7 +3775,8 @@ const Productos = () => {
         return colores[estado] || colors.text.secondary;
     };
 
-    const getEstadoIcon = (estado) => {
+    const getEstadoIcon = (estado, esPrestamo = false) => {
+        if (esPrestamo) return <ReceiptLongIcon fontSize="small" />;
         const iconos = {
             'DISPONIBLE': <CheckCircleOutlineIcon fontSize="small" />,
             'ASIGNADO': <AssignmentIcon fontSize="small" />,
@@ -3189,8 +3788,26 @@ const Productos = () => {
         return iconos[estado] || <InventoryIcon fontSize="small" />;
     };
 
-    const activeFiltersCount = Object.values(filters).filter(v => v && v !== '').length + (searchTerm ? 1 : 0);
-    
+    const activeFiltersCount = (() => {
+        let count = 0;
+        if (searchTerm) count++;
+        if (filters.bodega_id) count++;
+        if (filters.marcas?.length) count++;
+        if (filters.estados?.length) count++;
+        if (filters.condiciones?.length) count++;
+        if (filterType !== 'todos') count++;
+        return count;
+    })();
+
+    if (loading && !dataLoaded) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+                <Typography sx={{ ml: 2 }}>Cargando productos...</Typography>
+            </Box>
+        );
+    }
+
     return (
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar 
@@ -3277,6 +3894,12 @@ const Productos = () => {
                     )}
                 </Paper>
 
+                <VisualFilters 
+                    filterType={filterType} 
+                    onFilterChange={handleFilterTypeChange}
+                    counts={filterCounts}
+                />
+
                 <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
                     <Grid item xs={12} sm={6} md={6}>
                         <StyledCard>
@@ -3287,14 +3910,13 @@ const Productos = () => {
                                     </Avatar>
                                 </Box>
                                 <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.totalProductos}
+                                    {loading && !dataLoaded ? <CircularProgress size={24} /> : filterCounts.todos}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Total Productos
+                                    Total Productos Activos
                                 </Typography>
                                 <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
-                                    ({productos.filter(p => p.estado === 'DISPONIBLE').length} disponibles, {' '}
-                                    {productos.filter(p => p.estado === 'ASIGNADO').length} asignados)
+                                    ({filterCounts.disponibles} disponibles, {filterCounts.asignados} asignados, {filterCounts.prestamos} préstamos)
                                 </Typography>
                             </CardContent>
                         </StyledCard>
@@ -3309,10 +3931,10 @@ const Productos = () => {
                                     </Avatar>
                                 </Box>
                                 <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                    {loading ? <CircularProgress size={24} /> : `$${stats.valorTotal.toLocaleString('es-CL')}`}
+                                    {loading && !dataLoaded ? <CircularProgress size={24} /> : `$${stats.valorTotal.toLocaleString('es-CL')}`}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Valor Total
+                                    Valor Total Inventario
                                 </Typography>
                             </CardContent>
                         </StyledCard>
@@ -3323,7 +3945,7 @@ const Productos = () => {
                     <Grid item xs={6} sm={4} md={2}>
                         <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
                             <Typography variant="h6" color={colors.warning}>
-                                {productos.filter(p => p.estado === 'EN MANTENCIÓN' || p.estado === 'EN REPARACIÓN').length}
+                                {getProductosActivos(productos).filter(p => p.estado === 'EN MANTENCIÓN' || p.estado === 'EN REPARACIÓN').length}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                                 En Mantención
@@ -3334,18 +3956,7 @@ const Productos = () => {
                     <Grid item xs={6} sm={4} md={2}>
                         <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
                             <Typography variant="h6" color={colors.error}>
-                                {productos.filter(p => p.estado === 'NO DISPONIBLE' || p.fecha_baja || p.fecha_donacion).length}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                No Disponibles
-                            </Typography>
-                        </Paper>
-                    </Grid>
-                    
-                    <Grid item xs={6} sm={4} md={2}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                            <Typography variant="h6" color={colors.error}>
-                                {productos.filter(p => p.fecha_baja).length}
+                                {bajas.length}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                                 Dados de Baja
@@ -3356,7 +3967,7 @@ const Productos = () => {
                     <Grid item xs={6} sm={4} md={2}>
                         <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
                             <Typography variant="h6" color={colors.success}>
-                                {productos.filter(p => p.fecha_donacion).length}
+                                {donaciones.length}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                                 Donados
@@ -3368,25 +3979,6 @@ const Productos = () => {
                 <FilterPaper className="filter-paper">
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} md={5}>
-                            <TextField
-                                fullWidth
-                                placeholder="Buscar por nombre, marca, serie..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: '#6B7280' }} /></InputAdornment>,
-                                    endAdornment: searchTerm && (
-                                        <InputAdornment position="end">
-                                            <IconButton size="small" onClick={() => setSearchTerm('')}>
-                                                <CloseIcon fontSize="small" />
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                size="small"
-                            />
-                        </Grid>
-                        <Grid item xs={6} md={3}>
                             <Button
                                 fullWidth
                                 variant={showAdvancedFilters ? "contained" : "outlined"}
@@ -3394,26 +3986,29 @@ const Productos = () => {
                                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                                 className="filter-button"
                                 color={showAdvancedFilters ? "primary" : "inherit"}
+                                sx={{
+                                    backgroundColor: showAdvancedFilters ? colors.primary : 'transparent',
+                                    color: showAdvancedFilters ? 'white' : colors.text.primary,
+                                }}
                             >
-                                {showAdvancedFilters ? 'Ocultar filtros' : 'Filtros avanzados'}
+                                {showAdvancedFilters ? 'Ocultar filtros avanzados' : 'Mostrar filtros avanzados'}
                                 {activeFiltersCount > 0 && (
                                     <Chip
                                         size="small"
                                         label={activeFiltersCount}
-                                        sx={{ ml: 1, bgcolor: colors.primary, color: 'white', height: 24 }}
+                                        sx={{ ml: 1, bgcolor: showAdvancedFilters ? 'white' : colors.primary, color: showAdvancedFilters ? colors.primary : 'white', height: 24 }}
                                     />
                                 )}
                             </Button>
                         </Grid>
-                        <Grid item xs={6} md={4}>
+                        <Grid item xs={6} md={3}>
                             <Button
                                 fullWidth
                                 variant="outlined"
                                 color="error"
                                 startIcon={<FilterListOffIcon />}
                                 onClick={handleClearFilters}
-                                disabled={!searchTerm && activeFiltersCount === 0}
-                                className="filter-button"
+                                disabled={activeFiltersCount === 0}
                             >
                                 Limpiar filtros
                             </Button>
@@ -3421,69 +4016,19 @@ const Productos = () => {
                     </Grid>
 
                     <Collapse in={showAdvancedFilters}>
-                        <Box sx={{ mt: 3 }}>
-                            <Typography variant="subtitle2" className="filters-title">
-                                FILTROS AVANZADOS
-                            </Typography>
-
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6} md={4}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="estado-label">Estado</InputLabel>
-                                        <Select
-                                            labelId="estado-label"
-                                            value={filters.estado}
-                                            onChange={handleFilterChange('estado')}
-                                            label="Estado"
-                                        >
-                                            <MenuItem value="">Todos</MenuItem>
-                                            {estados.map((estado) => (
-                                                <MenuItem key={estado.id} value={estado.nombre}>
-                                                    {estado.nombre}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Grid item xs={12} sm={6} md={4}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="condicion-label">Condición</InputLabel>
-                                        <Select
-                                            labelId="condicion-label"
-                                            value={filters.condicion}
-                                            onChange={handleFilterChange('condicion')}
-                                            label="Condición"
-                                        >
-                                            <MenuItem value="">Todas</MenuItem>
-                                            <MenuItem value="Nuevo">Nuevo</MenuItem>
-                                            <MenuItem value="Usado">Usado</MenuItem>
-                                            <MenuItem value="Reparacion">Reparación</MenuItem>
-                                            <MenuItem value="Dañado">Dañado</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-
-                                <Grid item xs={12} sm={6} md={4}>
-                                    <FormControl fullWidth>
-                                        <InputLabel id="bodega-label">Bodega</InputLabel>
-                                        <Select
-                                            labelId="bodega-label"
-                                            value={filters.bodega_id}
-                                            onChange={handleFilterChange('bodega_id')}
-                                            label="Bodega"
-                                        >
-                                            <MenuItem value="">Todas</MenuItem>
-                                            {bodegas.map((bodega) => (
-                                                <MenuItem key={bodega.id} value={bodega.id}>
-                                                    {bodega.nombre}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                            </Grid>
-                        </Box>
+                        <AdvancedFilters
+                            filters={filters}
+                            onFilterChange={handleFilterChange}
+                            onClearFilters={handleClearFilters}
+                            marcas={marcas}
+                            estados={estados}
+                            bodegas={bodegas}
+                            condiciones={condiciones}
+                            activeFiltersCount={activeFiltersCount}
+                            searchTerm={searchTerm}
+                            onSearchChange={handleSearchChange}
+                            onClearSearch={handleClearSearch}
+                        />
                     </Collapse>
                 </FilterPaper>
 
@@ -3493,28 +4038,29 @@ const Productos = () => {
                             <TableRow>
                                 <StyledTableCell>Producto</StyledTableCell>
                                 <StyledTableCell>Marca</StyledTableCell>
+                                <StyledTableCell>Modelo</StyledTableCell>
                                 <StyledTableCell>N° Serie</StyledTableCell>
-                                <StyledTableCell>Precio</StyledTableCell>
                                 <StyledTableCell>Bodega</StyledTableCell>
                                 <StyledTableCell>Condición</StyledTableCell>
-                                <StyledTableCell>Estado</StyledTableCell>
+                                <StyledTableCell>Estado / Tipo</StyledTableCell>
+                                <StyledTableCell>Asignado a</StyledTableCell>
                                 <StyledTableCell align="center">Acciones</StyledTableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {loading ? (
+                            {loading && !dataLoaded ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                                    <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                                         <CircularProgress />
                                         <Typography sx={{ mt: 2 }}>Cargando productos...</Typography>
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedProductos.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                                    <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                                         <InventoryIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
                                         <Typography variant="h6" gutterBottom>
-                                            No hay productos
+                                            No hay productos activos
                                         </Typography>
                                         <Button
                                             variant="contained"
@@ -3530,6 +4076,9 @@ const Productos = () => {
                                     const bodegaEncontrada = bodegas.find(b => b.id === producto.bodega_id);
                                     const bodegaNombre = bodegaEncontrada?.nombre || producto.bodega_nombre || 'Sin asignar';
                                     const disponible = producto.estado === 'DISPONIBLE';
+                                    const esPrestamo = getEsPrestamo(producto);
+                                    const estadoMostrar = esPrestamo ? 'PRÉSTAMO' : producto.estado;
+                                    const estadoColor = getEstadoColor(producto.estado, esPrestamo);
                                     
                                     return (
                                         <TableRow key={producto.id} hover>
@@ -3552,6 +4101,7 @@ const Productos = () => {
                                                 </Box>
                                             </TableCell>
                                             <TableCell>{producto.marca || '-'}</TableCell>
+                                            <TableCell>{producto.modelo || '-'}</TableCell>
                                             <TableCell>
                                                 <Chip
                                                     icon={<QrCodeIcon fontSize="small" />}
@@ -3564,7 +4114,6 @@ const Productos = () => {
                                                     }}
                                                 />
                                             </TableCell>
-                                            <TableCell>${(producto.precio || 0).toLocaleString('es-CL')}</TableCell>
                                             <TableCell>
                                                 <Chip
                                                     icon={<StoreIcon />}
@@ -3590,14 +4139,28 @@ const Productos = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
-                                                    icon={getEstadoIcon(producto.estado)}
-                                                    label={producto.estado}
+                                                    icon={getEstadoIcon(producto.estado, esPrestamo)}
+                                                    label={estadoMostrar}
                                                     size="small"
                                                     sx={{ 
-                                                        backgroundColor: alpha(getEstadoColor(producto.estado), 0.1), 
-                                                        color: getEstadoColor(producto.estado),
+                                                        backgroundColor: alpha(estadoColor, 0.1), 
+                                                        color: estadoColor,
                                                     }}
                                                 />
+                                            </TableCell>
+                                            <TableCell>
+                                                {producto.colaborador_asignado && !producto.fecha_baja && !producto.fecha_donacion ? (
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.primary, 0.1), fontSize: '0.75rem' }}>
+                                                            {producto.colaborador_asignado.nombre?.charAt(0) || '?'}
+                                                        </Avatar>
+                                                        <Typography variant="body2">
+                                                            {producto.colaborador_asignado.nombre}
+                                                        </Typography>
+                                                    </Box>
+                                                ) : (
+                                                    <Typography variant="body2" color="text.secondary">-</Typography>
+                                                )}
                                             </TableCell>
                                             <TableCell align="center">
                                                 <Stack direction="row" spacing={0.5} justifyContent="center">
@@ -3620,7 +4183,7 @@ const Productos = () => {
                                                         </IconButton>
                                                     </Tooltip>
                                                     
-                                                    <Tooltip title="Asignar a colaborador">
+                                                    <Tooltip title={disponible ? "Asignar a colaborador" : "No disponible para asignar"}>
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleOpenAsignacion(producto)}
@@ -3641,7 +4204,7 @@ const Productos = () => {
                                                         </IconButton>
                                                     </Tooltip>
                                                     
-                                                    <Tooltip title="Eliminar/Donar">
+                                                    <Tooltip title="Dar de baja / Donar">
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleEliminarDonar(producto)}

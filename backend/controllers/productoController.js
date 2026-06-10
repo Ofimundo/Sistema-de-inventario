@@ -1,4 +1,4 @@
-// backend/controllers/productoController.js - VERSIÓN CORREGIDA CON LABORATORIO
+// backend/controllers/productoController.js - VERSIÓN COMPLETA CON ASIGNACIÓN, BODEGAS Y ESTADOS
 const { getConnection, sql } = require('../config/database');
 
 // Función auxiliar para obtener texto de estado
@@ -55,9 +55,28 @@ const productoController = {
                     p.imagen_path,
                     p.fecha_creacion,
                     p.bodega_id,
-                    b.nombre as bodega_nombre
-                FROM [INV].[productos] p WITH (NOLOCK)
-                LEFT JOIN [INV].[bodegas] b WITH (NOLOCK) ON p.bodega_id = b.id
+                    b.nombre as bodega_nombre,
+                    -- Campos para filtrar productos dados de baja o donados
+                    db.fecha_baja,
+                    dd.fecha_entrega as fecha_donacion,
+                    -- Datos de asignación activa
+                    a.id as asignacion_id,
+                    a.fecha_asignacion,
+                    a.es_prestamo,
+                    a.fecha_devolucion_esperada,
+                    -- Datos del colaborador
+                    c.id as colaborador_id,
+                    c.nombre as colaborador_nombre,
+                    c.email as colaborador_email,
+                    c.rut as colaborador_rut,
+                    c.cargo as colaborador_cargo,
+                    c.departamento as colaborador_departamento
+                FROM [INV].[productos] p
+                LEFT JOIN [INV].[bodegas] b ON p.bodega_id = b.id
+                LEFT JOIN [INV].[asignaciones] a ON p.id = a.producto_id AND (a.fecha_devolucion IS NULL OR a.fecha_devolucion = '')
+                LEFT JOIN [INV].[colaboradores] c ON a.colaborador_id = c.id
+                LEFT JOIN [INV].[disposicion_baja] db ON p.id = db.producto_id
+                LEFT JOIN [INV].[disposicion_donacion] dd ON p.id = dd.producto_id
                 WHERE 1=1
                     AND p.id_estado_equipo != 6
             `;
@@ -65,7 +84,7 @@ const productoController = {
             const request = pool.request();
             
             if (search && search.trim()) {
-                query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search)`;
+                query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search OR c.nombre LIKE @search)`;
                 request.input('search', sql.NVarChar, `%${search.trim()}%`);
             }
             
@@ -92,14 +111,48 @@ const productoController = {
                 request.input('bodegaId', sql.Int, parseInt(bodega_id));
             }
             
-            query += ` ORDER BY p.fecha_creacion DESC`;
+            query += ` ORDER BY p.id DESC`;
             
             const result = await request.query(query);
             
-            const productos = result.recordset.map(producto => ({
-                ...producto,
-                estado: getEstadoTexto(producto.id_estado_equipo)
-            }));
+            const productos = result.recordset.map(producto => {
+                // Crear objeto asignacion_activa
+                let asignacionActiva = null;
+                if (producto.asignacion_id) {
+                    asignacionActiva = {
+                        id: producto.asignacion_id,
+                        fecha_asignacion: producto.fecha_asignacion,
+                        es_prestamo: producto.es_prestamo === 1 ? 1 : 0,
+                        fecha_devolucion_esperada: producto.fecha_devolucion_esperada
+                    };
+                }
+                
+                // Crear objeto colaborador_asignado
+                let colaboradorAsignado = null;
+                if (producto.colaborador_id) {
+                    colaboradorAsignado = {
+                        id: producto.colaborador_id,
+                        nombre: producto.colaborador_nombre,
+                        email: producto.colaborador_email,
+                        rut: producto.colaborador_rut,
+                        cargo: producto.colaborador_cargo,
+                        departamento: producto.colaborador_departamento,
+                        asignacion_id: producto.asignacion_id,
+                        fecha_asignacion: producto.fecha_asignacion,
+                        es_prestamo: producto.es_prestamo === 1 ? 1 : 0
+                    };
+                }
+                
+                return {
+                    ...producto,
+                    estado: getEstadoTexto(producto.id_estado_equipo),
+                    asignacion_activa: asignacionActiva,
+                    colaborador_asignado: colaboradorAsignado,
+                    fecha_baja: producto.fecha_baja,
+                    fecha_donacion: producto.fecha_donacion,
+                    es_prestamo: producto.es_prestamo === 1 ? 1 : 0
+                };
+            });
             
             res.json({
                 success: true,
@@ -147,9 +200,28 @@ const productoController = {
                         p.fecha_creacion,
                         p.bodega_id,
                         b.nombre as bodega_nombre,
-                        b.ubicacion as bodega_ubicacion
-                    FROM [INV].[productos] p WITH (NOLOCK)
-                    LEFT JOIN [INV].[bodegas] b WITH (NOLOCK) ON p.bodega_id = b.id
+                        b.ubicacion as bodega_ubicacion,
+                        -- Campos para filtrar productos dados de baja o donados
+                        db.fecha_baja,
+                        dd.fecha_entrega as fecha_donacion,
+                        -- Datos de asignación activa
+                        a.id as asignacion_id,
+                        a.fecha_asignacion,
+                        a.es_prestamo,
+                        a.fecha_devolucion_esperada,
+                        -- Datos del colaborador
+                        c.id as colaborador_id,
+                        c.nombre as colaborador_nombre,
+                        c.email as colaborador_email,
+                        c.rut as colaborador_rut,
+                        c.cargo as colaborador_cargo,
+                        c.departamento as colaborador_departamento
+                    FROM [INV].[productos] p
+                    LEFT JOIN [INV].[bodegas] b ON p.bodega_id = b.id
+                    LEFT JOIN [INV].[asignaciones] a ON p.id = a.producto_id AND (a.fecha_devolucion IS NULL OR a.fecha_devolucion = '')
+                    LEFT JOIN [INV].[colaboradores] c ON a.colaborador_id = c.id
+                    LEFT JOIN [INV].[disposicion_baja] db ON p.id = db.producto_id
+                    LEFT JOIN [INV].[disposicion_donacion] dd ON p.id = dd.producto_id
                     WHERE p.id = @id
                 `);
 
@@ -157,14 +229,50 @@ const productoController = {
                 return res.status(404).json({ success: false, message: 'Producto no encontrado' });
             }
 
-            const producto = productoResult.recordset[0];
-            producto.estado = getEstadoTexto(producto.id_estado_equipo);
+            const row = productoResult.recordset[0];
+            
+            // Crear objeto asignacion_activa
+            let asignacionActiva = null;
+            if (row.asignacion_id) {
+                asignacionActiva = {
+                    id: row.asignacion_id,
+                    fecha_asignacion: row.fecha_asignacion,
+                    es_prestamo: row.es_prestamo === 1 ? 1 : 0,
+                    fecha_devolucion_esperada: row.fecha_devolucion_esperada
+                };
+            }
+            
+            // Crear objeto colaborador_asignado
+            let colaboradorAsignado = null;
+            if (row.colaborador_id) {
+                colaboradorAsignado = {
+                    id: row.colaborador_id,
+                    nombre: row.colaborador_nombre,
+                    email: row.colaborador_email,
+                    rut: row.colaborador_rut,
+                    cargo: row.colaborador_cargo,
+                    departamento: row.colaborador_departamento,
+                    asignacion_id: row.asignacion_id,
+                    fecha_asignacion: row.fecha_asignacion,
+                    es_prestamo: row.es_prestamo === 1 ? 1 : 0
+                };
+            }
+            
+            const producto = {
+                ...row,
+                estado: getEstadoTexto(row.id_estado_equipo),
+                asignacion_activa: asignacionActiva,
+                colaborador_asignado: colaboradorAsignado,
+                fecha_baja: row.fecha_baja,
+                fecha_donacion: row.fecha_donacion,
+                es_prestamo: row.es_prestamo === 1 ? 1 : 0
+            };
 
             const mantencionesResult = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .query(`
                     SELECT id, producto_id, tipo, fecha_inicio, fecha_fin, responsable, descripcion, costo
-                    FROM [INV].[mantenciones] WITH (NOLOCK)
+                    FROM [INV].[mantenciones]
                     WHERE producto_id = @producto_id
                     ORDER BY fecha_inicio DESC
                 `);
@@ -174,7 +282,7 @@ const productoController = {
                 .query(`
                     SELECT id, producto_id, nombre_usuario, fecha_asignacion, fecha_devolucion,
                            comentario, motivo, estado, email, rut_usuario, cargo, departamento
-                    FROM [INV].[producto_uso] WITH (NOLOCK)
+                    FROM [INV].[producto_uso]
                     WHERE producto_id = @producto_id
                     ORDER BY fecha_asignacion DESC
                 `);
@@ -373,7 +481,7 @@ const productoController = {
                     ISNULL(SUM(CASE WHEN id_estado_equipo = 5 THEN 1 ELSE 0 END), 0) as noDisponibles,
                     ISNULL(SUM(precio), 0) as valorTotal,
                     ISNULL(AVG(precio), 0) as precioPromedio
-                FROM [INV].[productos] WITH (NOLOCK)
+                FROM [INV].[productos]
                 WHERE id_estado_equipo != 6
             `);
 
@@ -425,7 +533,7 @@ const productoController = {
                 .query(`
                     SELECT id, nombre, marca, modelo, numero_serie, id_estado_equipo, 
                            condicion, precio, codigo_qr, bodega_id
-                    FROM [INV].[productos] WITH (NOLOCK)
+                    FROM [INV].[productos]
                     WHERE id = @id
                 `);
 
@@ -550,7 +658,7 @@ const productoController = {
             const result = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .query(`
-                    SELECT * FROM [INV].[mantenciones] WITH (NOLOCK)
+                    SELECT * FROM [INV].[mantenciones]
                     WHERE producto_id = @producto_id
                     ORDER BY fecha_inicio DESC
                 `);
@@ -781,7 +889,7 @@ const productoController = {
                 
                 const producto = productoInfo.recordset[0];
                 
-                // Crear tabla si no existe (sin campo contacto ni descripcion)
+                // Crear tabla si no existe
                 try {
                     await transaction.request().query(`
                         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='disposicion_laboratorio' AND xtype='U')
@@ -801,7 +909,7 @@ const productoController = {
                     console.log('⚠️ Tabla ya existe o error:', tableError.message);
                 }
                 
-                // Insertar en disposicion_laboratorio (sin contacto ni descripcion)
+                // Insertar en disposicion_laboratorio
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .input('laboratorio_nombre', sql.NVarChar, laboratorio_nombre)
@@ -818,7 +926,7 @@ const productoController = {
                         )
                     `);
                 
-                // Cambiar estado a NO DISPONIBLE (5) - SIN tocar bodega_id
+                // Cambiar estado a NO DISPONIBLE (5)
                 await transaction.request()
                     .input('id', sql.Int, producto_id)
                     .input('id_estado_equipo', sql.Int, 5)
@@ -869,7 +977,7 @@ const productoController = {
             const pool = await getConnection();
             const result = await pool.request()
                 .query(`
-                    SELECT DISTINCT marca FROM [INV].[productos] WITH (NOLOCK)
+                    SELECT DISTINCT marca FROM [INV].[productos]
                     WHERE marca IS NOT NULL AND marca != '' AND id_estado_equipo != 6
                     ORDER BY marca
                 `);
@@ -878,6 +986,41 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en getMarcas:', error);
+            res.json({ success: true, data: [] });
+        }
+    },
+
+    // ============================================
+    // NUEVO MÉTODO - OBTENER BODEGAS
+    // ============================================
+    getBodegas: async (req, res) => {
+        try {
+            const pool = await getConnection();
+            const result = await pool.request()
+                .query('SELECT id, nombre FROM INV.bodegas ORDER BY nombre');
+            
+            res.json({ success: true, data: result.recordset });
+        } catch (error) {
+            console.error('❌ Error en getBodegas:', error);
+            res.json({ success: true, data: [] });
+        }
+    },
+
+    // ============================================
+    // NUEVO MÉTODO - OBTENER ESTADOS
+    // ============================================
+    getEstados: async (req, res) => {
+        try {
+            const estados = [
+                { id: 1, nombre: 'DISPONIBLE' },
+                { id: 2, nombre: 'ASIGNADO' },
+                { id: 3, nombre: 'EN MANTENCIÓN' },
+                { id: 4, nombre: 'EN REPARACIÓN' },
+                { id: 5, nombre: 'NO DISPONIBLE' }
+            ];
+            res.json({ success: true, data: estados });
+        } catch (error) {
+            console.error('❌ Error en getEstados:', error);
             res.json({ success: true, data: [] });
         }
     },
@@ -960,7 +1103,7 @@ const productoController = {
             const result = await pool.request()
                 .input('producto_id', sql.Int, id)
                 .query(`
-                    SELECT * FROM [INV].[producto_uso] WITH (NOLOCK)
+                    SELECT * FROM [INV].[producto_uso]
                     WHERE producto_id = @producto_id
                     ORDER BY fecha_asignacion DESC
                 `);
@@ -986,7 +1129,7 @@ const productoController = {
             const result = await pool.request()
                 .input('id', sql.Int, id)
                 .query(`
-                    SELECT id, nombre, codigo_qr FROM [INV].[productos] WITH (NOLOCK)
+                    SELECT id, nombre, codigo_qr FROM [INV].[productos]
                     WHERE id = @id
                 `);
 
@@ -1081,6 +1224,143 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error finalizando mantención:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    // ============================================
+    // MÉTODO PARA ASIGNAR PRODUCTO A COLABORADOR
+    // ============================================
+    asignarProducto: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { 
+                colaborador_id, 
+                motivo, 
+                observaciones, 
+                fecha_asignacion,
+                es_prestamo,
+                fecha_devolucion_esperada 
+            } = req.body;
+
+            console.log('📥 POST /api/productos/asignar:', { 
+                producto_id: id, 
+                colaborador_id, 
+                es_prestamo 
+            });
+
+            if (!colaborador_id) {
+                return res.status(400).json({ success: false, message: 'El colaborador es requerido' });
+            }
+
+            const pool = await getConnection();
+            const transaction = pool.transaction();
+            await transaction.begin();
+
+            try {
+                // Verificar producto
+                const productoResult = await transaction.request()
+                    .input('id', sql.Int, id)
+                    .query(`
+                        SELECT id, nombre, id_estado_equipo 
+                        FROM INV.productos WHERE id = @id
+                    `);
+
+                if (productoResult.recordset.length === 0) {
+                    await transaction.rollback();
+                    return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+                }
+
+                const producto = productoResult.recordset[0];
+
+                if (producto.id_estado_equipo !== 1) {
+                    await transaction.rollback();
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: `No se puede asignar. El producto está ${getEstadoTexto(producto.id_estado_equipo)}` 
+                    });
+                }
+
+                // Verificar colaborador
+                const colaboradorResult = await transaction.request()
+                    .input('id', sql.Int, colaborador_id)
+                    .query(`
+                        SELECT id, nombre, email, rut
+                        FROM INV.colaboradores WHERE id = @id AND estado = 'ACTIVO'
+                    `);
+
+                if (colaboradorResult.recordset.length === 0) {
+                    await transaction.rollback();
+                    return res.status(404).json({ success: false, message: 'Colaborador no encontrado o inactivo' });
+                }
+
+                const colaborador = colaboradorResult.recordset[0];
+
+                // Finalizar asignaciones activas anteriores
+                await transaction.request()
+                    .input('producto_id', sql.Int, id)
+                    .query(`
+                        UPDATE INV.asignaciones 
+                        SET fecha_devolucion = GETDATE()
+                        WHERE producto_id = @producto_id AND (fecha_devolucion IS NULL OR fecha_devolucion = '')
+                    `);
+
+                // Crear nueva asignación
+                const esPrestamoValue = (es_prestamo === true || es_prestamo === 1 || es_prestamo === '1') ? 1 : 0;
+                
+                const asignacionResult = await transaction.request()
+                    .input('producto_id', sql.Int, id)
+                    .input('colaborador_id', sql.Int, colaborador_id)
+                    .input('fecha_asignacion', sql.DateTime, fecha_asignacion || new Date())
+                    .input('motivo', sql.NVarChar, motivo || (esPrestamoValue ? 'Préstamo de equipo' : 'Asignación de equipo'))
+                    .input('observaciones', sql.NVarChar, observaciones || '')
+                    .input('es_prestamo', sql.Bit, esPrestamoValue)
+                    .input('fecha_devolucion_esperada', sql.DateTime, esPrestamoValue ? (fecha_devolucion_esperada || null) : null)
+                    .query(`
+                        INSERT INTO INV.asignaciones (
+                            producto_id, colaborador_id, fecha_asignacion, 
+                            motivo, observaciones, es_prestamo, fecha_devolucion_esperada
+                        )
+                        OUTPUT INSERTED.*
+                        VALUES (
+                            @producto_id, @colaborador_id, @fecha_asignacion,
+                            @motivo, @observaciones, @es_prestamo, @fecha_devolucion_esperada
+                        )
+                    `);
+
+                const nuevaAsignacion = asignacionResult.recordset[0];
+
+                // Actualizar estado del producto
+                await transaction.request()
+                    .input('id', sql.Int, id)
+                    .input('id_estado_equipo', sql.Int, 2)
+                    .query(`
+                        UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id
+                    `);
+
+                await transaction.commit();
+
+                console.log(`✅ Asignación creada - ID: ${nuevaAsignacion.id}, es_prestamo: ${esPrestamoValue}`);
+
+                res.status(201).json({
+                    success: true,
+                    message: esPrestamoValue ? 'Préstamo registrado correctamente' : 'Producto asignado correctamente',
+                    data: nuevaAsignacion,
+                    producto: {
+                        id: producto.id,
+                        nombre: producto.nombre,
+                        estado: 'ASIGNADO',
+                        es_prestamo: esPrestamoValue
+                    }
+                });
+
+            } catch (error) {
+                await transaction.rollback();
+                throw error;
+            }
+
+        } catch (error) {
+            console.error('❌ Error en asignarProducto:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     }

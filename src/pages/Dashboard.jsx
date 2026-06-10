@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CORREGIDA Y ACTUALIZADA
+// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CORREGIDA (SIN PANTALLA EN BLANCO)
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -162,19 +162,57 @@ const bodegasService = {
   }
 };
 
+// ============================================
+// SERVICIO DE PRÉSTAMOS - CORREGIDO CON MANEJO DE ERRORES
+// ============================================
 const prestamosService = {
   getStatsPrestamos: async () => {
     try {
+      console.log('📊 Obteniendo estadísticas de préstamos...');
       const response = await api.get('/asignaciones/activas');
+      
       let asignaciones = [];
+      
+      // Manejar diferentes estructuras de respuesta
       if (response.data?.data && Array.isArray(response.data.data)) {
         asignaciones = response.data.data;
       } else if (Array.isArray(response.data)) {
         asignaciones = response.data;
+      } else if (response.data?.asignaciones && Array.isArray(response.data.asignaciones)) {
+        asignaciones = response.data.asignaciones;
+      } else {
+        console.warn('⚠️ Estructura de datos no reconocida:', response.data);
+        return { total: 0, activos: 0 };
       }
-      const prestamos = asignaciones.filter(a => a.es_prestamo === true || a.es_prestamo === 1);
-      const activos = prestamos.filter(p => !p.fecha_devolucion).length;
+      
+      // Verificar que asignaciones sea un array
+      if (!Array.isArray(asignaciones)) {
+        console.warn('⚠️ asignaciones no es un array:', asignaciones);
+        return { total: 0, activos: 0 };
+      }
+      
+      // Filtrar préstamos de manera segura (manejar cuando es_prestamo no existe)
+      const prestamos = asignaciones.filter(a => {
+        if (a && typeof a === 'object') {
+          if (a.es_prestamo !== undefined) {
+            return a.es_prestamo === true || a.es_prestamo === 1 || a.es_prestamo === 'true';
+          }
+          return false;
+        }
+        return false;
+      });
+      
+      const activos = prestamos.filter(p => {
+        if (p && typeof p === 'object') {
+          return !p.fecha_devolucion;
+        }
+        return false;
+      }).length;
+      
+      console.log(`📊 Préstamos encontrados: ${prestamos.length}, activos: ${activos}`);
+      
       return { total: prestamos.length, activos };
+      
     } catch (error) {
       console.error("Error obteniendo préstamos:", error);
       return { total: 0, activos: 0 };
@@ -183,7 +221,7 @@ const prestamosService = {
 };
 
 // ============================================
-// AUTH SERVICE - CORREGIDO
+// AUTH SERVICE
 // ============================================
 const authService = {
   getCurrentUser: () => {
@@ -510,7 +548,7 @@ const PerfilDialog = ({ open, onClose, user, onProfileUpdate, showSnackbar }) =>
 };
 
 // ============================================
-// DIÁLOGO DE CAMBIO DE CONTRASEÑA - CORREGIDO
+// DIÁLOGO DE CAMBIO DE CONTRASEÑA
 // ============================================
 const CambiarPasswordDialog = ({ open, onClose, showSnackbar, onLogout }) => {
   const [passwordData, setPasswordData] = useState({
@@ -735,6 +773,7 @@ const Dashboard = () => {
   const [productosCache, setProductosCache] = useState([]);
   const [bodegasCache, setBodegasCache] = useState([]);
   const [exporting, setExporting] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const isMountedRef = useRef(true);
 
   const menuItems = [
@@ -791,6 +830,7 @@ const Dashboard = () => {
       setLoading(true);
     }
     setApiError(false);
+    setDataLoaded(false);
 
     try {
       const productos = await productosService.getProductos();
@@ -801,13 +841,21 @@ const Dashboard = () => {
       if (!isMountedRef.current) return;
       setStats(newStats);
       
-      const prestamosStats = await prestamosService.getStatsPrestamos();
+      // Llamada segura a préstamos - SI FALLA NO ROMPE LA PÁGINA
+      let prestamosStats = { total: 0, activos: 0 };
+      try {
+        prestamosStats = await prestamosService.getStatsPrestamos();
+      } catch (prestamoError) {
+        console.warn('Error obteniendo préstamos:', prestamoError);
+      }
       if (!isMountedRef.current) return;
       setStatsPrestamos(prestamosStats);
       
       const bodegas = await bodegasService.getBodegas();
       if (!isMountedRef.current) return;
       setBodegasCache(bodegas);
+      
+      setDataLoaded(true);
       
       if (showRefresh && isMountedRef.current) {
         showSnackbar("Datos actualizados", "success");
@@ -816,6 +864,7 @@ const Dashboard = () => {
       console.error("Error cargando datos:", error);
       if (isMountedRef.current) {
         setApiError(true);
+        setDataLoaded(true);
         showSnackbar("Error al cargar los datos", "error");
       }
     } finally {
@@ -853,12 +902,35 @@ const Dashboard = () => {
 
   useEffect(() => {
     const intervalo = setInterval(() => {
-      if (!loading && !refreshing && isMountedRef.current) {
+      if (!loading && !refreshing && isMountedRef.current && dataLoaded) {
         fetchDashboardData(false);
       }
     }, 60000);
     return () => clearInterval(intervalo);
-  }, [loading, refreshing, fetchDashboardData]);
+  }, [loading, refreshing, fetchDashboardData, dataLoaded]);
+
+  // Error boundary para evitar que la app se rompa
+  useEffect(() => {
+    const handleError = (event) => {
+      console.error('Error global capturado:', event.error);
+      if (event.error?.message?.includes('removeChild') || event.error?.message?.includes('es_prestamo')) {
+        console.warn('Error recuperable - reiniciando estado...');
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            setStatsPrestamos({ total: 0, activos: 0 });
+            setLoading(false);
+            setDataLoaded(true);
+          }
+        }, 100);
+      }
+    };
+    
+    window.addEventListener('error', handleError);
+    
+    return () => {
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
 
   // INICIALIZACIÓN PRINCIPAL
   useEffect(() => {
@@ -938,10 +1010,12 @@ const Dashboard = () => {
     shape: { borderRadius: 14 },
   });
 
-  if (!user && loading) {
+  // Mostrar pantalla de carga mientras se cargan los datos iniciales
+  if (loading && !dataLoaded) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Cargando datos...</Typography>
       </Box>
     );
   }
@@ -1118,10 +1192,9 @@ const Dashboard = () => {
               </Typography>
               
               <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                {!loading && stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
-                {!loading && stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
-                {!loading && statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
-                {loading && `Cargando datos del inventario...`}
+                {stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
+                {stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
+                {statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
               </Typography>
               
               <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
@@ -1145,16 +1218,16 @@ const Dashboard = () => {
 
             <Grid container spacing={{ xs: 2, sm: 3 }}>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading} />
+                <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} change={`${stats.totalActivos} activos`} color="#2563EB" onClick={() => navigate("/productos")} loading={loading && !dataLoaded} />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={CheckCircleIcon} title="DISPONIBLES" value={stats.disponibles} color="#16A34A" loading={loading} />
+                <StatCard icon={CheckCircleIcon} title="DISPONIBLES" value={stats.disponibles} color="#16A34A" loading={loading && !dataLoaded} />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={AssignmentIcon} title="ASIGNADOS" value={stats.asignados} color="#9333EA" onClick={() => navigate("/asignacion")} loading={loading} />
+                <StatCard icon={AssignmentIcon} title="ASIGNADOS" value={stats.asignados} color="#9333EA" onClick={() => navigate("/asignacion")} loading={loading && !dataLoaded} />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
-                <StatCard icon={ReceiptIcon} title="PRÉSTAMOS" value={statsPrestamos.activos} change={`${statsPrestamos.total} totales`} color="#F59E0B" onClick={() => navigate("/asignacion")} loading={loading} />
+                <StatCard icon={ReceiptIcon} title="PRÉSTAMOS" value={statsPrestamos.activos} change={`${statsPrestamos.total} totales`} color="#F59E0B" onClick={() => navigate("/asignacion")} loading={loading && !dataLoaded} />
               </Grid>
             </Grid>
 

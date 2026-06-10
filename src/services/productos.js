@@ -1,4 +1,4 @@
-// src/services/productos.js - VERSIÓN COMPLETA CON FILTROS CORREGIDOS Y LABORATORIO
+// src/services/productos.js - VERSIÓN COMPLETA CON BÚSQUEDA POR COLABORADOR
 
 import api from './api';
 
@@ -10,7 +10,7 @@ export const productosService = {
     // ============================================
     
     /**
-     * Listar todos los productos con filtros
+     * Listar todos los productos con filtros (incluye búsqueda por colaborador)
      */
     getProductos: async (search = '', filters = {}) => {
         try {
@@ -18,7 +18,7 @@ export const productosService = {
             
             const params = new URLSearchParams();
             
-            // Búsqueda por texto
+            // Búsqueda por texto (puede incluir nombre de colaborador)
             if (search && search.trim()) {
                 params.append('search', search.trim());
             }
@@ -72,15 +72,44 @@ export const productosService = {
                     fecha_donacion: producto.fecha_donacion || null
                 }));
                 
-                console.log(`✅ ${productos.length} productos procesados`);
-                console.log(`📊 Disponibles: ${productos.filter(p => p.id_estado_equipo === 1).length}`);
-                console.log(`📊 Asignados: ${productos.filter(p => p.id_estado_equipo === 2).length}`);
-                console.log(`📊 En Mantención: ${productos.filter(p => p.id_estado_equipo === 3).length}`);
-                console.log(`📊 En Reparación: ${productos.filter(p => p.id_estado_equipo === 4).length}`);
-                console.log(`📊 No Disponibles: ${productos.filter(p => p.id_estado_equipo === 5).length}`);
-                console.log(`📊 Dados de Baja: ${productos.filter(p => p.id_estado_equipo === 6).length}`);
+                // Aplicar filtro por colaborador en el frontend (búsqueda local)
+                let filteredProductos = productos;
                 
-                return productos;
+                if (search && search.trim()) {
+                    const searchTerm = search.toLowerCase().trim();
+                    filteredProductos = productos.filter(producto => {
+                        // Búsqueda en campos del producto
+                        const nombre = (producto.nombre || '').toLowerCase();
+                        const marca = (producto.marca || '').toLowerCase();
+                        const modelo = (producto.modelo || '').toLowerCase();
+                        const serie = (producto.numero_serie || '').toLowerCase();
+                        
+                        // Búsqueda en colaborador asignado
+                        const colaboradorNombre = (producto.colaborador_asignado?.nombre || '').toLowerCase();
+                        const colaboradorRut = (producto.colaborador_asignado?.rut || '').toLowerCase();
+                        const colaboradorEmail = (producto.colaborador_asignado?.email || '').toLowerCase();
+                        const colaboradorCargo = (producto.colaborador_asignado?.cargo || '').toLowerCase();
+                        
+                        return nombre.includes(searchTerm) ||
+                               marca.includes(searchTerm) ||
+                               modelo.includes(searchTerm) ||
+                               serie.includes(searchTerm) ||
+                               colaboradorNombre.includes(searchTerm) ||
+                               colaboradorRut.includes(searchTerm) ||
+                               colaboradorEmail.includes(searchTerm) ||
+                               colaboradorCargo.includes(searchTerm);
+                    });
+                }
+                
+                console.log(`✅ ${filteredProductos.length} productos procesados (${productos.length} totales, filtrados por: "${search}")`);
+                console.log(`📊 Disponibles: ${filteredProductos.filter(p => p.id_estado_equipo === 1).length}`);
+                console.log(`📊 Asignados: ${filteredProductos.filter(p => p.id_estado_equipo === 2).length}`);
+                console.log(`📊 En Mantención: ${filteredProductos.filter(p => p.id_estado_equipo === 3).length}`);
+                console.log(`📊 En Reparación: ${filteredProductos.filter(p => p.id_estado_equipo === 4).length}`);
+                console.log(`📊 No Disponibles: ${filteredProductos.filter(p => p.id_estado_equipo === 5).length}`);
+                console.log(`📊 Dados de Baja: ${filteredProductos.filter(p => p.id_estado_equipo === 6).length}`);
+                
+                return filteredProductos;
             }
             
             return [];

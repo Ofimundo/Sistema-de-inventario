@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA Y CORREGIDA
+// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA CORREGIDA (SIN ELIMINAR NADA)
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -7,7 +7,9 @@ const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const multer = require('multer');
 
-// Configurar directorio para documentos generados
+// ============================================
+// CONFIGURACIÓN DE DIRECTORIOS
+// ============================================
 const DOCS_DIR = path.join(__dirname, '../uploads/documentos');
 const DOCUMENTOS_FISICOS_DIR = path.join(__dirname, '../uploads/documentos_fisicos');
 
@@ -130,7 +132,7 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN
+// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN (CORREGIDA)
 // ============================================
 async function generarActaAsignacion(datos) {
     console.log('🔧 generarActaAsignacion llamado con ID:', datos.id_asignacion);
@@ -214,17 +216,18 @@ async function generarActaAsignacion(datos) {
             doc.moveTo(40, tableTop + 15).lineTo(560, tableTop + 15).stroke();
 
             let currentY = tableTop + 25;
-            productos.forEach((producto, index) => {
+            const productosArray = Array.isArray(productos) ? productos : [productos];
+            productosArray.forEach((producto, index) => {
                 doc.font('Helvetica').fontSize(9)
                    .text((index + 1).toString(), colPositions.num, currentY)
-                   .text(producto.tipo || 'Equipo', colPositions.tipo, currentY)
+                   .text(producto.tipo || producto.nombre || 'Equipo', colPositions.tipo, currentY)
                    .text(producto.marca || 'N/A', colPositions.marca, currentY)
                    .text(producto.modelo || 'N/A', colPositions.modelo, currentY)
                    .text(producto.numero_serie || 'N/A', colPositions.serie, currentY)
                    .text(producto.condicion || 'NUEVO', colPositions.estado, currentY)
                    .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
                 currentY += 20;
-                if (currentY > 700 && index < productos.length - 1) { doc.addPage(); currentY = 50; }
+                if (currentY > 700 && index < productosArray.length - 1) { doc.addPage(); currentY = 50; }
             });
             doc.moveDown(2);
 
@@ -285,7 +288,7 @@ async function generarActaAsignacion(datos) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN
+// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN (CORREGIDA)
 // ============================================
 function generarActaRecepcion(datos) {
     console.log('🔧 generarActaRecepcion llamado con ID:', datos.id_asignacion);
@@ -366,17 +369,18 @@ function generarActaRecepcion(datos) {
             doc.moveTo(40, tableTop + 15).lineTo(560, tableTop + 15).stroke();
 
             let currentY = tableTop + 25;
-            productos.forEach((producto, index) => {
+            const productosArray = Array.isArray(productos) ? productos : [productos];
+            productosArray.forEach((producto, index) => {
                 doc.font('Helvetica').fontSize(9)
                    .text((index + 1).toString(), colPositions.num, currentY)
-                   .text(producto.tipo || 'Equipo', colPositions.tipo, currentY)
+                   .text(producto.tipo || producto.nombre || 'Equipo', colPositions.tipo, currentY)
                    .text(producto.marca || 'N/A', colPositions.marca, currentY)
                    .text(producto.modelo || 'N/A', colPositions.modelo, currentY)
                    .text(producto.numero_serie || 'N/A', colPositions.serie, currentY)
                    .text(condicion_entrega || 'BUENO', colPositions.estado, currentY)
                    .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
                 currentY += 20;
-                if (currentY > 700 && index < productos.length - 1) { doc.addPage(); currentY = 50; }
+                if (currentY > 700 && index < productosArray.length - 1) { doc.addPage(); currentY = 50; }
             });
             doc.moveDown(2);
 
@@ -434,7 +438,7 @@ function generarActaRecepcion(datos) {
 }
 
 // ============================================
-// ENDPOINTS
+// ENDPOINTS - GET
 // ============================================
 
 // GET - Obtener asignaciones activas
@@ -643,7 +647,7 @@ router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
     }
 });
 
-// GET - Descargar documento por filename
+// GET - Descargar documento por filename (CORREGIDO)
 router.get('/descargar/:filename', (req, res) => {
     try {
         const { filename } = req.params;
@@ -657,20 +661,20 @@ router.get('/descargar/:filename', (req, res) => {
         const filepath = path.join(DOCS_DIR, safeFilename);
         
         if (!fs.existsSync(filepath)) {
-            // Buscar archivo alternativo
+            // Buscar archivo alternativo por ID
             const files = fs.readdirSync(DOCS_DIR);
-            const pattern = safeFilename.split('_').slice(0, 3).join('_');
-            const foundFile = files.find(f => f.includes(pattern) && f.endsWith('.pdf'));
-            
-            if (foundFile) {
-                const foundPath = path.join(DOCS_DIR, foundFile);
-                res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
-                const fileStream = fs.createReadStream(foundPath);
-                fileStream.pipe(res);
-                return;
+            const idMatch = safeFilename.match(/\d+/);
+            if (idMatch) {
+                const foundFile = files.find(f => f.includes(`acta_asignacion_${idMatch[0]}`) && f.endsWith('.pdf'));
+                if (foundFile) {
+                    const foundPath = path.join(DOCS_DIR, foundFile);
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
+                    const fileStream = fs.createReadStream(foundPath);
+                    fileStream.pipe(res);
+                    return;
+                }
             }
-            
             return res.status(404).json({ success: false, message: 'Documento no encontrado' });
         }
         
@@ -688,10 +692,11 @@ router.get('/descargar/:filename', (req, res) => {
     }
 });
 
-// POST - Generar acta de asignación
+// POST - Generar acta de asignación (MODIFICADO PARA DEVOLVER PDF DIRECTO)
 router.post('/generar-acta-asignacion', async (req, res) => {
     try {
         console.log('📥 POST /api/asignaciones/generar-acta-asignacion');
+        console.log('Body recibido:', JSON.stringify(req.body, null, 2));
         
         const {
             id_asignacion,
@@ -709,14 +714,16 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             return res.json({ success: true, message: 'Préstamo sin documento', es_prestamo: true });
         }
         
-        if (!colaborador || !productos || productos.length === 0) {
-            return res.status(400).json({ success: false, message: 'Datos incompletos' });
+        if (!colaborador || (!productos && !req.body.producto)) {
+            return res.status(400).json({ success: false, message: 'Datos incompletos: faltan colaborador o producto' });
         }
+        
+        const productosArray = productos || (req.body.producto ? [req.body.producto] : null);
         
         const pdfBuffer = await generarActaAsignacion({
             id_asignacion: id_asignacion || Date.now(),
             colaborador,
-            productos,
+            productos: productosArray,
             fecha_asignacion: fecha_asignacion || new Date(),
             motivo: motivo || 'Asignación de equipo',
             observaciones: observaciones || 'Sin observaciones',
@@ -729,13 +736,18 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             throw new Error('No se pudo generar el PDF');
         }
         
-        const filename = `acta_asignacion_${id_asignacion || Date.now()}.pdf`;
+        // Guardar en disco (opcional, para respaldo)
+        const filename = `acta_asignacion_${id_asignacion}_${Date.now()}.pdf`;
         const filepath = path.join(DOCS_DIR, filename);
         fs.writeFileSync(filepath, pdfBuffer);
-        
         console.log(`✅ Acta guardada: ${filename} (${pdfBuffer.length} bytes)`);
         
-        res.json({ success: true, message: 'Acta generada exitosamente', filename: filename });
+        // ============================================
+        // IMPORTANTE: DEVOLVER EL PDF DIRECTAMENTE
+        // ============================================
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(pdfBuffer);
         
     } catch (error) {
         console.error('❌ Error:', error);
@@ -743,7 +755,7 @@ router.post('/generar-acta-asignacion', async (req, res) => {
     }
 });
 
-// POST - Generar acta de recepción
+// POST - Generar acta de recepción (CORREGIDO)
 router.post('/generar-acta-recepcion', async (req, res) => {
     try {
         console.log('📥 POST /api/asignaciones/generar-acta-recepcion');
@@ -765,14 +777,16 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             return res.json({ success: true, message: 'Préstamo sin documento', es_prestamo: true });
         }
         
-        if (!colaborador || !productos || productos.length === 0) {
+        if (!colaborador || (!productos && !req.body.producto)) {
             return res.status(400).json({ success: false, message: 'Datos incompletos' });
         }
+        
+        const productosArray = productos || (req.body.producto ? [req.body.producto] : null);
         
         const pdfBuffer = await generarActaRecepcion({
             id_asignacion: id_asignacion || Date.now(),
             colaborador,
-            productos,
+            productos: productosArray,
             fecha_recepcion: fecha_recepcion || new Date(),
             motivo: motivo || 'Devolución de equipo',
             observaciones: observaciones || 'Sin observaciones',
@@ -786,7 +800,7 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             throw new Error('No se pudo generar el PDF');
         }
         
-        const filename = `acta_recepcion_${id_asignacion || Date.now()}.pdf`;
+        const filename = `acta_recepcion_${id_asignacion || Date.now()}_${Date.now()}.pdf`;
         const filepath = path.join(DOCS_DIR, filename);
         fs.writeFileSync(filepath, pdfBuffer);
         
@@ -800,7 +814,7 @@ router.post('/generar-acta-recepcion', async (req, res) => {
     }
 });
 
-// GET - Descargar acta de asignación por ID
+// GET - Descargar acta de asignación por ID (CORREGIDO)
 router.get('/descargar-acta/:asignacionId', async (req, res) => {
     try {
         const { asignacionId } = req.params;
@@ -811,14 +825,18 @@ router.get('/descargar-acta/:asignacionId', async (req, res) => {
         }
         
         const files = fs.readdirSync(DOCS_DIR);
+        console.log(`📁 Archivos disponibles:`, files);
+        
         const pattern = `acta_asignacion_${asignacionId}`;
         const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
         
         if (!foundFile) {
-            return res.status(404).json({ success: false, message: 'Acta no encontrada' });
+            return res.status(404).json({ success: false, message: `Acta no encontrada para ID: ${asignacionId}` });
         }
         
         const filepath = path.join(DOCS_DIR, foundFile);
+        console.log(`✅ Sirviendo archivo: ${foundFile}`);
+        
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${foundFile}"`);
         
@@ -831,7 +849,7 @@ router.get('/descargar-acta/:asignacionId', async (req, res) => {
     }
 });
 
-// GET - Descargar acta de recepción por ID
+// GET - Descargar acta de recepción por ID (CORREGIDO)
 router.get('/descargar-acta-recepcion/:asignacionId', async (req, res) => {
     try {
         const { asignacionId } = req.params;
@@ -870,7 +888,6 @@ router.post('/generar-pdf/:asignacionId', async (req, res) => {
         
         const pool = await getConnection();
         
-        // Obtener datos de la asignación
         const result = await pool.request()
             .input('id', sql.Int, asignacionId)
             .query(`
@@ -888,18 +905,19 @@ router.post('/generar-pdf/:asignacionId', async (req, res) => {
         
         const data = result.recordset[0];
         
-        // Generar PDF
         const doc = new PDFDocument({ margin: 50, size: 'A4' });
         const buffers = [];
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => {
             const pdfData = Buffer.concat(buffers);
+            const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
+            const filepath = path.join(DOCS_DIR, filename);
+            fs.writeFileSync(filepath, pdfData);
             res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="acta_asignacion_${asignacionId}.pdf"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.send(pdfData);
         });
         
-        // Contenido del PDF
         doc.fontSize(18).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' });
         doc.moveDown();
         doc.fontSize(10).text(`ID Asignación: ${asignacionId}`);
@@ -961,8 +979,11 @@ router.get('/descargar-pdf/:asignacionId', async (req, res) => {
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => {
             const pdfData = Buffer.concat(buffers);
+            const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
+            const filepath = path.join(DOCS_DIR, filename);
+            fs.writeFileSync(filepath, pdfData);
             res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="acta_asignacion_${asignacionId}.pdf"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.send(pdfData);
         });
         
@@ -1037,6 +1058,7 @@ router.post('/', async (req, res) => {
     
     try {
         console.log('📥 POST /api/asignaciones');
+        console.log('Body recibido:', JSON.stringify(req.body, null, 2));
         
         const { 
             producto_id, 
@@ -1119,40 +1141,45 @@ router.post('/', async (req, res) => {
         let documentoGenerado = null;
         
         if (!esPrestamoValue) {
-            const documentoData = {
-                id_asignacion: asignacionId,
-                colaborador: {
-                    nombre: colaborador.nombre,
-                    rut: colaborador.rut,
-                    email: colaborador.email,
-                    cargo: colaborador.cargo,
-                    departamento: colaborador.departamento,
-                    direccion: colaborador.direccion || EMPRESA.domicilio,
-                    fecha_nacimiento: colaborador.fecha_nacimiento || '1990-01-01'
-                },
-                productos: [{
-                    tipo: 'Equipo',
-                    nombre: producto.nombre,
-                    marca: producto.marca || 'N/A',
-                    modelo: producto.modelo || 'N/A',
-                    numero_serie: producto.numero_serie || 'N/A',
-                    condicion: producto.condicion || 'NUEVO',
-                    cantidad: 1
-                }],
-                fecha_asignacion: fechaAsignacionValue,
-                motivo: motivo || 'Asignación de equipo',
-                observaciones: observaciones || 'Sin observaciones',
-                firma_trabajador: firma_trabajador || colaborador.nombre,
-                firma_gerente: firma_gerente || EMPRESA.representante_legal,
-                es_prestamo: false
-            };
-            
-            const pdfBuffer = await generarActaAsignacion(documentoData);
-            if (pdfBuffer && pdfBuffer.length > 0) {
-                const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
-                const filepath = path.join(DOCS_DIR, filename);
-                fs.writeFileSync(filepath, pdfBuffer);
-                documentoGenerado = { filename: filename };
+            try {
+                const documentoData = {
+                    id_asignacion: asignacionId,
+                    colaborador: {
+                        nombre: colaborador.nombre,
+                        rut: colaborador.rut,
+                        email: colaborador.email,
+                        cargo: colaborador.cargo,
+                        departamento: colaborador.departamento,
+                        direccion: colaborador.direccion || EMPRESA.domicilio,
+                        fecha_nacimiento: colaborador.fecha_nacimiento || '1990-01-01'
+                    },
+                    productos: [{
+                        tipo: 'Equipo',
+                        nombre: producto.nombre,
+                        marca: producto.marca || 'N/A',
+                        modelo: producto.modelo || 'N/A',
+                        numero_serie: producto.numero_serie || 'N/A',
+                        condicion: producto.condicion || 'NUEVO',
+                        cantidad: 1
+                    }],
+                    fecha_asignacion: fechaAsignacionValue,
+                    motivo: motivo || 'Asignación de equipo',
+                    observaciones: observaciones || 'Sin observaciones',
+                    firma_trabajador: firma_trabajador || colaborador.nombre,
+                    firma_gerente: firma_gerente || EMPRESA.representante_legal,
+                    es_prestamo: false
+                };
+                
+                const pdfBuffer = await generarActaAsignacion(documentoData);
+                if (pdfBuffer && pdfBuffer.length > 0) {
+                    const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
+                    const filepath = path.join(DOCS_DIR, filename);
+                    fs.writeFileSync(filepath, pdfBuffer);
+                    documentoGenerado = { filename: filename };
+                    console.log(`✅ Acta generada automáticamente: ${filename}`);
+                }
+            } catch (pdfError) {
+                console.error('⚠️ Error generando acta automática:', pdfError.message);
             }
         }
         
@@ -1240,39 +1267,44 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
         let documentoGenerado = null;
         
         if (!esPrestamoValue) {
-            const recepcionData = {
-                id_asignacion: asignacionIdNum,
-                colaborador: {
-                    nombre: asignacion.colaborador_nombre,
-                    rut: asignacion.colaborador_rut,
-                    email: asignacion.colaborador_email,
-                    cargo: asignacion.colaborador_cargo,
-                    departamento: asignacion.colaborador_departamento,
-                    direccion: asignacion.colaborador_direccion || EMPRESA.domicilio
-                },
-                productos: [{
-                    tipo: 'Equipo',
-                    nombre: asignacion.producto_nombre,
-                    marca: asignacion.marca || 'N/A',
-                    modelo: asignacion.modelo || 'N/A',
-                    numero_serie: asignacion.numero_serie || 'N/A',
-                    cantidad: 1
-                }],
-                fecha_recepcion: fechaRecepcionValue,
-                motivo: motivo_devolucion || 'Devolución de equipo',
-                observaciones: observaciones_devolucion || 'Sin observaciones',
-                condicion_entrega: condicion_entrega || 'BUENO',
-                firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
-                firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal,
-                es_prestamo: false
-            };
-            
-            const pdfBuffer = await generarActaRecepcion(recepcionData);
-            if (pdfBuffer && pdfBuffer.length > 0) {
-                const filename = `acta_recepcion_${asignacionIdNum}_${Date.now()}.pdf`;
-                const filepath = path.join(DOCS_DIR, filename);
-                fs.writeFileSync(filepath, pdfBuffer);
-                documentoGenerado = { filename: filename };
+            try {
+                const recepcionData = {
+                    id_asignacion: asignacionIdNum,
+                    colaborador: {
+                        nombre: asignacion.colaborador_nombre,
+                        rut: asignacion.colaborador_rut,
+                        email: asignacion.colaborador_email,
+                        cargo: asignacion.colaborador_cargo,
+                        departamento: asignacion.colaborador_departamento,
+                        direccion: asignacion.colaborador_direccion || EMPRESA.domicilio
+                    },
+                    productos: [{
+                        tipo: 'Equipo',
+                        nombre: asignacion.producto_nombre,
+                        marca: asignacion.marca || 'N/A',
+                        modelo: asignacion.modelo || 'N/A',
+                        numero_serie: asignacion.numero_serie || 'N/A',
+                        cantidad: 1
+                    }],
+                    fecha_recepcion: fechaRecepcionValue,
+                    motivo: motivo_devolucion || 'Devolución de equipo',
+                    observaciones: observaciones_devolucion || 'Sin observaciones',
+                    condicion_entrega: condicion_entrega || 'BUENO',
+                    firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
+                    firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal,
+                    es_prestamo: false
+                };
+                
+                const pdfBuffer = await generarActaRecepcion(recepcionData);
+                if (pdfBuffer && pdfBuffer.length > 0) {
+                    const filename = `acta_recepcion_${asignacionIdNum}_${Date.now()}.pdf`;
+                    const filepath = path.join(DOCS_DIR, filename);
+                    fs.writeFileSync(filepath, pdfBuffer);
+                    documentoGenerado = { filename: filename };
+                    console.log(`✅ Acta de recepción generada automáticamente: ${filename}`);
+                }
+            } catch (pdfError) {
+                console.error('⚠️ Error generando acta de recepción:', pdfError.message);
             }
         }
         

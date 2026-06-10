@@ -39,7 +39,10 @@ api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
         
-        console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`);
+        // Determinar si es una petición de blob (PDF)
+        const isBlobRequest = config.responseType === 'blob';
+        
+        console.log(`📤 ${config.method?.toUpperCase()} ${config.url}${isBlobRequest ? ' [BLOB]' : ''}`);
         
         if (token) {
             const tokenFormatted = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
@@ -49,7 +52,8 @@ api.interceptors.request.use(
             console.warn('   ⚠️ No hay token disponible');
         }
         
-        if (config.data && config.method !== 'get') {
+        // Para peticiones blob, no mostrar el body
+        if (config.data && config.method !== 'get' && !isBlobRequest) {
             const logData = { ...config.data };
             if (logData.password) logData.password = '***';
             if (logData.currentPassword) logData.currentPassword = '***';
@@ -67,10 +71,19 @@ api.interceptors.request.use(
 );
 
 // ============================================
-// INTERCEPTOR DE RESPUESTAS - CORREGIDO
+// INTERCEPTOR DE RESPUESTAS - CORREGIDO PARA BLOB
 // ============================================
 api.interceptors.response.use(
     (response) => {
+        // IMPORTANTE: Si es una respuesta blob, NO intentar loguear como JSON
+        const isBlobResponse = response.config.responseType === 'blob';
+        
+        if (isBlobResponse) {
+            console.log(`📥 ${response.status} ${response.config.url} [BLOB - ${response.data?.size || 0} bytes]`);
+            // Devolver la respuesta tal cual para que el frontend maneje el blob
+            return response;
+        }
+        
         console.log(`📥 ${response.status} ${response.config.url}`);
         return response;
     },
@@ -93,7 +106,13 @@ api.interceptors.response.use(
         const data = error.response.data;
         
         console.error(`   🔴 Status: ${status}`);
-        console.error('   📄 Data:', data);
+        
+        // Si es blob, no intentar mostrar como JSON
+        if (originalRequest.responseType === 'blob') {
+            console.error('   📄 Error en respuesta blob (PDF)');
+        } else {
+            console.error('   📄 Data:', data);
+        }
         
         // Detectar si es un endpoint de perfil o cambio de contraseña
         const isProfileEndpoint = originalRequest.url?.includes('/profile') || 
@@ -115,7 +134,7 @@ api.interceptors.response.use(
             
             return Promise.reject({
                 success: false,
-                message: data.message || 'Sesión expirada. Por favor inicia sesión nuevamente.',
+                message: data?.message || 'Sesión expirada. Por favor inicia sesión nuevamente.',
                 status
             });
         }
@@ -125,7 +144,7 @@ api.interceptors.response.use(
             console.warn(`   ⚠️ Error 401 en endpoint ${isChangePasswordEndpoint ? 'cambio de contraseña' : 'perfil'}, pero NO se redirige al login`);
             return Promise.reject({
                 success: false,
-                message: data.message || (isChangePasswordEndpoint ? 'Contraseña actual incorrecta' : 'Error de autenticación'),
+                message: data?.message || (isChangePasswordEndpoint ? 'Contraseña actual incorrecta' : 'Error de autenticación'),
                 status,
                 isProfileError: true
             });
@@ -133,7 +152,7 @@ api.interceptors.response.use(
         
         const errorResponse = {
             success: false,
-            message: data.message || data.error || `Error ${status}`,
+            message: data?.message || data?.error || `Error ${status}`,
             status,
             data: data
         };
@@ -345,16 +364,11 @@ export const authService = {
         }
     },
     
-    /**
-     * Cambiar contraseña - VERSIÓN CORREGIDA CON FETCH
-     */
     changePassword: async (currentPassword, newPassword) => {
         try {
             console.log('🔐 Cambiando contraseña...');
-            console.log('   📡 Enviando a:', `${API_URL}/auth/change-password`);
             
             const token = localStorage.getItem('token');
-            console.log('   🔑 Token existe:', token ? 'Sí' : 'No');
             
             if (!token) {
                 return {
@@ -363,66 +377,34 @@ export const authService = {
                 };
             }
             
-            if (token) {
-                console.log('   🔑 Token (primeros 20 chars):', token.substring(0, 20) + '...');
-            }
-            
-            // Usar fetch directamente para asegurar el envío del token
-            const response = await fetch(`${API_URL}/auth/change-password`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    currentPassword: currentPassword,
-                    newPassword: newPassword
-                })
+            const response = await api.post('/auth/change-password', {
+                currentPassword,
+                newPassword
             });
             
-            const data = await response.json();
-            console.log('📥 Respuesta del servidor:', data);
-            console.log('📥 Status:', response.status);
+            console.log('📥 Respuesta del servidor:', response.data);
             
-            if (response.ok && data.success === true) {
-                console.log('✅ Contraseña cambiada exitosamente');
-                
-                if (data.token) {
-                    localStorage.setItem('token', data.token);
-                    console.log('   🔑 Token actualizado');
+            if (response.data && response.data.success) {
+                if (response.data.token) {
+                    localStorage.setItem('token', response.data.token);
                 }
                 
                 return {
                     success: true,
-                    message: data.message || 'Contraseña cambiada correctamente'
-                };
-            }
-            
-            // Manejar errores específicos
-            if (response.status === 401) {
-                return {
-                    success: false,
-                    message: data.message || 'Contraseña actual incorrecta o sesión expirada'
-                };
-            }
-            
-            if (response.status === 400) {
-                return {
-                    success: false,
-                    message: data.message || 'La nueva contraseña debe tener al menos 6 caracteres'
+                    message: response.data.message || 'Contraseña cambiada correctamente'
                 };
             }
             
             return {
                 success: false,
-                message: data.message || 'Error al cambiar contraseña'
+                message: response.data?.message || 'Error al cambiar contraseña'
             };
             
         } catch (error) {
             console.error('❌ Error cambiando contraseña:', error);
             return {
                 success: false,
-                message: error.message || 'Error de conexión con el servidor'
+                message: error.response?.data?.message || error.message || 'Error de conexión'
             };
         }
     },
