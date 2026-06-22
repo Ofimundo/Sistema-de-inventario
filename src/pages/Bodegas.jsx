@@ -667,8 +667,9 @@ const BodegasPage = () => {
         try {
             await api.delete(`/bodegas/${bodegaToDelete.id}`);
             showSnackbar(`Bodega "${bodegaToDelete.nombre}" eliminada correctamente`, 'success');
-            handleCloseConfirmDialog();
+            setConfirmDialogOpen(false);
             fetchBodegas();
+            setTimeout(() => setBodegaToDelete(null), 300);
         } catch (error) {
             console.error('Error al eliminar:', error);
             showSnackbar('Error al eliminar la bodega', 'error');

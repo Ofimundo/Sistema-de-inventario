@@ -34,20 +34,20 @@ const COLOR_GRADIENT = {
 // PARÁMETROS AJUSTABLES
 // ============================================
 const CONFIG = {
-    marginTop: 35,
-    marginLeft: 60,
-    marginRight: 50,
-    marginBottom: 70,
+    marginTop: 0,
+    marginLeft: 79,
+    marginRight: 79,
+    marginBottom: 64,
     
     titleSize: 13,
-    sectionTitleSize: 10,
-    textSize: 10,
-    tableTextSize: 9,
+    sectionTitleSize: 11,
+    textSize: 11,
+    tableTextSize: 10,
     footerSize: 7,
     
-    paragraphSpacing: 2,
-    itemSpacing: 1.25,
-    sectionSpacing: 1,
+    paragraphSpacing: 1.25,
+    itemSpacing: 0.7,
+    sectionSpacing: 0.8,
     
     footerOffset: 80,
     footerLineWidth: 4,
@@ -112,32 +112,69 @@ function formatearFecha(fecha) {
 function drawHeader(doc, logoPath) {
     const LOGO_WIDTH = 120;
     
+    // Dibujar hojas decorativas en esquina superior derecha
+    const hojasPath = path.join(ASSETS_DIR, 'hojas.png');
+    if (fs.existsSync(hojasPath)) {
+        doc.image(hojasPath, doc.page.width - 110, 0, { width: 110 });
+    }
+    
     if (fs.existsSync(logoPath)) {
         doc.image(logoPath, CONFIG.marginLeft, 50, { width: LOGO_WIDTH });
     } else {
-        doc.fontSize(18).font('Helvetica-Bold').fillColor(COLOR_GRADIENT.start);
+        doc.fontSize(18).font('Calibri-Bold').fillColor(COLOR_GRADIENT.start);
         doc.text('Ofimundo', CONFIG.marginLeft, 40);
     }
 }
 
-// Función para dibujar pie de página
+// Función para dibujar pie de página - 3 columnas
 function drawFooter(doc) {
     const footerY = doc.page.height - CONFIG.footerOffset;
-    const startX = CONFIG.marginLeft;
-    const endX = 545;
-    const totalWidth = endX - startX;
+    const lineY = footerY - 3;
     
-    drawGradientLine(doc, startX, footerY - 3, totalWidth, CONFIG.footerLineWidth, 
-                     COLOR_GRADIENT.start, COLOR_GRADIENT.middle, COLOR_GRADIENT.end);
+    // Línea degradada de borde a borde
+    const sections = 100;
+    const sectionWidth = doc.page.width / sections;
+    for (let i = 0; i <= sections / 2; i++) {
+        const ratio = i / (sections / 2);
+        const color = interpolateColor(COLOR_GRADIENT.start, COLOR_GRADIENT.middle, ratio);
+        doc.fillColor(color);
+        doc.rect(i * sectionWidth, lineY, sectionWidth + 0.5, CONFIG.footerLineWidth).fill();
+    }
+    for (let i = 0; i <= sections / 2; i++) {
+        const ratio = i / (sections / 2);
+        const color = interpolateColor(COLOR_GRADIENT.middle, COLOR_GRADIENT.end, ratio);
+        doc.fillColor(color);
+        doc.rect((sections / 2 + i) * sectionWidth, lineY, sectionWidth + 0.5, CONFIG.footerLineWidth).fill();
+    }
     
-    doc.fontSize(CONFIG.footerSize).font('Helvetica-Bold').fillColor('#333333');
-    doc.text('Ofimundo', CONFIG.marginLeft, footerY + 5);
-    doc.text('Teléfono +56 2 2810 4700', CONFIG.marginLeft, footerY + 15);
-    doc.text('Lota 2305, Providencia, Santiago-Chile', CONFIG.marginLeft, footerY + 25);
+    // 3 columnas alineadas con márgenes
+    const leftX = CONFIG.marginLeft;
+    const rightX_end = doc.page.width - CONFIG.marginRight;
+    const totalColWidth = rightX_end - leftX;
+    const colWidth = totalColWidth / 3;
+    const centerX = leftX + colWidth;
+    const rightX = leftX + colWidth * 2;
+    const lineSpacing = 10;
+    const startY = footerY + 5;
     
-    doc.text('Visita nuestro sitio web:', 350, footerY + 5, { align: 'right' });
-    doc.text('www.ofimundo.cl', 350, footerY + 15, { align: 'right' });
-    doc.text('Más información en: hola@ofimundo.cl', 350, footerY + 25, { align: 'right' });
+    // Columna izquierda
+    doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#333333');
+    doc.text('Ofimundo', leftX, startY, { align: 'left', width: colWidth });
+    doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#444444');
+    doc.text('Teléfono +56 2 2810 4700', leftX, startY + lineSpacing, { align: 'left', width: colWidth });
+    doc.text('Lota 2305, Providencia', leftX, startY + lineSpacing * 2, { align: 'left', width: colWidth });
+    
+    // Columna centro
+    doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#555555');
+    doc.text('Visita nuestro sitio web:', centerX, startY, { align: 'center', width: colWidth });
+    doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#0A66C2');
+    doc.text('www.ofimundo.cl', centerX, startY + lineSpacing, { align: 'center', width: colWidth });
+    
+    // Columna derecha
+    doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#555555');
+    doc.text('Más información en:', rightX, startY, { align: 'right', width: colWidth });
+    doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#0A66C2');
+    doc.text('hola@ofimundo.cl', rightX, startY + lineSpacing, { align: 'right', width: colWidth });
 }
 
 // Función para cargar imagen de firma desde archivo
@@ -186,7 +223,7 @@ function dibujarFirma(doc, idAnexo, tipo, x, y, nombrePorDefecto) {
     } catch (err) {
         console.log('⚠️ Error al dibujar firma:', err.message);
     }
-    doc.font('Helvetica').fontSize(9).text(nombrePorDefecto || '_________________________', x, y + 5);
+    doc.font('Calibri').fontSize(9).text(nombrePorDefecto || '_________________________', x, y + 5);
     return false;
 }
 
@@ -198,9 +235,18 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             const fechaFormateada = formatearFecha(fecha);
             
             const doc = new PDFDocument({ 
-                margin: CONFIG.marginTop,
+                margins: {
+                    top: CONFIG.marginTop,
+                    bottom: 35,
+                    left: CONFIG.marginLeft,
+                    right: CONFIG.marginRight
+                },
                 size: 'LETTER'
             });
+            
+            // Registrar fuentes Calibri
+            doc.registerFont('Calibri', path.join(ASSETS_DIR, 'calibri.ttf'));
+            doc.registerFont('Calibri-Bold', path.join(ASSETS_DIR, 'calibrib.ttf'));
             
             const chunks = [];
             const logoPath = path.join(ASSETS_DIR, 'logo-ofimundo.png');
@@ -234,33 +280,35 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             drawHeader(doc, logoPath);
             doc.y = 115;
 
-            doc.fontSize(CONFIG.titleSize).font('Helvetica-Bold').fillColor('#000000');
+            const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+            doc.fontSize(CONFIG.titleSize).font('Calibri-Bold').fillColor('#000000');
             doc.text('ANEXO ENTREGA DE HERRAMIENTAS DE TRABAJO', { align: 'center' });
             doc.moveDown(0.8);
 
-            doc.fontSize(CONFIG.textSize).font('Helvetica');
+            doc.fontSize(CONFIG.textSize).font('Calibri');
 
             doc.text(`En Santiago, a ${fechaFormateada} entre, por una parte, ${empresaTexto}`, { continued: true });
-            doc.font('Helvetica-Bold').text(` Rut ${rutEmpresa},`, { continued: true });
-            doc.font('Helvetica').text(` representada por su Gerente General, don ${representante}, cédula de identidad N° ${cedula} ambos domiciliados para estos efectos en Lota 2305, comuna Providencia (en adelante, la "Compañía" o el "Empleador");`);
+            doc.font('Calibri-Bold').text(` Rut ${rutEmpresa},`, { continued: true });
+            doc.font('Calibri').text(` representada por su Gerente General, don ${representante}, cédula de identidad N° ${cedula} ambos domiciliados para estos efectos en Lota 2305, comuna Providencia (en adelante, la "Compañía" o el "Empleador");`);
             doc.moveDown(CONFIG.paragraphSpacing);
 
-            doc.text(`y por la otra, don ${colaborador.nombre}, cédula de identidad N° ${colaborador.rut} (en adelante, el "Trabajador", y juntamente con el Empleador, las "Partes"), se conviene el siguiente anexo al contrato de trabajo:`, { width: 500 });
+            doc.text(`y por la otra, don ${colaborador.nombre}, cédula de identidad N° ${colaborador.rut} (en adelante, el "Trabajador", y juntamente con el Empleador, las "Partes"), se conviene el siguiente anexo al contrato de trabajo:`, { width: pageWidth, align: 'justify' });
             doc.moveDown(0.8);
 
-            doc.font('Helvetica-Bold').fontSize(CONFIG.sectionTitleSize);
+            doc.font('Calibri-Bold').fontSize(CONFIG.sectionTitleSize);
             doc.text('PRIMERO: Entrega material de Herramienta de Trabajo.', { underline: true });
             doc.moveDown(CONFIG.paragraphSpacing);
 
-            doc.font('Helvetica').fontSize(CONFIG.textSize);
-            doc.text('Las Partes, de común acuerdo, dejan constancia que con esta fecha la Compañía hace entrega al Trabajador las siguientes herramientas de trabajo:');
+            doc.font('Calibri').fontSize(CONFIG.textSize);
+            doc.text('Las Partes, de común acuerdo, dejan constancia que con esta fecha la Compañía hace entrega al Trabajador las siguientes herramientas de trabajo:', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
 
-            const tableLeft = CONFIG.marginLeft + 10;
-            const colWidths = [80, 80, 100, 100, 70];
+            const tableLeft = CONFIG.marginLeft;
+            const colWidths = [85, 85, 95, 105, 84];
             const titleY = doc.y;
 
-            doc.font('Helvetica-Bold').fontSize(CONFIG.tableTextSize);
+            doc.font('Calibri-Bold').fontSize(CONFIG.tableTextSize);
             doc.text('Tipo', tableLeft, titleY);
             doc.text('Marca', tableLeft + colWidths[0], titleY);
             doc.text('Modelo', tableLeft + colWidths[0] + colWidths[1], titleY);
@@ -268,9 +316,9 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.text('Estado', tableLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], titleY);
 
             let lineY = titleY + 12;
-            doc.moveTo(tableLeft, lineY).lineTo(tableLeft + 430, lineY).stroke();
+            doc.moveTo(tableLeft, lineY).lineTo(tableLeft + pageWidth, lineY).stroke();
 
-            doc.font('Helvetica').fontSize(CONFIG.tableTextSize);
+            doc.font('Calibri').fontSize(CONFIG.tableTextSize);
             let rowY = lineY + 6;
             doc.text(producto.tipo || 'Equipo', tableLeft, rowY);
             doc.text(producto.marca || 'N/A', tableLeft + colWidths[0], rowY);
@@ -279,7 +327,7 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.text(producto.condicion || 'NUEVO', tableLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], rowY);
 
             rowY += 14;
-            doc.moveTo(tableLeft, rowY).lineTo(tableLeft + 430, rowY).stroke();
+            doc.moveTo(tableLeft, rowY).lineTo(tableLeft + pageWidth, rowY).stroke();
             doc.y = rowY + 10;
             doc.moveDown(CONFIG.paragraphSpacing);
 
@@ -291,7 +339,7 @@ async function generarAnexoPDF(datos, idAnexo = null) {
                 doc.y,
                 {
                     align: 'justify',
-                    width: 500
+                    width: pageWidth
                 }
             );
             doc.moveDown(CONFIG.paragraphSpacing);
@@ -302,7 +350,7 @@ async function generarAnexoPDF(datos, idAnexo = null) {
                 doc.y,
                 {
                     align: 'justify',
-                    width: 500
+                    width: pageWidth
                 }
             );
 
@@ -312,12 +360,12 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             drawHeader(doc, logoPath);
             doc.y = 115;
             
-            doc.font('Helvetica-Bold').fontSize(CONFIG.sectionTitleSize);
+            doc.font('Calibri-Bold').fontSize(CONFIG.sectionTitleSize);
             doc.text('SEGUNDO: Obligaciones.', { underline: true });
             doc.moveDown(CONFIG.paragraphSpacing);
             
-            doc.font('Helvetica').fontSize(CONFIG.textSize);
-            doc.text('Las Partes acuerdan que durante el tiempo que el Trabajador tenga en su poder las Herramientas, deberá observar las siguientes obligaciones:', { width: 500 });
+            doc.font('Calibri').fontSize(CONFIG.textSize);
+            doc.text('Las Partes acuerdan que durante el tiempo que el Trabajador tenga en su poder las Herramientas, deberá observar las siguientes obligaciones:', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
             
             const obligaciones = [
@@ -330,20 +378,20 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             ];
             
             for (let i = 0; i < obligaciones.length; i++) {
-                doc.font('Helvetica').fontSize(CONFIG.textSize - 1);
-                doc.text(obligaciones[i], { indent: 20, width: 480, align: 'justify' });
+                doc.font('Calibri').fontSize(CONFIG.textSize - 1);
+                doc.text(obligaciones[i], { indent: 20, width: pageWidth, align: 'justify' });
                 if (i < obligaciones.length - 1) doc.moveDown(CONFIG.itemSpacing);
             }
             doc.moveDown(CONFIG.sectionSpacing);
             
-            doc.font('Helvetica-Bold').fontSize(CONFIG.sectionTitleSize);
+            doc.font('Calibri-Bold').fontSize(CONFIG.sectionTitleSize);
             doc.text('TERCERO: Procedimiento en caso de su pérdida, robo, hurto o destrucción.', { underline: true });
             doc.moveDown(CONFIG.paragraphSpacing);
             
-            doc.font('Helvetica').fontSize(CONFIG.textSize - 1);
-            doc.text('Como consecuencia de la responsabilidad de cuidado impuestas al Trabajador respecto de las Herramientas, en el evento de su pérdida, robo, hurto o destrucción por parte de terceros, aún sin que haya mediado responsabilidad del Trabajador, ésta se obliga a comunicarlo verbalmente y por escrito a ÁREA TI la Compañía, tan pronto tome conocimiento de la ocurrencia de tales hechos, señalando todos los antecedentes y circunstancias del caso de que disponga, a efectos que la Compañía haga uso de los derechos que la ley le confiere.', { width: 500, align: 'justify' });
+            doc.font('Calibri').fontSize(CONFIG.textSize - 1);
+            doc.text('Como consecuencia de la responsabilidad de cuidado impuestas al Trabajador respecto de las Herramientas, en el evento de su pérdida, robo, hurto o destrucción por parte de terceros, aún sin que haya mediado responsabilidad del Trabajador, ésta se obliga a comunicarlo verbalmente y por escrito a ÁREA TI la Compañía, tan pronto tome conocimiento de la ocurrencia de tales hechos, señalando todos los antecedentes y circunstancias del caso de que disponga, a efectos que la Compañía haga uso de los derechos que la ley le confiere.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('De igual forma, las Partes acuerdan que en un plazo no superior a 24 horas de comunicado a la Compañía el hecho de su pérdida, robo, hurto o destrucción, el Trabajador deberá interponer una denuncia y/o constancia ante Carabineros de Chile y acreditar ante el Empleador haber efectuado esta denuncia y/o constancia por un medio fehaciente dentro del mismo plazo antes indicado, con la finalidad de que ésta persiga la eventual responsabilidad del o los involucrado(s) en los hechos correspondientes, ejerciendo los derechos que la ley le provee.', { width: 500, align: 'justify' });
+            doc.text('De igual forma, las Partes acuerdan que en un plazo no superior a 24 horas de comunicado a la Compañía el hecho de su pérdida, robo, hurto o destrucción, el Trabajador deberá interponer una denuncia y/o constancia ante Carabineros de Chile y acreditar ante el Empleador haber efectuado esta denuncia y/o constancia por un medio fehaciente dentro del mismo plazo antes indicado, con la finalidad de que ésta persiga la eventual responsabilidad del o los involucrado(s) en los hechos correspondientes, ejerciendo los derechos que la ley le provee.', { width: pageWidth, align: 'justify' });
             
             drawFooter(doc);
             
@@ -351,63 +399,65 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             drawHeader(doc, logoPath);
             doc.y = 115;
             
-            doc.font('Helvetica').fontSize(CONFIG.textSize - 1);
-            doc.text('De la misma forma, las Partes acuerdan que en caso de ser necesario o de requerírselo la Compañía, el Trabajador deberá comparecer ante las autoridades encargadas de la investigación o ante los Tribunales de Justicia y prestar toda su colaboración en tales instancias.', { width: 500, align: 'justify' });
+            doc.font('Calibri').fontSize(CONFIG.textSize - 1);
+            doc.text('De la misma forma, las Partes acuerdan que en caso de ser necesario o de requerírselo la Compañía, el Trabajador deberá comparecer ante las autoridades encargadas de la investigación o ante los Tribunales de Justicia y prestar toda su colaboración en tales instancias.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('Los costos que impliquen la reparación o reposición de las Herramientas serán asumidos por el Trabajador cuando su daño, pérdida o destrucción tenga su origen en la falta del cuidado debido que debe emplear en el uso y conservación de las herramientas de trabajo, en la medida que así se acredite.', { width: 500, align: 'justify' });
+            doc.text('Los costos que impliquen la reparación o reposición de las Herramientas serán asumidos por el Trabajador cuando su daño, pérdida o destrucción tenga su origen en la falta del cuidado debido que debe emplear en el uso y conservación de las herramientas de trabajo, en la medida que así se acredite.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('Para estos efectos, en este mismo acto, el Trabajador autoriza expresamente al Empleador para que descuente directamente los montos involucrados de su remuneración mensual de conformidad a lo dispuesto en el artículo 58 inciso 3° del Código del Trabajo, y/o de los pagos a que pudiere tener derecho por concepto de feriado legal y/o proporcional, así como también de las eventuales indemnizaciones sustitutiva del aviso previo y por años de servicio a las que pudiere tener derecho de acuerdo a la ley al momento del término de su contrato de trabajo, de lo cual deberá dejarse constancia en el respectivo finiquito.', { width: 500, align: 'justify' });
+            doc.text('Para estos efectos, en este mismo acto, el Trabajador autoriza expresamente al Empleador para que descuente directamente los montos involucrados de su remuneración mensual de conformidad a lo dispuesto en el artículo 58 inciso 3° del Código del Trabajo, y/o de los pagos a que pudiere tener derecho por concepto de feriado legal y/o proporcional, así como también de las eventuales indemnizaciones sustitutiva del aviso previo y por años de servicio a las que pudiere tener derecho de acuerdo a la ley al momento del término de su contrato de trabajo, de lo cual deberá dejarse constancia en el respectivo finiquito.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.sectionSpacing);
             
-            doc.font('Helvetica-Bold').fontSize(CONFIG.sectionTitleSize);
+            doc.font('Calibri-Bold').fontSize(CONFIG.sectionTitleSize);
             doc.text('CUARTO: Parte integrante del Contrato.', { underline: true });
             doc.moveDown(CONFIG.paragraphSpacing);
             
-            doc.font('Helvetica').fontSize(CONFIG.textSize);
-            doc.text('Para todos los efectos legales y contractuales procedentes, el presente Anexo forma parte íntegra del contrato de trabajo, manteniéndose vigentes todas las otras cláusulas pactadas y no modificadas por el presente instrumento.', { width: 500, align: 'justify' });
+            doc.font('Calibri').fontSize(CONFIG.textSize);
+            doc.text('Para todos los efectos legales y contractuales procedentes, el presente Anexo forma parte íntegra del contrato de trabajo, manteniéndose vigentes todas las otras cláusulas pactadas y no modificadas por el presente instrumento.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('El presente anexo se firma de acuerdo con la Ley N° 19.799 sobre "Documentos electrónicos, firma electrónica y servicios de certificación de dicha firma".', { width: 500, align: 'justify' });
+            doc.text('El presente anexo se firma de acuerdo con la Ley N° 19.799 sobre "Documentos electrónicos, firma electrónica y servicios de certificación de dicha firma".', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('La copia del presente Anexo al Contrato de Trabajo se envía de manera automática al correo electrónico personal informado por el Trabajador, y ha quedado disponible para ambas partes en el portal (BUK), al cual tiene acceso el Trabajador.', { width: 500, align: 'justify' });
+            doc.text('La copia del presente Anexo al Contrato de Trabajo se envía de manera automática al correo electrónico personal informado por el Trabajador, y ha quedado disponible para ambas partes en el portal (BUK), al cual tiene acceso el Trabajador.', { width: pageWidth, align: 'justify' });
             
             doc.moveDown(CONFIG.signaturesMarginTop / 10);
             
-            doc.font('Helvetica-Bold').fontSize(12);
+            doc.font('Calibri-Bold').fontSize(12);
             doc.text('FIRMAS', { align: 'center' });
             doc.moveDown(2);
             
             const firmaY = doc.y;
+            const leftFirmaX = CONFIG.marginLeft + 10;
+            const rightFirmaX = doc.page.width - CONFIG.marginRight - 150 - 10;
             
             // FIRMA DEL TRABAJADOR
-            doc.font('Helvetica').fontSize(11);
-            doc.text('_________________________', 70, firmaY);
-            doc.text('_________________________', 340, firmaY);
+            doc.font('Calibri').fontSize(11);
+            doc.text('_________________________', leftFirmaX, firmaY);
+            doc.text('_________________________', rightFirmaX, firmaY);
             doc.moveDown(0.8);
             
             // Usar firmas desde archivos si existen
             if (idAnexo) {
                 // Intentar dibujar firma desde archivo
                 if (fs.existsSync(path.join(FIRMAS_DIR, `firma_trabajador_${idAnexo}.png`))) {
-                    doc.image(path.join(FIRMAS_DIR, `firma_trabajador_${idAnexo}.png`), 70, firmaY - 40, { width: 150, height: 40, align: 'center' });
+                    doc.image(path.join(FIRMAS_DIR, `firma_trabajador_${idAnexo}.png`), leftFirmaX, firmaY - 40, { width: 150, height: 40, align: 'center' });
                 } else {
-                    doc.text(firma_trabajador || colaborador.nombre, 70, firmaY + 5);
+                    doc.text(firma_trabajador || colaborador.nombre, leftFirmaX, firmaY + 5);
                 }
                 
                 if (fs.existsSync(path.join(FIRMAS_DIR, `firma_gerente_${idAnexo}.png`))) {
-                    doc.image(path.join(FIRMAS_DIR, `firma_gerente_${idAnexo}.png`), 340, firmaY - 40, { width: 150, height: 40, align: 'center' });
+                    doc.image(path.join(FIRMAS_DIR, `firma_gerente_${idAnexo}.png`), rightFirmaX, firmaY - 40, { width: 150, height: 40, align: 'center' });
                 } else {
-                    doc.text(representante, 340, firmaY + 5);
+                    doc.text(representante, rightFirmaX, firmaY + 5);
                 }
             } else {
-                doc.text(firma_trabajador || colaborador.nombre, 70, firmaY + 5);
-                doc.text(representante, 340, firmaY + 5);
+                doc.text(firma_trabajador || colaborador.nombre, leftFirmaX, firmaY + 5);
+                doc.text(representante, rightFirmaX, firmaY + 5);
             }
             
             doc.moveDown(0.8);
             
-            doc.font('Helvetica').fontSize(9);
-            doc.text('FIRMA TRABAJADOR', 70, doc.y);
-            doc.text('Gerente General', 340, doc.y);
+            doc.font('Calibri').fontSize(9);
+            doc.text('FIRMA TRABAJADOR', leftFirmaX, doc.y);
+            doc.text('Gerente General', rightFirmaX, doc.y);
             
             drawFooter(doc);
             

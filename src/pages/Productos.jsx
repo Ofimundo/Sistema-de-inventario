@@ -3625,6 +3625,8 @@ const Productos = () => {
             showSnackbar('Producto eliminado', 'success');
             await fetchData(true);
             await loadExportData();
+            setOpenConfirmDelete(false);
+            setTimeout(() => setSelectedProducto(null), 300);
         } catch (error) {
             console.error('Error eliminando:', error);
             showSnackbar('Error al eliminar el producto', 'error');

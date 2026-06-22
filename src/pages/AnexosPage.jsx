@@ -823,10 +823,11 @@ const AnexosPage = () => {
             setSuccess('Anexo eliminado correctamente');
             await cargarAnexos();
             setDeleteDialogOpen(false);
-            setAnexoToDelete(null);
+            // Evitar nullificar inmediatamente para que el Dialog no falle en su animación de cierre
+            setTimeout(() => setAnexoToDelete(null), 300);
         } catch (error) {
             console.error('Error:', error);
-            setError(error.response?.data?.message || 'Error al eliminar el anexo');
+            setError(error?.message || 'Error al eliminar el anexo');
         } finally {
             setEliminando(false);
         }
@@ -1363,4 +1364,45 @@ const AnexosPage = () => {
     );
 };
 
-export default AnexosPage;
+// Error boundary para capturar el error que causa la pantalla blanca
+class AnexosPageErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error("ErrorBoundary atrapó un error:", error, errorInfo);
+        this.setState({ errorInfo });
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <Box p={4} m={4} bgcolor="#fff" borderRadius={2} border="1px solid red">
+                    <Typography variant="h5" color="error" gutterBottom>
+                        Ocurrió un error inesperado (Pantalla Blanca)
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                        Por favor, toma una captura de este error y envíala para corregirlo:
+                    </Typography>
+                    <Box component="pre" p={2} bgcolor="#f5f5f5" borderRadius={1} overflow="auto" fontSize={12}>
+                        <code>{this.state.error && this.state.error.toString()}</code>
+                        <br />
+                        <code>{this.state.errorInfo && this.state.errorInfo.componentStack}</code>
+                    </Box>
+                    <Button variant="contained" sx={{ mt: 2 }} onClick={() => window.location.reload()}>
+                        Recargar página
+                    </Button>
+                </Box>
+            );
+        }
+        return <AnexosPage {...this.props} />;
+    }
+}
+
+export default AnexosPageErrorBoundary;
