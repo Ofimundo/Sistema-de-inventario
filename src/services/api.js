@@ -5,6 +5,21 @@ import axios from 'axios';
  * Obtiene la URL base según las variables de entorno
  */
 const getBaseURL = () => {
+    // ============================================
+    // CAMBIA ESTA URL SEGÚN TU BACKEND LOCAL
+    // ============================================
+    // Si tu backend corre en puerto 3000:
+    const LOCAL_URL = 'http://localhost:3000/api';
+    
+    // Si tu backend corre en puerto 98:
+    // const LOCAL_URL = 'http://localhost:98/api';
+    
+    // Si tu backend corre en puerto 5000:
+    // const LOCAL_URL = 'http://localhost:5000/api';
+    
+    // Si tu backend corre en puerto 8080:
+    // const LOCAL_URL = 'http://localhost:8080/api';
+    
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         console.log('✅ Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
         return import.meta.env.VITE_API_URL;
@@ -15,8 +30,9 @@ const getBaseURL = () => {
         return process.env.REACT_APP_API_URL;
     }
     
-    console.log('⚠️ No se encontraron variables de entorno, usando fallback: http://localhost:98/api');
-    return 'http://localhost:98/api';
+    // Usar URL local por defecto
+    console.log('✅ Usando URL local:', LOCAL_URL);
+    return LOCAL_URL;
 };
 
 const API_URL = getBaseURL();
@@ -33,13 +49,12 @@ const api = axios.create({
 });
 
 // ============================================
-// INTERCEPTOR DE PETICIONES - CORREGIDO
+// INTERCEPTOR DE PETICIONES
 // ============================================
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
         
-        // Determinar si es una petición de blob (PDF)
         const isBlobRequest = config.responseType === 'blob';
         
         console.log(`📤 ${config.method?.toUpperCase()} ${config.url}${isBlobRequest ? ' [BLOB]' : ''}`);
@@ -52,7 +67,6 @@ api.interceptors.request.use(
             console.warn('   ⚠️ No hay token disponible');
         }
         
-        // Para peticiones blob, no mostrar el body
         if (config.data && config.method !== 'get' && !isBlobRequest) {
             const logData = { ...config.data };
             if (logData.password) logData.password = '***';
@@ -71,16 +85,14 @@ api.interceptors.request.use(
 );
 
 // ============================================
-// INTERCEPTOR DE RESPUESTAS - CORREGIDO PARA BLOB
+// INTERCEPTOR DE RESPUESTAS
 // ============================================
 api.interceptors.response.use(
     (response) => {
-        // IMPORTANTE: Si es una respuesta blob, NO intentar loguear como JSON
         const isBlobResponse = response.config.responseType === 'blob';
         
         if (isBlobResponse) {
             console.log(`📥 ${response.status} ${response.config.url} [BLOB - ${response.data?.size || 0} bytes]`);
-            // Devolver la respuesta tal cual para que el frontend maneje el blob
             return response;
         }
         
@@ -95,10 +107,12 @@ api.interceptors.response.use(
         if (!error.response) {
             console.error('   🔌 Sin conexión al servidor');
             console.error('   💡 Verifica que el backend esté corriendo en:', API_URL);
+            console.error('   💡 Ejecuta en otra terminal: cd backend && npm start');
             return Promise.reject({
                 success: false,
                 message: `No se pudo conectar al servidor en ${API_URL}. Verifica que el backend esté corriendo.`,
-                originalError: error
+                originalError: error,
+                code: 'ERR_NETWORK'
             });
         }
         
@@ -107,19 +121,16 @@ api.interceptors.response.use(
         
         console.error(`   🔴 Status: ${status}`);
         
-        // Si es blob, no intentar mostrar como JSON
         if (originalRequest.responseType === 'blob') {
             console.error('   📄 Error en respuesta blob (PDF)');
         } else {
             console.error('   📄 Data:', data);
         }
         
-        // Detectar si es un endpoint de perfil o cambio de contraseña
         const isProfileEndpoint = originalRequest.url?.includes('/profile') || 
                                   originalRequest.url?.includes('/perfil');
         const isChangePasswordEndpoint = originalRequest.url?.includes('/change-password');
         
-        // Manejo de token expirado (401) - EXCEPTO PARA ENDPOINTS DE PERFIL Y CAMBIO DE CONTRASEÑA
         if (status === 401 && !originalRequest._retry && !isProfileEndpoint && !isChangePasswordEndpoint && !originalRequest.url?.includes('/login')) {
             originalRequest._retry = true;
             
@@ -135,18 +146,19 @@ api.interceptors.response.use(
             return Promise.reject({
                 success: false,
                 message: data?.message || 'Sesión expirada. Por favor inicia sesión nuevamente.',
-                status
+                status,
+                code: 'UNAUTHORIZED'
             });
         }
         
-        // Para errores en endpoints de perfil o cambio de contraseña, NO redirigir
         if (status === 401 && (isProfileEndpoint || isChangePasswordEndpoint)) {
             console.warn(`   ⚠️ Error 401 en endpoint ${isChangePasswordEndpoint ? 'cambio de contraseña' : 'perfil'}, pero NO se redirige al login`);
             return Promise.reject({
                 success: false,
                 message: data?.message || (isChangePasswordEndpoint ? 'Contraseña actual incorrecta' : 'Error de autenticación'),
                 status,
-                isProfileError: true
+                isProfileError: true,
+                code: 'UNAUTHORIZED_PROFILE'
             });
         }
         
@@ -154,7 +166,8 @@ api.interceptors.response.use(
             success: false,
             message: data?.message || data?.error || `Error ${status}`,
             status,
-            data: data
+            data: data,
+            code: `HTTP_${status}`
         };
         
         return Promise.reject(errorResponse);
@@ -162,7 +175,7 @@ api.interceptors.response.use(
 );
 
 // ============================================
-// SERVICIO DE AUTENTICACIÓN - COMPLETO CORREGIDO
+// SERVICIO DE AUTENTICACIÓN
 // ============================================
 export const authService = {
     login: async (usuario, password) => {

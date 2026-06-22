@@ -1,4 +1,4 @@
-// src/App.jsx - VERSIÓN CON RUTA DE CHECKLIST
+// src/App.jsx - VERSIÓN COMPLETA CORREGIDA (SIN CÓDIGO DE BACKEND)
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { 
@@ -24,7 +24,7 @@ const HistorialPage = lazy(() => import('./pages/HistorialPage'));
 const AsignacionPage = lazy(() => import('./pages/AsignacionPage'));
 const ColaboradoresPage = lazy(() => import('./pages/ColaboradoresPage'));
 const StockPage = lazy(() => import('./pages/StockPage'));
-
+const AnexosPage = lazy(() => import('./pages/AnexosPage'));
 
 // Componente para mostrar mientras carga
 const LoadingScreen = () => (
@@ -171,6 +171,16 @@ function App() {
                         element={
                             <PrivateRoute>
                                 <StockPage />
+                            </PrivateRoute>
+                        } 
+                    />
+                    
+                    {/* ANEXOS DE CONTRATO */}
+                    <Route 
+                        path="/anexos" 
+                        element={
+                            <PrivateRoute>
+                                <AnexosPage />
                             </PrivateRoute>
                         } 
                     />

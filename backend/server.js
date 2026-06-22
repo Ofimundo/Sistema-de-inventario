@@ -1,4 +1,4 @@
-// backend/server.js - VERSIÓN COMPLETA CORREGIDA CON LOGS DE DEPURACIÓN
+// backend/server.js - VERSIÓN COMPLETA CORREGIDA CON RUTAS DE ANEXOS
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -112,6 +112,7 @@ app.get('/api', (req, res) => {
             bodegas: '/api/bodegas',
             colaboradores: '/api/colaboradores',
             asignaciones: '/api/asignaciones',
+            anexos: '/api/anexos',
             auth: '/api/auth',
             export: '/api/export',
             'change-password': '/api/auth/change-password'
@@ -132,6 +133,7 @@ const estadosRoutes = require('./routes/estadosRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
 const usuariosRoutes = require('./routes/usuarios');
 const colaboradorRoutes = require('./routes/colaboradorRoutes');
+const anexosRoutes = require('./routes/anexosRoutes');
 const colaboradorController = require('./controllers/colaboradorController');
 
 // ============================================
@@ -160,6 +162,7 @@ app.use('/api/estados', authenticateToken, estadosRoutes);
 app.use('/api/documentos', authenticateToken, documentoRoutes);
 app.use('/api/usuarios', authenticateToken, usuariosRoutes);
 app.use('/api/colaboradores', authenticateToken, colaboradorRoutes);
+app.use('/api/anexos', authenticateToken, anexosRoutes); // <-- ESTA LÍNEA ES LA QUE FALTABA
 
 // Ruta adicional para empresas
 app.get('/api/colaboradores/empresas', authenticateToken, colaboradorController.getEmpresas);
@@ -221,6 +224,7 @@ getConnection().then(() => {
         console.log(`   - /api/bodegas (bodegas)`);
         console.log(`   - /api/colaboradores (colaboradores)`);
         console.log(`   - /api/asignaciones (asignaciones)`);
+        console.log(`   - /api/anexos (anexos de contrato)`);
         console.log(`   - /api/auth/change-password (cambiar contraseña)`);
         console.log(`   - /api/auth/change-password-test (test)`);
         console.log('=================================\n');

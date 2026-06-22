@@ -1,4 +1,4 @@
-// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA CORREGIDA (SIN ELIMINAR NADA)
+// backend/routes/asignacionRoutes.js - VERSIÓN COMPLETA CORREGIDA
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -109,7 +109,17 @@ function getEstadoTexto(idEstado) {
 }
 
 // ============================================
-// FUNCIÓN PARA DIBUJAR FIRMA (IMAGEN O TEXTO)
+// FUNCIÓN PARA TRUNCAR TEXTO LARGO
+// ============================================
+function truncarTexto(texto, maxLength = 500) {
+    if (!texto) return '';
+    if (typeof texto !== 'string') texto = JSON.stringify(texto);
+    if (texto.length <= maxLength) return texto;
+    return texto.substring(0, maxLength);
+}
+
+// ============================================
+// FUNCIÓN PARA DIBUJAR FIRMA
 // ============================================
 function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
     if (firma && typeof firma === 'string' && firma.startsWith('data:image')) {
@@ -132,12 +142,12 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN (CORREGIDA)
+// FUNCIÓN PARA GENERAR ACTA DE ASIGNACIÓN
 // ============================================
 async function generarActaAsignacion(datos) {
     console.log('🔧 generarActaAsignacion llamado con ID:', datos.id_asignacion);
     
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
         try {
             const {
                 id_asignacion,
@@ -147,11 +157,9 @@ async function generarActaAsignacion(datos) {
                 motivo,
                 observaciones,
                 firma_trabajador,
-                firma_gerente,
                 es_prestamo
             } = datos;
 
-            // Si es préstamo, no generar documento
             if (es_prestamo) {
                 console.log('⚠️ Es un préstamo, no se genera documento');
                 return resolve(Buffer.from(''));
@@ -159,10 +167,19 @@ async function generarActaAsignacion(datos) {
 
             const doc = new PDFDocument({ margin: 50, size: 'A4' });
             const buffers = [];
+            
             doc.on('data', buffers.push.bind(buffers));
-            doc.on('end', () => resolve(Buffer.concat(buffers)));
+            doc.on('end', () => {
+                const pdfBuffer = Buffer.concat(buffers);
+                console.log(`✅ PDF generado: ${pdfBuffer.length} bytes`);
+                resolve(pdfBuffer);
+            });
+            
+            doc.on('error', (err) => {
+                console.error('❌ Error en PDF:', err);
+                reject(err);
+            });
 
-            // ========== ENCABEZADO ==========
             doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
             doc.font('Helvetica').fontSize(10)
                .text(`RUT: ${EMPRESA.rut} | ${EMPRESA.domicilio}`, { align: 'center' })
@@ -177,7 +194,6 @@ async function generarActaAsignacion(datos) {
                .text(`ID Asignación: ${id_asignacion}`, { align: 'left' })
                .moveDown(1);
 
-            // 1. DATOS DE LA EMPRESA
             doc.font('Helvetica-Bold').fontSize(12).text('1. DATOS DE LA EMPRESA', { underline: true }).moveDown(0.5);
             doc.font('Helvetica').fontSize(10)
                .text(`Razón Social: ${EMPRESA.nombre}`)
@@ -187,7 +203,6 @@ async function generarActaAsignacion(datos) {
                .text(`Domicilio: ${EMPRESA.domicilio}`)
                .moveDown(1);
 
-            // 2. DATOS DEL TRABAJADOR
             doc.font('Helvetica-Bold').fontSize(12).text('2. DATOS DEL TRABAJADOR', { underline: true }).moveDown(0.5);
             doc.font('Helvetica').fontSize(10)
                .text(`Nombre: ${colaborador.nombre || ''}`)
@@ -200,7 +215,6 @@ async function generarActaAsignacion(datos) {
                .text(`Departamento: ${colaborador.departamento || 'Tecnología e Innovación'}`)
                .moveDown(1);
 
-            // 3. DATOS DEL EQUIPO ENTREGADO
             doc.font('Helvetica-Bold').fontSize(12).text('3. DATOS DEL EQUIPO ENTREGADO', { underline: true }).moveDown(0.5);
 
             const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado: 380, cantidad: 460 };
@@ -231,11 +245,9 @@ async function generarActaAsignacion(datos) {
             });
             doc.moveDown(2);
 
-            doc.moveDown(2);
             doc.font('Helvetica-Bold').fontSize(12)
                .text('4. MOTIVO DE LA ASIGNACIÓN', colPositions.num, doc.y, { underline: true })
                .moveDown(0.5);
-
             doc.font('Helvetica').fontSize(9)
                .text(motivo || 'Asignación de equipo para uso laboral', colPositions.num, doc.y, { width: 520 });
             doc.moveDown(2);
@@ -243,7 +255,6 @@ async function generarActaAsignacion(datos) {
             doc.font('Helvetica-Bold').fontSize(12)
                .text('5. OBSERVACIONES', colPositions.num, doc.y, { underline: true })
                .moveDown(0.5);
-
             doc.font('Helvetica').fontSize(9)
                .text(observaciones || 'Sin observaciones', colPositions.num, doc.y, { width: 520 });
             doc.moveDown(2);
@@ -254,24 +265,15 @@ async function generarActaAsignacion(datos) {
             doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true });
             doc.moveDown(3);
 
-            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'right' });
+            // SOLO FIRMA DEL TRABAJADOR
+            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'left' });
             doc.moveDown(1);
             
             const lineaTrabajadorY = doc.y;
-            doc.moveTo(120, lineaTrabajadorY).lineTo(480, lineaTrabajadorY).stroke();
-            dibujarFirma(doc, firma_trabajador, 120, lineaTrabajadorY - 28, colaborador.nombre);
+            doc.moveTo(100, lineaTrabajadorY).lineTo(250, lineaTrabajadorY).stroke();
+            dibujarFirma(doc, firma_trabajador, 100, lineaTrabajadorY - 28, colaborador.nombre);
             doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'center' });
-            doc.moveDown(3);
-
-            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'right' });
-            doc.moveDown(2);
-
-            const lineaGerenteY = doc.y;
-            doc.moveTo(120, lineaGerenteY).lineTo(480, lineaGerenteY).stroke();
-            dibujarFirma(doc, firma_gerente, 120, lineaGerenteY - 28, EMPRESA.representante_legal);
-            doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
+            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'left' });
             doc.moveDown(3);
 
             doc.font('Helvetica-Oblique').fontSize(8)
@@ -288,7 +290,7 @@ async function generarActaAsignacion(datos) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN (CORREGIDA)
+// FUNCIÓN PARA GENERAR ACTA DE RECEPCIÓN
 // ============================================
 function generarActaRecepcion(datos) {
     console.log('🔧 generarActaRecepcion llamado con ID:', datos.id_asignacion);
@@ -304,11 +306,9 @@ function generarActaRecepcion(datos) {
                 observaciones,
                 condicion_entrega,
                 firma_trabajador,
-                firma_gerente,
                 es_prestamo
             } = datos;
 
-            // Si es préstamo, no generar documento
             if (es_prestamo) {
                 console.log('⚠️ Es un préstamo, no se genera documento de recepción');
                 return resolve(Buffer.from(''));
@@ -316,8 +316,18 @@ function generarActaRecepcion(datos) {
 
             const doc = new PDFDocument({ margin: 50, size: 'A4' });
             const buffers = [];
+            
             doc.on('data', buffers.push.bind(buffers));
-            doc.on('end', () => resolve(Buffer.concat(buffers)));
+            doc.on('end', () => {
+                const pdfBuffer = Buffer.concat(buffers);
+                console.log(`✅ PDF de recepción generado: ${pdfBuffer.length} bytes`);
+                resolve(pdfBuffer);
+            });
+            
+            doc.on('error', (err) => {
+                console.error('❌ Error en PDF de recepción:', err);
+                reject(err);
+            });
 
             doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
             doc.font('Helvetica').fontSize(10)
@@ -404,24 +414,15 @@ function generarActaRecepcion(datos) {
             doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true });
             doc.moveDown(3);
 
-            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'right' });
+            // SOLO FIRMA DEL TRABAJADOR
+            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'left' });
             doc.moveDown(1);
             
             const lineaTrabajadorY = doc.y;
-            doc.moveTo(300, lineaTrabajadorY).lineTo(550, lineaTrabajadorY).stroke();
-            dibujarFirma(doc, firma_trabajador, 350, lineaTrabajadorY - 28, colaborador.nombre);
+            doc.moveTo(100, lineaTrabajadorY).lineTo(250, lineaTrabajadorY).stroke();
+            dibujarFirma(doc, firma_trabajador, 100, lineaTrabajadorY - 28, colaborador.nombre);
             doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'right' });
-            doc.moveDown(4);
-
-            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'right' });
-            doc.moveDown(1);
-
-            const lineaGerenteY = doc.y;
-            doc.moveTo(300, lineaGerenteY).lineTo(550, lineaGerenteY).stroke();
-            dibujarFirma(doc, firma_gerente, 350, lineaGerenteY - 28, EMPRESA.representante_legal);
-            doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'right' });
+            doc.font('Helvetica').fontSize(9).text('FIRMA TRABAJADOR', { align: 'left' });
             doc.moveDown(3);
 
             doc.font('Helvetica-Oblique').fontSize(8)
@@ -441,7 +442,6 @@ function generarActaRecepcion(datos) {
 // ENDPOINTS - GET
 // ============================================
 
-// GET - Obtener asignaciones activas
 router.get('/activas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/activas');
@@ -474,14 +474,12 @@ router.get('/activas', async (req, res) => {
         `);
         
         res.json({ success: true, data: result.recordset });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
 
-// GET - Obtener solo préstamos activos
 router.get('/prestamos/activos', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/prestamos/activos');
@@ -514,14 +512,12 @@ router.get('/prestamos/activos', async (req, res) => {
         `);
         
         res.json({ success: true, data: result.recordset });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
 
-// GET - Obtener estadísticas de préstamos
 router.get('/prestamos/estadisticas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/prestamos/estadisticas');
@@ -546,14 +542,12 @@ router.get('/prestamos/estadisticas', async (req, res) => {
                 colaboradoresConPrestamos: result.recordset[0].colaboradores_con_prestamos || 0
             }
         });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// GET - Obtener historial de préstamos
 router.get('/prestamos/historial', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/prestamos/historial');
@@ -608,7 +602,6 @@ router.get('/prestamos/historial', async (req, res) => {
         
         const result = await request.query(query);
         res.json({ success: true, data: result.recordset });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
@@ -619,7 +612,6 @@ router.get('/prestamos/historial', async (req, res) => {
 // ENDPOINTS PARA DOCUMENTOS
 // ============================================
 
-// GET - Buscar documento por asignación ID y tipo
 router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
     try {
         const { asignacionId, tipo } = req.params;
@@ -647,7 +639,6 @@ router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
     }
 });
 
-// GET - Descargar documento por filename (CORREGIDO)
 router.get('/descargar/:filename', (req, res) => {
     try {
         const { filename } = req.params;
@@ -661,7 +652,6 @@ router.get('/descargar/:filename', (req, res) => {
         const filepath = path.join(DOCS_DIR, safeFilename);
         
         if (!fs.existsSync(filepath)) {
-            // Buscar archivo alternativo por ID
             const files = fs.readdirSync(DOCS_DIR);
             const idMatch = safeFilename.match(/\d+/);
             if (idMatch) {
@@ -685,18 +675,15 @@ router.get('/descargar/:filename', (req, res) => {
         const fileStream = fs.createReadStream(filepath);
         fileStream.pipe(res);
         console.log(`✅ Documento descargado: ${safeFilename}`);
-        
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// POST - Generar acta de asignación (MODIFICADO PARA DEVOLVER PDF DIRECTO)
 router.post('/generar-acta-asignacion', async (req, res) => {
     try {
         console.log('📥 POST /api/asignaciones/generar-acta-asignacion');
-        console.log('Body recibido:', JSON.stringify(req.body, null, 2));
         
         const {
             id_asignacion,
@@ -706,7 +693,6 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             motivo,
             observaciones,
             firma_trabajador,
-            firma_gerente,
             es_prestamo
         } = req.body;
         
@@ -715,7 +701,7 @@ router.post('/generar-acta-asignacion', async (req, res) => {
         }
         
         if (!colaborador || (!productos && !req.body.producto)) {
-            return res.status(400).json({ success: false, message: 'Datos incompletos: faltan colaborador o producto' });
+            return res.status(400).json({ success: false, message: 'Datos incompletos' });
         }
         
         const productosArray = productos || (req.body.producto ? [req.body.producto] : null);
@@ -726,9 +712,8 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             productos: productosArray,
             fecha_asignacion: fecha_asignacion || new Date(),
             motivo: motivo || 'Asignación de equipo',
-            observaciones: observaciones || 'Sin observaciones',
+            observaciones: truncarTexto(observaciones, 500),
             firma_trabajador: firma_trabajador || colaborador.nombre,
-            firma_gerente: firma_gerente || EMPRESA.representante_legal,
             es_prestamo: false
         });
         
@@ -736,26 +721,24 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             throw new Error('No se pudo generar el PDF');
         }
         
-        // Guardar en disco (opcional, para respaldo)
+        if (!fs.existsSync(DOCS_DIR)) {
+            fs.mkdirSync(DOCS_DIR, { recursive: true });
+        }
+        
         const filename = `acta_asignacion_${id_asignacion}_${Date.now()}.pdf`;
         const filepath = path.join(DOCS_DIR, filename);
         fs.writeFileSync(filepath, pdfBuffer);
         console.log(`✅ Acta guardada: ${filename} (${pdfBuffer.length} bytes)`);
         
-        // ============================================
-        // IMPORTANTE: DEVOLVER EL PDF DIRECTAMENTE
-        // ============================================
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(pdfBuffer);
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// POST - Generar acta de recepción (CORREGIDO)
 router.post('/generar-acta-recepcion', async (req, res) => {
     try {
         console.log('📥 POST /api/asignaciones/generar-acta-recepcion');
@@ -769,7 +752,6 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             observaciones,
             condicion_entrega,
             firma_trabajador,
-            firma_gerente,
             es_prestamo
         } = req.body;
         
@@ -789,15 +771,18 @@ router.post('/generar-acta-recepcion', async (req, res) => {
             productos: productosArray,
             fecha_recepcion: fecha_recepcion || new Date(),
             motivo: motivo || 'Devolución de equipo',
-            observaciones: observaciones || 'Sin observaciones',
+            observaciones: truncarTexto(observaciones, 500),
             condicion_entrega: condicion_entrega || 'BUENO',
             firma_trabajador: firma_trabajador || colaborador.nombre,
-            firma_gerente: firma_gerente || EMPRESA.representante_legal,
             es_prestamo: false
         });
         
         if (!pdfBuffer || pdfBuffer.length === 0) {
             throw new Error('No se pudo generar el PDF');
+        }
+        
+        if (!fs.existsSync(DOCS_DIR)) {
+            fs.mkdirSync(DOCS_DIR, { recursive: true });
         }
         
         const filename = `acta_recepcion_${id_asignacion || Date.now()}_${Date.now()}.pdf`;
@@ -807,14 +792,12 @@ router.post('/generar-acta-recepcion', async (req, res) => {
         console.log(`✅ Acta guardada: ${filename} (${pdfBuffer.length} bytes)`);
         
         res.json({ success: true, message: 'Acta generada exitosamente', filename: filename });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// GET - Descargar acta de asignación por ID (CORREGIDO)
 router.get('/descargar-acta/:asignacionId', async (req, res) => {
     try {
         const { asignacionId } = req.params;
@@ -825,8 +808,6 @@ router.get('/descargar-acta/:asignacionId', async (req, res) => {
         }
         
         const files = fs.readdirSync(DOCS_DIR);
-        console.log(`📁 Archivos disponibles:`, files);
-        
         const pattern = `acta_asignacion_${asignacionId}`;
         const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
         
@@ -842,14 +823,12 @@ router.get('/descargar-acta/:asignacionId', async (req, res) => {
         
         const fileStream = fs.createReadStream(filepath);
         fileStream.pipe(res);
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// GET - Descargar acta de recepción por ID (CORREGIDO)
 router.get('/descargar-acta-recepcion/:asignacionId', async (req, res) => {
     try {
         const { asignacionId } = req.params;
@@ -873,152 +852,12 @@ router.get('/descargar-acta-recepcion/:asignacionId', async (req, res) => {
         
         const fileStream = fs.createReadStream(filepath);
         fileStream.pipe(res);
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// POST - Generar PDF de asignación (endpoint simplificado)
-router.post('/generar-pdf/:asignacionId', async (req, res) => {
-    try {
-        const { asignacionId } = req.params;
-        console.log(`📥 POST /api/asignaciones/generar-pdf/${asignacionId}`);
-        
-        const pool = await getConnection();
-        
-        const result = await pool.request()
-            .input('id', sql.Int, asignacionId)
-            .query(`
-                SELECT a.*, p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
-                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.cargo as colaborador_cargo
-                FROM INV.asignaciones a
-                LEFT JOIN INV.productos p ON a.producto_id = p.id
-                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                WHERE a.id = @id
-            `);
-        
-        if (result.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'Asignación no encontrada' });
-        }
-        
-        const data = result.recordset[0];
-        
-        const doc = new PDFDocument({ margin: 50, size: 'A4' });
-        const buffers = [];
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-            const pdfData = Buffer.concat(buffers);
-            const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
-            const filepath = path.join(DOCS_DIR, filename);
-            fs.writeFileSync(filepath, pdfData);
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(pdfData);
-        });
-        
-        doc.fontSize(18).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(10).text(`ID Asignación: ${asignacionId}`);
-        doc.text(`Fecha: ${new Date().toLocaleDateString()}`);
-        doc.moveDown();
-        doc.fontSize(12).text('DATOS DEL COLABORADOR', { underline: true });
-        doc.text(`Nombre: ${data.colaborador_nombre}`);
-        doc.text(`RUT: ${data.colaborador_rut}`);
-        doc.text(`Cargo: ${data.colaborador_cargo}`);
-        doc.moveDown();
-        doc.fontSize(12).text('DATOS DEL EQUIPO', { underline: true });
-        doc.text(`Producto: ${data.producto_nombre}`);
-        doc.text(`N° Serie: ${data.numero_serie}`);
-        doc.text(`Marca/Modelo: ${data.marca} ${data.modelo}`);
-        doc.moveDown();
-        doc.fontSize(12).text('FIRMAS', { underline: true });
-        doc.moveDown();
-        doc.text('_________________________', { align: 'center' });
-        doc.text('Firma del Trabajador', { align: 'center' });
-        doc.moveDown();
-        doc.text('_________________________', { align: 'center' });
-        doc.text('Firma del Gerente', { align: 'center' });
-        
-        doc.end();
-        
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// GET - Descargar PDF de asignación (endpoint simplificado)
-router.get('/descargar-pdf/:asignacionId', async (req, res) => {
-    try {
-        const { asignacionId } = req.params;
-        console.log(`📥 GET /api/asignaciones/descargar-pdf/${asignacionId}`);
-        
-        const pool = await getConnection();
-        
-        const result = await pool.request()
-            .input('id', sql.Int, asignacionId)
-            .query(`
-                SELECT a.*, p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
-                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.cargo as colaborador_cargo
-                FROM INV.asignaciones a
-                LEFT JOIN INV.productos p ON a.producto_id = p.id
-                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                WHERE a.id = @id
-            `);
-        
-        if (result.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'Asignación no encontrada' });
-        }
-        
-        const data = result.recordset[0];
-        
-        const doc = new PDFDocument({ margin: 50, size: 'A4' });
-        const buffers = [];
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-            const pdfData = Buffer.concat(buffers);
-            const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
-            const filepath = path.join(DOCS_DIR, filename);
-            fs.writeFileSync(filepath, pdfData);
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(pdfData);
-        });
-        
-        doc.fontSize(18).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(10).text(`ID Asignación: ${asignacionId}`);
-        doc.text(`Fecha: ${new Date(data.fecha_asignacion).toLocaleDateString()}`);
-        doc.moveDown();
-        doc.fontSize(12).text('DATOS DEL COLABORADOR', { underline: true });
-        doc.text(`Nombre: ${data.colaborador_nombre}`);
-        doc.text(`RUT: ${data.colaborador_rut}`);
-        doc.text(`Cargo: ${data.colaborador_cargo}`);
-        doc.moveDown();
-        doc.fontSize(12).text('DATOS DEL EQUIPO', { underline: true });
-        doc.text(`Producto: ${data.producto_nombre}`);
-        doc.text(`N° Serie: ${data.numero_serie}`);
-        doc.text(`Marca/Modelo: ${data.marca} ${data.modelo}`);
-        doc.moveDown();
-        
-        if (data.firma_trabajador) {
-            doc.fontSize(10).text(`Firma Trabajador: ${data.firma_trabajador}`);
-        }
-        if (data.firma_gerente) {
-            doc.fontSize(10).text(`Firma Gerente: ${data.firma_gerente}`);
-        }
-        
-        doc.end();
-        
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// GET - Obtener estadísticas generales
 router.get('/estadisticas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/estadisticas');
@@ -1044,21 +883,21 @@ router.get('/estadisticas', async (req, res) => {
                 prestamosActivos: result.recordset[0].prestamos_activos || 0
             }
         });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// POST - Crear asignación
+// ============================================
+// POST - CREAR ASIGNACIÓN (CORREGIDO)
+// ============================================
 router.post('/', async (req, res) => {
     let pool;
     let transaction;
     
     try {
         console.log('📥 POST /api/asignaciones');
-        console.log('Body recibido:', JSON.stringify(req.body, null, 2));
         
         const { 
             producto_id, 
@@ -1067,7 +906,6 @@ router.post('/', async (req, res) => {
             observaciones, 
             fecha_asignacion,
             firma_trabajador,
-            firma_gerente,
             es_prestamo
         } = req.body;
         
@@ -1079,31 +917,28 @@ router.post('/', async (req, res) => {
         const colaboradorIdNum = validarId(colaborador_id, 'colaborador_id');
         
         pool = await getConnection();
-        transaction = new sql.Transaction(pool);
-        await transaction.begin();
         
-        const productoCheck = await transaction.request()
+        // Obtener datos del producto
+        const productoCheck = await pool.request()
             .input('id', sql.Int, productoIdNum)
             .query(`SELECT id, id_estado_equipo, nombre, numero_serie, marca, modelo, condicion FROM INV.productos WHERE id = @id`);
         
         if (productoCheck.recordset.length === 0) {
-            await transaction.rollback();
             return res.status(404).json({ success: false, message: 'Producto no encontrado' });
         }
         
         const producto = productoCheck.recordset[0];
         
         if (producto.id_estado_equipo !== ESTADOS.DISPONIBLE) {
-            await transaction.rollback();
             return res.status(400).json({ success: false, message: `Producto no disponible. Estado: ${getEstadoTexto(producto.id_estado_equipo)}` });
         }
         
-        const colaboradorCheck = await transaction.request()
+        // Obtener datos del colaborador
+        const colaboradorCheck = await pool.request()
             .input('id', sql.Int, colaboradorIdNum)
             .query(`SELECT id, nombre, email, rut, cargo, departamento, direccion, fecha_nacimiento FROM INV.colaboradores WHERE id = @id AND estado = 'ACTIVO'`);
         
         if (colaboradorCheck.recordset.length === 0) {
-            await transaction.rollback();
             return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
         }
         
@@ -1111,13 +946,23 @@ router.post('/', async (req, res) => {
         const fechaAsignacionValue = fecha_asignacion ? new Date(fecha_asignacion) : new Date();
         const esPrestamoValue = es_prestamo === true || es_prestamo === 1;
         
+        // TRUNCAR OBSERVACIONES
+        let observacionesCortas = '';
+        if (observaciones) {
+            observacionesCortas = observaciones.length > 400 ? observaciones.substring(0, 400) : observaciones;
+        }
+        
+        // INICIAR TRANSACCIÓN
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        
         const insertAsignacion = await transaction.request()
             .input('producto_id', sql.Int, productoIdNum)
             .input('colaborador_id', sql.Int, colaboradorIdNum)
             .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
             .input('motivo', sql.NVarChar(500), motivo || (esPrestamoValue ? 'PRÉSTAMO TEMPORAL' : 'Asignación de equipo'))
             .input('fecha_asignacion', sql.DateTime, fechaAsignacionValue)
-            .input('observaciones', sql.NVarChar(1000), observaciones || '')
+            .input('observaciones', sql.NVarChar(500), observacionesCortas)
             .input('condicion_entrega', sql.NVarChar(50), 'BUENO')
             .input('es_prestamo', sql.Bit, esPrestamoValue)
             .query(`
@@ -1132,16 +977,39 @@ router.post('/', async (req, res) => {
             `);
         
         const asignacionId = insertAsignacion.recordset[0].id;
+        console.log('✅ Asignación creada ID:', asignacionId);
         
         await transaction.request()
             .input('id', sql.Int, productoIdNum)
             .input('id_estado_equipo', sql.Int, ESTADOS.ASIGNADO)
             .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
         
+        await transaction.commit();
+        console.log('✅ Transacción completada exitosamente');
+        
+        // Guardar observaciones completas en un archivo si es necesario
+        if (observaciones && observaciones.length > 400) {
+            try {
+                const observacionesFile = path.join(DOCS_DIR, `observaciones_${asignacionId}.json`);
+                fs.writeFileSync(observacionesFile, observaciones);
+                console.log(`✅ Observaciones completas guardadas en: observaciones_${asignacionId}.json`);
+            } catch (fileError) {
+                console.error('⚠️ Error guardando observaciones completas:', fileError.message);
+            }
+        }
+        
+        // Generar PDF del acta de asignación
         let documentoGenerado = null;
+        let pdfBuffer = null;
         
         if (!esPrestamoValue) {
             try {
+                console.log('📄 Generando acta de asignación...');
+                
+                if (!fs.existsSync(DOCS_DIR)) {
+                    fs.mkdirSync(DOCS_DIR, { recursive: true });
+                }
+                
                 const documentoData = {
                     id_asignacion: asignacionId,
                     colaborador: {
@@ -1164,26 +1032,33 @@ router.post('/', async (req, res) => {
                     }],
                     fecha_asignacion: fechaAsignacionValue,
                     motivo: motivo || 'Asignación de equipo',
-                    observaciones: observaciones || 'Sin observaciones',
+                    observaciones: 'Documento generado automáticamente por el sistema',
                     firma_trabajador: firma_trabajador || colaborador.nombre,
-                    firma_gerente: firma_gerente || EMPRESA.representante_legal,
                     es_prestamo: false
                 };
                 
-                const pdfBuffer = await generarActaAsignacion(documentoData);
+                pdfBuffer = await generarActaAsignacion(documentoData);
                 if (pdfBuffer && pdfBuffer.length > 0) {
                     const filename = `acta_asignacion_${asignacionId}_${Date.now()}.pdf`;
                     const filepath = path.join(DOCS_DIR, filename);
                     fs.writeFileSync(filepath, pdfBuffer);
                     documentoGenerado = { filename: filename };
-                    console.log(`✅ Acta generada automáticamente: ${filename}`);
+                    console.log(`✅ Acta de asignación generada: ${filename} (${pdfBuffer.length} bytes)`);
                 }
             } catch (pdfError) {
-                console.error('⚠️ Error generando acta automática:', pdfError.message);
+                console.error('⚠️ Error generando acta de asignación:', pdfError.message);
             }
         }
         
-        await transaction.commit();
+        // Devolver la respuesta con el PDF si se generó
+        if (pdfBuffer && pdfBuffer.length > 0 && !esPrestamoValue) {
+            console.log('📄 Enviando PDF de asignación al cliente...');
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="acta_asignacion_${asignacionId}.pdf"`);
+            res.setHeader('X-Documento-Generado', 'true');
+            res.setHeader('X-Asignacion-Id', asignacionId);
+            return res.send(pdfBuffer);
+        }
         
         res.json({
             success: true,
@@ -1196,30 +1071,37 @@ router.post('/', async (req, res) => {
         });
         
     } catch (error) {
-        if (transaction) await transaction.rollback();
-        console.error('❌ Error:', error);
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackError) {
+                console.error('❌ Error al hacer rollback:', rollbackError);
+            }
+        }
+        console.error('❌ Error detallado:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
+// ============================================
 // PUT - Finalizar asignación
+// ============================================
 router.put('/:asignacionId/finalizar', async (req, res) => {
     let pool;
     let transaction;
     
     try {
         const { asignacionId } = req.params;
-        const { fecha_devolucion, motivo_devolucion, observaciones_devolucion, condicion_entrega, firma_trabajador_devolucion, firma_gerente_devolucion } = req.body;
+        const { fecha_devolucion, motivo_devolucion, observaciones_devolucion, condicion_entrega, firma_trabajador_devolucion } = req.body;
         
         console.log(`📥 PUT /api/asignaciones/${asignacionId}/finalizar`);
         
         const asignacionIdNum = validarId(asignacionId, 'ID de asignación');
         
         pool = await getConnection();
-        transaction = new sql.Transaction(pool);
-        await transaction.begin();
         
-        const asignacionResult = await transaction.request()
+        // Obtener datos de la asignación
+        const asignacionResult = await pool.request()
             .input('id', sql.Int, asignacionIdNum)
             .query(`
                 SELECT a.id, a.producto_id, a.colaborador_id, a.es_prestamo,
@@ -1234,7 +1116,6 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             `);
         
         if (asignacionResult.recordset.length === 0) {
-            await transaction.rollback();
             return res.status(404).json({ success: false, message: 'Asignación no encontrada o ya finalizada' });
         }
         
@@ -1242,20 +1123,27 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
         const fechaRecepcionValue = fecha_devolucion ? new Date(fecha_devolucion) : new Date();
         const esPrestamoValue = asignacion.es_prestamo === true || asignacion.es_prestamo === 1;
         
+        // TRUNCAR OBSERVACIONES
+        let observacionesCortas = '';
+        if (observaciones_devolucion) {
+            observacionesCortas = observaciones_devolucion.length > 400 ? observaciones_devolucion.substring(0, 400) : observaciones_devolucion;
+        }
+        
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        
         await transaction.request()
             .input('id', sql.Int, asignacionIdNum)
             .input('fecha_devolucion', sql.DateTime, fechaRecepcionValue)
             .input('condicion_entrega', sql.NVarChar(50), condicion_entrega || 'BUENO')
-            .input('observaciones', sql.NVarChar(2000), observaciones_devolucion || '')
+            .input('observaciones', sql.NVarChar(500), observacionesCortas)
             .input('firma_trabajador_devolucion', sql.NVarChar, firma_trabajador_devolucion || null)
-            .input('firma_gerente_devolucion', sql.NVarChar, firma_gerente_devolucion || null)
             .query(`
                 UPDATE INV.asignaciones 
                 SET fecha_devolucion = @fecha_devolucion, 
                     condicion_entrega = @condicion_entrega,
                     observaciones = @observaciones,
-                    firma_trabajador_devolucion = @firma_trabajador_devolucion,
-                    firma_gerente_devolucion = @firma_gerente_devolucion
+                    firma_trabajador_devolucion = @firma_trabajador_devolucion
                 WHERE id = @id
             `);
         
@@ -1264,10 +1152,20 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
             .input('id_estado_equipo', sql.Int, ESTADOS.DISPONIBLE)
             .query(`UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id`);
         
+        await transaction.commit();
+        
+        // Generar PDF del acta de recepción
         let documentoGenerado = null;
+        let pdfBuffer = null;
         
         if (!esPrestamoValue) {
             try {
+                console.log('📄 Generando acta de recepción...');
+                
+                if (!fs.existsSync(DOCS_DIR)) {
+                    fs.mkdirSync(DOCS_DIR, { recursive: true });
+                }
+                
                 const recepcionData = {
                     id_asignacion: asignacionIdNum,
                     colaborador: {
@@ -1291,24 +1189,31 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
                     observaciones: observaciones_devolucion || 'Sin observaciones',
                     condicion_entrega: condicion_entrega || 'BUENO',
                     firma_trabajador: firma_trabajador_devolucion || asignacion.colaborador_nombre,
-                    firma_gerente: firma_gerente_devolucion || EMPRESA.representante_legal,
                     es_prestamo: false
                 };
                 
-                const pdfBuffer = await generarActaRecepcion(recepcionData);
+                pdfBuffer = await generarActaRecepcion(recepcionData);
                 if (pdfBuffer && pdfBuffer.length > 0) {
                     const filename = `acta_recepcion_${asignacionIdNum}_${Date.now()}.pdf`;
                     const filepath = path.join(DOCS_DIR, filename);
                     fs.writeFileSync(filepath, pdfBuffer);
                     documentoGenerado = { filename: filename };
-                    console.log(`✅ Acta de recepción generada automáticamente: ${filename}`);
+                    console.log(`✅ Acta de recepción generada: ${filename} (${pdfBuffer.length} bytes)`);
                 }
             } catch (pdfError) {
                 console.error('⚠️ Error generando acta de recepción:', pdfError.message);
             }
         }
         
-        await transaction.commit();
+        // Devolver la respuesta con el PDF si se generó
+        if (pdfBuffer && pdfBuffer.length > 0 && !esPrestamoValue) {
+            console.log('📄 Enviando PDF de recepción al cliente...');
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="acta_recepcion_${asignacionIdNum}.pdf"`);
+            res.setHeader('X-Documento-Generado', 'true');
+            res.setHeader('X-Asignacion-Id', asignacionIdNum);
+            return res.send(pdfBuffer);
+        }
         
         res.json({
             success: true,
@@ -1323,7 +1228,6 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
     }
 });
 
-// GET - Obtener historial de asignaciones
 router.get('/historial', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/historial');
@@ -1341,14 +1245,12 @@ router.get('/historial', async (req, res) => {
         `);
         
         res.json({ success: true, data: result.recordset });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// GET - Obtener asignación por ID (debe ir al final)
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -1374,7 +1276,6 @@ router.get('/:id', async (req, res) => {
         }
         
         res.json({ success: true, data: result.recordset[0] });
-        
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });

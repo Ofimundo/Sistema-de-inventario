@@ -1,4 +1,4 @@
-// backend/routes/productoRoutes.js - VERSIÓN COMPLETA Y CORREGIDA
+// backend/routes/productoRoutes.js - VERSIÓN COMPLETA CON ENDPOINT CON-ASIGNACION
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -180,6 +180,49 @@ router.get('/disposiciones', async (req, res) => {
     } catch (error) {
         console.error('❌ Error en disposiciones:', error);
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// GET - Obtener productos con asignación activa (NUEVO ENDPOINT)
+router.get('/con-asignacion', async (req, res) => {
+    try {
+        console.log('📥 GET /api/productos/con-asignacion');
+        
+        const pool = await getConnection();
+        
+        const result = await pool.request().query(`
+            SELECT 
+                p.id,
+                p.nombre,
+                p.marca,
+                p.modelo,
+                p.numero_serie,
+                p.condicion,
+                p.id_estado_equipo,
+                a.id as asignacion_id,
+                a.colaborador_id,
+                a.fecha_asignacion,
+                a.es_prestamo,
+                c.nombre as colaborador_nombre,
+                c.rut as colaborador_rut,
+                c.email as colaborador_email,
+                c.cargo as colaborador_cargo,
+                c.departamento as colaborador_departamento,
+                c.direccion as colaborador_direccion
+            FROM INV.productos p
+            LEFT JOIN INV.asignaciones a ON p.id = a.producto_id AND a.fecha_devolucion IS NULL
+            LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+            WHERE p.id_estado_equipo IS NULL OR p.id_estado_equipo != 6
+            ORDER BY p.nombre
+        `);
+        
+        console.log(`✅ ${result.recordset.length} productos con asignación activa cargados`);
+        
+        res.json({ success: true, data: result.recordset });
+        
+    } catch (error) {
+        console.error('❌ Error en /con-asignacion:', error);
+        res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
 
@@ -546,10 +589,10 @@ router.get('/test-db', async (req, res) => {
 });
 
 // ============================================
-// RUTA PRINCIPAL - GET PRODUCTOS (CORREGIDA)
+// RUTA PRINCIPAL - GET PRODUCTOS
 // ============================================
 
-// GET - Listar todos los productos (VERSIÓN CORREGIDA)
+// GET - Listar todos los productos
 router.get('/', async (req, res) => {
     try {
         console.log('📥 GET /api/productos');
@@ -646,7 +689,6 @@ router.get('/', async (req, res) => {
                 };
             }
 
-            // IMPORTANTE: Determinar si es préstamo desde múltiples fuentes
             const esPrestamo = 
                 (producto.es_prestamo === 1 || producto.es_prestamo === true) ||
                 (asignacionActiva?.es_prestamo === 1) ||
@@ -671,23 +713,12 @@ router.get('/', async (req, res) => {
                 estado: getEstadoTexto(producto.id_estado_equipo || 1),
                 colaborador_asignado: colaboradorAsignado,
                 asignacion_activa: asignacionActiva,
-                es_prestamo: esPrestamo ? 1 : 0  // FORZAR el valor correcto
+                es_prestamo: esPrestamo ? 1 : 0
             };
         });
 
-        // Log para depuración
         const prestamos = productos.filter(p => p.es_prestamo === 1);
         console.log(`📊 Préstamos activos detectados: ${prestamos.length}`);
-        if (prestamos.length > 0) {
-            console.log('📋 Préstamos encontrados:', prestamos.map(p => ({ id: p.id, nombre: p.nombre, colaborador: p.colaborador_asignado?.nombre })));
-        } else {
-            console.log('⚠️ No se detectaron préstamos. Verificando datos...');
-            // Mostrar primeros 5 productos con asignacion_activa
-            const conAsignacion = productos.filter(p => p.asignacion_activa);
-            if (conAsignacion.length > 0) {
-                console.log('Productos con asignación activa:', conAsignacion.slice(0, 5).map(p => ({ id: p.id, nombre: p.nombre, asignacion: p.asignacion_activa })));
-            }
-        }
 
         res.json({ success: true, data: productos });
 

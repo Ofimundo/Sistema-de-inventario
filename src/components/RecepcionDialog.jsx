@@ -1,4 +1,4 @@
-// src/components/RecepcionDialog.jsx - VERSIÓN CORREGIDA (con generación de acta de recepción)
+// src/components/RecepcionDialog.jsx - VERSIÓN COMPLETA CORREGIDA
 /* eslint-disable react-hooks/static-components */
 import React, { useState } from 'react';
 import {
@@ -38,11 +38,27 @@ import {
     Warning as WarningIcon
 } from '@mui/icons-material';
 import api from '../services/api';
-import { asignacionService } from '../services/asignacionService';
 
-// URL BASE
-const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
+// URL BASE - Usar la misma que api.js
+const getApiBaseUrl = () => {
+    const envUrl = import.meta.env?.VITE_API_URL;
+    if (envUrl) return envUrl;
+    return 'http://localhost:3001/api';
+};
+const API_BASE_URL = getApiBaseUrl();
 console.log('🔧 RecepcionDialog - API_BASE_URL:', API_BASE_URL);
+
+// Función para descargar PDF
+const descargarPDF = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+};
 
 // Componente de Firma Dibujada (Canvas)
 const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', width = 450, height = 180, label = 'Firma' }) => {
@@ -237,18 +253,12 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
     const [observacionesDevolucion, setObservacionesDevolucion] = useState('');
     const [condicionEntrega, setCondicionEntrega] = useState('BUENO');
     const [firmaTrabajadorText, setFirmaTrabajadorText] = useState('');
-    const [firmaGerenteText, setFirmaGerenteText] = useState('');
     const [firmaTrabajadorDibujo, setFirmaTrabajadorDibujo] = useState('');
-    const [firmaGerenteDibujo, setFirmaGerenteDibujo] = useState('');
     const [tipoFirmaTrabajador, setTipoFirmaTrabajador] = useState('texto');
-    const [tipoFirmaGerente, setTipoFirmaGerente] = useState('texto');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-    const [documentoGenerado, setDocumentoGenerado] = useState(null);
     const [downloading, setDownloading] = useState(false);
-    const [recepcionId, setRecepcionId] = useState(null);
 
     // Detectar si es préstamo
     const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
@@ -260,136 +270,8 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         return firmaTrabajadorText;
     };
 
-    const getFirmaGerenteFinal = () => {
-        if (tipoFirmaGerente === 'dibujo') {
-            return firmaGerenteDibujo || '';
-        }
-        return firmaGerenteText;
-    };
-
-    // Función para generar y descargar el acta de recepción
-    const generarYDescargarActaRecepcion = async (idAsignacion) => {
-        try {
-            console.log('📄 Generando acta de recepción para asignación ID:', idAsignacion);
-            
-            const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/api/asignaciones/generar-acta-recepcion`;
-            
-            const actaData = {
-                id_asignacion: idAsignacion,
-                colaborador: {
-                    nombre: asignacion?.colaborador_nombre || '',
-                    rut: asignacion?.colaborador_rut || '',
-                    email: asignacion?.colaborador_email || '',
-                    cargo: asignacion?.colaborador_cargo || '',
-                    departamento: asignacion?.colaborador_departamento || '',
-                    direccion: asignacion?.colaborador_direccion || 'Lota Nº2305, comuna de Providencia'
-                },
-                productos: [{
-                    tipo: 'Equipo',
-                    nombre: producto?.nombre || '',
-                    marca: producto?.marca || 'N/A',
-                    modelo: producto?.modelo || 'N/A',
-                    numero_serie: producto?.numero_serie || 'N/A',
-                    cantidad: 1
-                }],
-                fecha_recepcion: new Date().toISOString(),
-                motivo: motivoDevolucion || 'Devolución de equipo',
-                observaciones: observacionesDevolucion || 'Sin observaciones',
-                condicion_entrega: condicionEntrega,
-                firma_trabajador: getFirmaTrabajadorFinal(),
-                firma_gerente: getFirmaGerenteFinal(),
-                es_prestamo: false
-            };
-            
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(actaData)
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            
-            if (result.success && result.filename) {
-                // Descargar el PDF automáticamente
-                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${result.filename}`;
-                const downloadResponse = await fetch(downloadUrl, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (downloadResponse.ok) {
-                    const blob = await downloadResponse.blob();
-                    const downloadUrlBlob = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = downloadUrlBlob;
-                    link.download = result.filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(downloadUrlBlob);
-                    console.log('✅ Acta de recepción generada y descargada correctamente');
-                    return result.filename;
-                }
-            }
-            
-            return null;
-        } catch (error) {
-            console.error('❌ Error generando acta de recepción:', error);
-            return null;
-        }
-    };
-
-    // Función para descargar el acta de recepción manualmente
-    const handleDescargarDocumento = async () => {
-        if (!asignacion?.id || downloading) return;
-        
-        setDownloading(true);
-        try {
-            console.log('📥 Descargando acta de recepción para asignación:', asignacion.id);
-            
-            const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta-recepcion/${asignacion.id}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error ${response.status}: ${response.statusText}`);
-            }
-
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `acta_recepcion_${asignacion.id}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
-            
-            console.log('✅ Acta de recepción descargada correctamente');
-        } catch (error) {
-            console.error('❌ Error descargando acta:', error);
-            alert('Error al descargar el acta de recepción. Por favor, intente nuevamente.');
-        } finally {
-            setTimeout(() => setDownloading(false), 1000);
-        }
-    };
-
     const handleSubmit = async () => {
-        // Para préstamos, las firmas son opcionales
+        // Para préstamos, el motivo es opcional
         if (!esPrestamo) {
             if (!motivoDevolucion.trim()) {
                 setError('Debe ingresar el MOTIVO DE LA DEVOLUCIÓN (campo obligatorio)');
@@ -397,14 +279,9 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             }
             
             const firmaTrabajadorFinal = getFirmaTrabajadorFinal();
-            const firmaGerenteFinal = getFirmaGerenteFinal();
 
             if (!firmaTrabajadorFinal) {
                 setError('La firma del trabajador es requerida');
-                return;
-            }
-            if (!firmaGerenteFinal) {
-                setError('La firma del gerente general es requerida');
                 return;
             }
         }
@@ -413,55 +290,85 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         setError('');
 
         try {
+            const token = localStorage.getItem('token');
+            
             const payload = {
                 fecha_devolucion: new Date().toISOString(),
                 motivo_devolucion: motivoDevolucion || (esPrestamo ? 'Devolución de préstamo' : ''),
                 observaciones_devolucion: observacionesDevolucion,
                 condicion_entrega: condicionEntrega,
-                firma_trabajador_devolucion: esPrestamo ? null : getFirmaTrabajadorFinal(),
-                firma_gerente_devolucion: esPrestamo ? null : getFirmaGerenteFinal()
+                firma_trabajador_devolucion: esPrestamo ? null : getFirmaTrabajadorFinal()
             };
 
             console.log('📤 Enviando devolución:', payload);
+            console.log('📡 URL:', `${API_BASE_URL}/asignaciones/${asignacion.id}/finalizar`);
 
-            const response = await api.put(`/asignaciones/${asignacion.id}/finalizar`, payload);
+            // Usar fetch directamente para poder manejar la respuesta como blob si es necesario
+            const response = await fetch(`${API_BASE_URL}/asignaciones/${asignacion.id}/finalizar`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
 
-            console.log('📥 Respuesta del servidor:', response.data);
+            console.log('📥 Response status:', response.status);
+            console.log('📥 Content-Type:', response.headers.get('content-type'));
 
-            if (response.data.success) {
-                let filenameGenerado = null;
-                
-                // SI NO ES PRÉSTAMO, generar y descargar el acta de recepción automáticamente
-                if (!esPrestamo && asignacion.id) {
-                    filenameGenerado = await generarYDescargarActaRecepcion(asignacion.id);
-                    if (filenameGenerado) {
-                        setDocumentoGenerado({ filename: filenameGenerado });
+            const contentType = response.headers.get('content-type');
+            
+            if (contentType && contentType.includes('application/pdf')) {
+                // Es un PDF - descargar automáticamente
+                console.log('📄 Recibiendo PDF...');
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = `acta_recepcion_${asignacion.id}.pdf`;
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (match && match[1]) {
+                        filename = match[1].replace(/['"]/g, '');
                     }
                 }
+                descargarPDF(blob, filename);
+                console.log('✅ PDF descargado correctamente');
                 
+                // Mostrar confirmación
                 setShowConfirmDialog(true);
-                setSuccess(true);
                 
                 if (onSuccess) {
-                    const mensaje = esPrestamo 
-                        ? 'Devolución de préstamo registrada exitosamente (sin documento)'
-                        : filenameGenerado 
-                            ? 'Devolución registrada exitosamente. El acta de recepción se ha generado y descargado.'
-                            : 'Devolución registrada exitosamente.';
-                    
                     onSuccess({
                         success: true,
-                        message: mensaje,
-                        documento: !esPrestamo ? { filename: filenameGenerado || `acta_recepcion_${asignacion.id}.pdf` } : null,
+                        message: esPrestamo 
+                            ? 'Devolución de préstamo registrada exitosamente (sin documento)'
+                            : 'Devolución registrada exitosamente. El acta de recepción se ha descargado.',
                         es_prestamo: esPrestamo
                     });
                 }
             } else {
-                throw new Error(response.data?.message || 'Error al procesar la recepción');
+                // Es JSON - procesar normalmente
+                const data = await response.json();
+                console.log('📥 Respuesta JSON:', data);
+                
+                if (data.success) {
+                    setShowConfirmDialog(true);
+                    
+                    if (onSuccess) {
+                        onSuccess({
+                            success: true,
+                            message: esPrestamo 
+                                ? 'Devolución de préstamo registrada exitosamente (sin documento)'
+                                : 'Devolución registrada exitosamente.',
+                            es_prestamo: esPrestamo
+                        });
+                    }
+                } else {
+                    throw new Error(data.message || 'Error al procesar la recepción');
+                }
             }
         } catch (error) {
             console.error('❌ Error en recepción:', error);
-            setError(error.response?.data?.message || error.message || 'Error al procesar la transacción');
+            setError(error.message || 'Error al procesar la transacción');
         } finally {
             setLoading(false);
         }
@@ -472,15 +379,41 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
         setObservacionesDevolucion('');
         setCondicionEntrega('BUENO');
         setFirmaTrabajadorText('');
-        setFirmaGerenteText('');
         setFirmaTrabajadorDibujo('');
-        setFirmaGerenteDibujo('');
         setError('');
-        setSuccess(false);
         setShowConfirmDialog(false);
-        setDocumentoGenerado(null);
-        setRecepcionId(null);
         onClose();
+    };
+
+    // Función para descargar el acta manualmente
+    const handleDescargarActa = async () => {
+        if (!asignacion?.id || downloading) return;
+        
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/asignaciones/descargar-acta-recepcion/${asignacion.id}`;
+            
+            console.log('📥 Descargando acta desde:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            descargarPDF(blob, `acta_recepcion_${asignacion.id}.pdf`);
+            console.log('✅ Acta descargada manualmente');
+        } catch (error) {
+            console.error('❌ Error descargando acta:', error);
+            setError('Error al descargar el acta. Por favor, intente nuevamente.');
+        } finally {
+            setDownloading(false);
+        }
     };
 
     // Ventana de confirmación para PRÉSTAMOS
@@ -553,7 +486,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
             </DialogTitle>
             <DialogContent dividers sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body1" gutterBottom>
-                    La devolución se ha registrado correctamente y el <strong>Acta de Recepción</strong> se ha generado y descargado automáticamente.
+                    La devolución se ha registrado correctamente y el <strong>Acta de Recepción</strong> se ha descargado automáticamente.
                 </Typography>
                 
                 <Paper variant="outlined" sx={{ p: 2, mt: 2, textAlign: 'left', bgcolor: '#f9f9f9' }}>
@@ -599,11 +532,11 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                     <Button 
                         variant="contained" 
                         startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-                        onClick={handleDescargarDocumento}
+                        onClick={handleDescargarActa}
                         disabled={downloading}
                         sx={{ borderRadius: 0, bgcolor: '#0A66C2' }}
                     >
-                        {downloading ? 'Descargando...' : 'Descargar Acta'}
+                        {downloading ? 'Descargando...' : 'Descargar Acta nuevamente'}
                     </Button>
                     <Button 
                         variant="outlined" 
@@ -760,11 +693,11 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
 
                         <Divider />
 
-                        {/* Firmas - Solo para asignaciones normales */}
+                        {/* SOLO FIRMA DEL TRABAJADOR */}
                         {!esPrestamo && (
                             <>
                                 <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                                    Firmas de Conformidad
+                                    Firma de Conformidad
                                 </Typography>
 
                                 {/* Firma del Trabajador */}
@@ -800,40 +733,6 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                                         />
                                     )}
                                 </Box>
-
-                                {/* Firma del Gerente */}
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
-                                        Firma del Gerente General / Autorizante *
-                                    </Typography>
-                                    <FormControl component="fieldset" sx={{ mb: 2 }}>
-                                        <RadioGroup
-                                            row
-                                            value={tipoFirmaGerente}
-                                            onChange={(e) => setTipoFirmaGerente(e.target.value)}
-                                        >
-                                            <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                            <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                                        </RadioGroup>
-                                    </FormControl>
-                                    
-                                    {tipoFirmaGerente === 'texto' ? (
-                                        <FirmaTexto
-                                            onFirmaCapturada={setFirmaGerenteText}
-                                            valorInicial={firmaGerenteText}
-                                            required={true}
-                                            label="Firma del Gerente"
-                                        />
-                                    ) : (
-                                        <FirmaDibujada
-                                            onFirmaGuardada={setFirmaGerenteDibujo}
-                                            valorInicial={firmaGerenteDibujo}
-                                            width={450}
-                                            height={150}
-                                            label="Dibuje su firma aquí"
-                                        />
-                                    )}
-                                </Box>
                             </>
                         )}
 
@@ -859,7 +758,7 @@ const RecepcionDialog = ({ open, onClose, producto, asignacion, onSuccess }) => 
                             <Button
                                 variant="contained"
                                 onClick={handleSubmit}
-                                disabled={loading || (!esPrestamo && (!motivoDevolucion.trim() || !getFirmaTrabajadorFinal() || !getFirmaGerenteFinal()))}
+                                disabled={loading || (!esPrestamo && (!motivoDevolucion.trim() || !getFirmaTrabajadorFinal()))}
                                 startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
                                 sx={{ borderRadius: 0, bgcolor: esPrestamo ? '#F59E0B' : '#0A66C2', '&:hover': { bgcolor: esPrestamo ? '#d97706' : '#0050a0' } }}
                             >

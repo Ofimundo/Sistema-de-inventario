@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - VERSIÓN COMPLETA CORREGIDA (SIN PANTALLA EN BLANCO)
+// src/pages/Dashboard.jsx - VERSIÓN ACTUALIZADA CON ANEXOS
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -71,7 +71,8 @@ import {
   Work as WorkIcon,
   Business as BusinessIcon,
   Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon
+  VisibilityOff as VisibilityOffIcon,
+  Description as DescriptionIcon
 } from "@mui/icons-material";
 import api from "../services/api";
 
@@ -163,7 +164,7 @@ const bodegasService = {
 };
 
 // ============================================
-// SERVICIO DE PRÉSTAMOS - CORREGIDO CON MANEJO DE ERRORES
+// SERVICIO DE PRÉSTAMOS
 // ============================================
 const prestamosService = {
   getStatsPrestamos: async () => {
@@ -173,7 +174,6 @@ const prestamosService = {
       
       let asignaciones = [];
       
-      // Manejar diferentes estructuras de respuesta
       if (response.data?.data && Array.isArray(response.data.data)) {
         asignaciones = response.data.data;
       } else if (Array.isArray(response.data)) {
@@ -185,13 +185,11 @@ const prestamosService = {
         return { total: 0, activos: 0 };
       }
       
-      // Verificar que asignaciones sea un array
       if (!Array.isArray(asignaciones)) {
         console.warn('⚠️ asignaciones no es un array:', asignaciones);
         return { total: 0, activos: 0 };
       }
       
-      // Filtrar préstamos de manera segura (manejar cuando es_prestamo no existe)
       const prestamos = asignaciones.filter(a => {
         if (a && typeof a === 'object') {
           if (a.es_prestamo !== undefined) {
@@ -776,12 +774,16 @@ const Dashboard = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const isMountedRef = useRef(true);
 
+  // ============================================
+  // MENÚ PRINCIPAL - ACTUALIZADO CON ANEXOS
+  // ============================================
   const menuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
     { text: "Productos", icon: <InventoryIcon />, path: "/productos" },
     { text: "Bodegas", icon: <WarehouseIcon />, path: "/bodegas" },
     { text: 'Colaboradores', icon: <PersonIcon />, path: '/colaboradores' },
     { text: "Asignaciones", icon: <AssignmentIcon />, path: "/asignacion" },
+    { text: "Anexos", icon: <DescriptionIcon />, path: "/anexos" },  // <-- NUEVO
     { text: "Stock", icon: <Inventory2Icon />, path: "/stock" },
     { text: "Historial", icon: <HistoryIcon />, path: "/historial" },
   ];
@@ -841,7 +843,6 @@ const Dashboard = () => {
       if (!isMountedRef.current) return;
       setStats(newStats);
       
-      // Llamada segura a préstamos - SI FALLA NO ROMPE LA PÁGINA
       let prestamosStats = { total: 0, activos: 0 };
       try {
         prestamosStats = await prestamosService.getStatsPrestamos();
@@ -909,7 +910,6 @@ const Dashboard = () => {
     return () => clearInterval(intervalo);
   }, [loading, refreshing, fetchDashboardData, dataLoaded]);
 
-  // Error boundary para evitar que la app se rompa
   useEffect(() => {
     const handleError = (event) => {
       console.error('Error global capturado:', event.error);
@@ -932,7 +932,6 @@ const Dashboard = () => {
     };
   }, []);
 
-  // INICIALIZACIÓN PRINCIPAL
   useEffect(() => {
     isMountedRef.current = true;
     
@@ -1010,7 +1009,6 @@ const Dashboard = () => {
     shape: { borderRadius: 14 },
   });
 
-  // Mostrar pantalla de carga mientras se cargan los datos iniciales
   if (loading && !dataLoaded) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -1194,7 +1192,8 @@ const Dashboard = () => {
               <Typography sx={{ opacity: 0.9, mb: 3 }}>
                 {stats.totalProductos > 0 && `📦 Tienes ${stats.totalProductos} productos en inventario. `}
                 {stats.asignados > 0 && `🎯 Hay ${stats.asignados} equipos asignados. `}
-                {statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos.`}
+                {statsPrestamos.activos > 0 && `📋 Hay ${statsPrestamos.activos} préstamos activos. `}
+                {statsPrestamos.activos >= 0 && `📄 Genera anexos de contrato para los colaboradores.`}
               </Typography>
               
               <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
@@ -1212,6 +1211,9 @@ const Dashboard = () => {
                 </Button>
                 <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => navigate("/asignacion")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
                   Gestionar Préstamos
+                </Button>
+                <Button variant="outlined" startIcon={<DescriptionIcon />} onClick={() => navigate("/anexos")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
+                  Anexos de Contrato
                 </Button>
               </Box>
             </Paper>
@@ -1242,7 +1244,7 @@ const Dashboard = () => {
                 <NavigationCard icon={AssignmentIcon} title="Asignaciones" description="Controla equipos" onClick={() => navigate("/asignacion")} color="#16A34A" />
               </Grid>
               <Grid item xs={6} sm={6} md={3}>
-                <NavigationCard icon={Inventory2Icon} title="Stock" description="Por marca/modelo" onClick={() => navigate("/stock")} color="#F59E0B" />
+                <NavigationCard icon={DescriptionIcon} title="Anexos" description="Genera documentos legales" onClick={() => navigate("/anexos")} color="#F59E0B" />
               </Grid>
             </Grid>
           </Container>

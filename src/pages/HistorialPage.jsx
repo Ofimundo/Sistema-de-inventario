@@ -1,4 +1,4 @@
-// src/pages/HistorialPage.jsx - VERSIÓN CORREGIDA CON STOCK EN MENÚ
+// src/pages/HistorialPage.jsx - VERSIÓN COMPLETA CON FILTROS MEJORADOS
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -99,8 +99,15 @@ import {
     DeleteForever as DeleteForeverIcon,
     VolunteerActivism as VolunteerActivismIcon,
     Inventory2 as Inventory2Icon,
-    BarChart as BarChartIcon
+    BarChart as BarChartIcon,
+    Description as DescriptionIcon,
+    PictureAsPdf as PdfIcon,
+    Construction as ConstructionIcon,
+    People as PeopleIcon,
+    Science as ScienceIcon,
+    Receipt as ReceiptIcon
 } from '@mui/icons-material';
+import api from '../services/api';
 import historialService from '../services/historialService';
 
 const drawerWidth = 260;
@@ -189,6 +196,18 @@ const NotificacionItem = styled(ListItem)(({ theme, leida }) => ({
         backgroundColor: alpha(colors.primary, 0.05)
     }
 }));
+
+// Función para descargar PDF
+const descargarPDF = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+};
 
 // Tarjeta de estadísticas
 function StatCard({ icon: Icon, title, value, color, loading }) {
@@ -308,10 +327,17 @@ const HistorialPage = () => {
     const [historialCompleto, setHistorialCompleto] = useState([]);
     const [bajas, setBajas] = useState([]);
     const [donaciones, setDonaciones] = useState([]);
+    const [asignaciones, setAsignaciones] = useState([]);
+    const [prestamos, setPrestamos] = useState([]);
+    const [mantenciones, setMantenciones] = useState([]);
+    const [colaboradores, setColaboradores] = useState([]);
+    const [laboratorios, setLaboratorios] = useState([]);
+    const [documentos, setDocumentos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [apiError, setApiError] = useState(false);
     const [exportLoading, setExportLoading] = useState(false);
+    const [downloadingDoc, setDownloadingDoc] = useState(false);
     
     // Estados para paginación
     const [page, setPage] = useState(0);
@@ -322,9 +348,9 @@ const HistorialPage = () => {
     // Estados para filtros
     const [filtros, setFiltros] = useState({
         busqueda: '',
-        origen: 'todos',
         fechaInicio: null,
-        fechaFin: null
+        fechaFin: null,
+        tipoDocumento: 'todos'
     });
 
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -332,7 +358,7 @@ const HistorialPage = () => {
     // Snackbar
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    // MENÚ ACTUALIZADO CON STOCK POR MARCA Y MODELO
+    // MENÚ ACTUALIZADO
     const menuItems = [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
         { text: 'Productos', icon: <InventoryIcon />, path: '/productos' },
@@ -341,6 +367,16 @@ const HistorialPage = () => {
         { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
         { text: 'Stock por Marca/Modelo', icon: <Inventory2Icon />, path: '/stock' },
         { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+        { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+    ];
+
+    // Opciones para filtro de tipo de documento
+    const tiposDocumentoOptions = [
+        { value: 'todos', label: 'Todos los documentos' },
+        { value: 'asignacion', label: 'Actas de Asignación' },
+        { value: 'recepcion', label: 'Actas de Recepción' },
+        { value: 'anexo', label: 'Anexos de Contrato' },
+        { value: 'checklist', label: 'Checklist' }
     ];
 
     // Función para mostrar notificaciones
@@ -413,87 +449,119 @@ const HistorialPage = () => {
         showSnackbar('Todas las notificaciones eliminadas', 'success');
     }, [showSnackbar]);
 
-    // Exportar a Excel
-    const handleExportExcel = useCallback(async () => {
-        if (exportLoading) return;
+    // Función para descargar documento
+    const handleDescargarDocumento = async (filename, tipo) => {
+        if (downloadingDoc) return;
         
+        setDownloadingDoc(true);
         try {
-            setExportLoading(true);
-            showSnackbar('Generando reporte de historial...', 'info');
+            const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
             
-            const blob = await historialService.exportarExcel(filtros);
-            
-            if (!blob || blob.size === 0) {
-                throw new Error('El archivo generado está vacío');
-            }
-            
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            
-            const fecha = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            let nombreArchivo = `historial_completo_${fecha}.xlsx`;
-            
-            if (filtros.origen && filtros.origen !== 'todos') {
-                nombreArchivo = `historial_${filtros.origen}_${fecha}.xlsx`;
-            }
-            
-            link.setAttribute('download', nombreArchivo);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            
-            showSnackbar('✅ Reporte generado y descargado exitosamente', 'success');
-            
-        } catch (error) {
-            console.error('❌ Error exportando:', error);
-            let errorMessage = 'Error al generar el reporte';
-            if (error.message) errorMessage = error.message;
-            showSnackbar(errorMessage, 'error');
-        } finally {
-            setExportLoading(false);
-        }
-    }, [showSnackbar, filtros, exportLoading]);
+            const response = await fetch(`${API_BASE_URL}/documentos/descargar/${encodeURIComponent(filename)}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-    // Cargar historial
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            descargarPDF(blob, filename);
+            showSnackbar(`Documento ${tipo} descargado correctamente`, 'success');
+        } catch (error) {
+            console.error('❌ Error descargando documento:', error);
+            showSnackbar('Error al descargar el documento', 'error');
+        } finally {
+            setDownloadingDoc(false);
+        }
+    };
+
+    // Cargar documentos del sistema
+    const cargarDocumentos = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            
+            const response = await fetch(`${API_BASE_URL}/documentos/todos`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data) {
+                    setDocumentos(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Error cargando documentos:', error);
+            setDocumentos([]);
+        }
+    };
+
+    // Cargar historial completo
     const cargarHistorial = useCallback(async () => {
         setLoading(true);
         setApiError(false);
         
         try {
-            console.log('🔄 Cargando historial...');
+            console.log('🔄 Cargando historial completo...');
             
+            const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            
+            // Cargar asignaciones
+            const asignacionesRes = await fetch(`${API_BASE_URL}/asignaciones/historial`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (asignacionesRes.ok) {
+                const data = await asignacionesRes.json();
+                if (data.success) {
+                    setAsignaciones(data.data || []);
+                }
+            }
+            
+            // Cargar préstamos activos
+            const prestamosRes = await fetch(`${API_BASE_URL}/asignaciones/prestamos/activos`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (prestamosRes.ok) {
+                const data = await prestamosRes.json();
+                if (data.success) {
+                    setPrestamos(data.data || []);
+                }
+            }
+            
+            // Cargar colaboradores
+            const colaboradoresRes = await fetch(`${API_BASE_URL}/colaboradores`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (colaboradoresRes.ok) {
+                const data = await colaboradoresRes.json();
+                if (data.success) {
+                    setColaboradores(data.data || []);
+                }
+            }
+            
+            // Cargar documentos
+            await cargarDocumentos();
+            
+            // Datos existentes
             const completoResponse = await historialService.getHistorialCompleto();
-            
             if (completoResponse && completoResponse.success) {
                 const data = completoResponse.data || {};
-                
                 setHistorialCompleto(data.completo || []);
                 setBajas(data.bajas || []);
                 setDonaciones(data.donaciones || []);
-                
-                console.log('✅ Historial cargado:', {
-                    completo: data.completo?.length || 0,
-                    bajas: data.bajas?.length || 0,
-                    donaciones: data.donaciones?.length || 0
-                });
-                
-                setApiError(false);
-            } else {
-                setHistorialCompleto([]);
-                setBajas([]);
-                setDonaciones([]);
-                console.log('⚠️ No se recibieron datos válidos del servidor');
             }
-
+            
+            console.log('✅ Historial cargado completo');
+            setApiError(false);
         } catch (error) {
             console.error('❌ Error cargando historial:', error);
             setApiError(true);
             showSnackbar('Error al cargar el historial', 'error');
-            setHistorialCompleto([]);
-            setBajas([]);
-            setDonaciones([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -551,9 +619,9 @@ const HistorialPage = () => {
     const limpiarFiltros = () => {
         setFiltros({
             busqueda: '',
-            origen: 'todos',
             fechaInicio: null,
-            fechaFin: null
+            fechaFin: null,
+            tipoDocumento: 'todos'
         });
         setPage(0);
     };
@@ -590,7 +658,7 @@ const HistorialPage = () => {
     };
 
     const getFechaTexto = (item) => {
-        const fecha = item.fecha || item.fecha_hora || item.fecha_accion;
+        const fecha = item.fecha || item.fecha_asignacion || item.fecha_creacion;
         if (!fecha) return 'Fecha desconocida';
         try {
             return new Date(fecha).toLocaleString('es-CL', {
@@ -605,87 +673,131 @@ const HistorialPage = () => {
         }
     };
 
-    const getIconoPorOrigen = (origen, accion) => {
-        if (origen === 'baja') return <DeleteForeverIcon />;
-        if (origen === 'donacion') return <VolunteerActivismIcon />;
-        if (origen === 'historial') return <HistoryIcon />;
-        return <MovimientoIcon />;
-    };
-
-    const getColorPorOrigen = (origen, accion) => {
-        if (origen === 'baja') return colors.error;
-        if (origen === 'donacion') return colors.secondary;
-        if (origen === 'historial') return colors.primary;
-        return colors.info;
-    };
-
-    const getLabelPorOrigen = (origen, accion) => {
-        if (origen === 'baja') return 'Baja';
-        if (origen === 'donacion') return 'Donación';
-        if (origen === 'historial') return 'Historial';
-        return 'Movimiento';
-    };
-
-    // Obtener datos según pestaña
-    const getDatosActuales = () => {
-        switch(tabValue) {
-            case 0: return historialCompleto;
-            case 1: return bajas;
-            case 2: return donaciones;
-            default: return [];
+    // ============================================
+    // FUNCIONES PARA TIPOS DE DOCUMENTOS CORREGIDAS
+    // ============================================
+    const getIconoPorTipo = (tipo) => {
+        switch(tipo) {
+            case 'asignacion': return <AssignmentIcon />;
+            case 'prestamo': return <PersonIcon />;
+            case 'baja': return <DeleteForeverIcon />;
+            case 'donacion': return <VolunteerActivismIcon />;
+            case 'mantencion': return <ConstructionIcon />;
+            case 'colaborador': return <PeopleIcon />;
+            case 'documento': return <PdfIcon />;
+            case 'anexo': return <DescriptionIcon />;
+            default: return <HistoryIcon />;
         }
     };
 
-    // Filtrar datos
-    const filtrarDatos = (items) => {
-        if (!items || items.length === 0) return [];
+    const getColorPorTipo = (tipo) => {
+        switch(tipo) {
+            case 'asignacion': return colors.primary;
+            case 'prestamo': return colors.warning;
+            case 'baja': return colors.error;
+            case 'donacion': return colors.secondary;
+            case 'mantencion': return colors.info;
+            case 'colaborador': return colors.success;
+            case 'documento': return '#dc2626';
+            case 'anexo': return '#8B5CF6';
+            default: return colors.info;
+        }
+    };
+
+    const getLabelPorTipo = (tipo) => {
+        switch(tipo) {
+            case 'asignacion': return 'Asignación';
+            case 'prestamo': return 'Préstamo';
+            case 'baja': return 'Baja';
+            case 'donacion': return 'Donación';
+            case 'mantencion': return 'Mantención';
+            case 'colaborador': return 'Colaborador';
+            case 'documento': return 'Documento';
+            case 'anexo': return 'Anexo';
+            default: return 'Movimiento';
+        }
+    };
+
+    // Filtrar datos según pestaña con filtros mejorados
+    const filtrarDatosPorPestana = () => {
+        let datos = [];
         
-        return items.filter(item => {
+        switch(tabValue) {
+            case 0: // Todos
+                datos = [
+                    ...historialCompleto.map(item => ({ ...item, origen: item.origen || 'movimiento' })),
+                    ...asignaciones.map(a => ({ ...a, origen: 'asignacion', fecha: a.fecha_asignacion })),
+                    ...prestamos.map(p => ({ ...p, origen: 'prestamo', fecha: p.fecha_asignacion })),
+                    ...documentos.map(d => ({ ...d, origen: d.tipo === 'anexo' ? 'anexo' : 'documento', fecha: d.fecha_creacion }))
+                ];
+                break;
+            case 1: // Asignaciones
+                datos = asignaciones.map(a => ({ ...a, origen: 'asignacion', fecha: a.fecha_asignacion }));
+                break;
+            case 2: // Préstamos
+                datos = prestamos.map(p => ({ ...p, origen: 'prestamo', fecha: p.fecha_asignacion }));
+                break;
+            case 3: // Bajas
+                datos = bajas;
+                break;
+            case 4: // Donaciones
+                datos = donaciones;
+                break;
+            case 5: // Colaboradores
+                datos = colaboradores;
+                break;
+            case 6: // Documentos
+                datos = documentos;
+                break;
+            default:
+                datos = [];
+        }
+        
+        // Aplicar filtros
+        return datos.filter(item => {
+            // Filtro por búsqueda
             if (filtros.busqueda) {
                 const busquedaLower = filtros.busqueda.toLowerCase();
-                const producto = item.producto_nombre || '';
-                const descripcion = item.descripcion || '';
-                const usuario = item.usuario_responsable || '';
-                
-                const coincide = 
-                    producto.toLowerCase().includes(busquedaLower) ||
-                    descripcion.toLowerCase().includes(busquedaLower) ||
-                    usuario.toLowerCase().includes(busquedaLower);
-                
-                if (!coincide) return false;
+                const textoBuscar = `${item.descripcion || ''} ${item.producto_nombre || ''} ${item.nombre || ''} ${item.filename || ''}`.toLowerCase();
+                if (!textoBuscar.includes(busquedaLower)) return false;
             }
-
-            if (filtros.origen !== 'todos' && item.origen !== filtros.origen) {
-                return false;
+            
+            // Filtro por fecha inicio
+            if (filtros.fechaInicio) {
+                const fechaItem = new Date(item.fecha || item.fecha_asignacion || item.fecha_creacion);
+                if (fechaItem < filtros.fechaInicio) return false;
             }
-
-            const fecha = new Date(item.fecha || 0);
-            if (filtros.fechaInicio && fecha < filtros.fechaInicio) return false;
+            
+            // Filtro por fecha fin
             if (filtros.fechaFin) {
+                const fechaItem = new Date(item.fecha || item.fecha_asignacion || item.fecha_creacion);
                 const fechaFin = new Date(filtros.fechaFin);
                 fechaFin.setHours(23, 59, 59);
-                if (fecha > fechaFin) return false;
+                if (fechaItem > fechaFin) return false;
             }
-
+            
+            // Filtro por tipo de documento (solo para pestaña de documentos)
+            if (tabValue === 6 && filtros.tipoDocumento !== 'todos') {
+                if (item.tipo !== filtros.tipoDocumento) return false;
+            }
+            
             return true;
         });
     };
 
-    const ordenarDatos = (items) => {
-        if (!items || items.length === 0) return [];
-        
-        return [...items].sort((a, b) => {
+    const ordenarDatos = (datos) => {
+        return [...datos].sort((a, b) => {
             let aValue, bValue;
             
             if (orderBy === 'fecha') {
-                aValue = new Date(a.fecha || 0);
-                bValue = new Date(b.fecha || 0);
+                aValue = new Date(a.fecha || a.fecha_asignacion || a.fecha_creacion || 0);
+                bValue = new Date(b.fecha || b.fecha_asignacion || b.fecha_creacion || 0);
             } else if (orderBy === 'producto') {
-                aValue = a.producto_nombre || '';
-                bValue = b.producto_nombre || '';
+                aValue = a.producto_nombre || a.nombre || '';
+                bValue = b.producto_nombre || b.nombre || '';
             } else {
-                aValue = a[orderBy];
-                bValue = b[orderBy];
+                aValue = a[orderBy] || '';
+                bValue = b[orderBy] || '';
             }
             
             if (typeof aValue === 'string') {
@@ -700,13 +812,22 @@ const HistorialPage = () => {
         });
     };
 
-    const datosFiltrados = ordenarDatos(filtrarDatos(getDatosActuales()));
+    const datosFiltrados = ordenarDatos(filtrarDatosPorPestana());
     const paginatedData = datosFiltrados.slice(
         page * rowsPerPage,
         page * rowsPerPage + rowsPerPage
     );
 
-    const origenesUnicos = ['todos', ...new Set(historialCompleto.map(i => i.origen).filter(Boolean))];
+    // Tabs actualizados
+    const tabs = [
+        { label: 'TODOS', icon: <HistoryIcon /> },
+        { label: 'ASIGNACIONES', icon: <AssignmentIcon /> },
+        { label: 'PRÉSTAMOS', icon: <PersonIcon /> },
+        { label: 'BAJAS', icon: <DeleteForeverIcon /> },
+        { label: 'DONACIONES', icon: <VolunteerActivismIcon /> },
+        { label: 'COLABORADORES', icon: <PeopleIcon /> },
+        { label: 'DOCUMENTOS', icon: <PdfIcon /> }
+    ];
 
     // Tema
     const customTheme = createTheme({
@@ -924,7 +1045,7 @@ const HistorialPage = () => {
                                 Historial del Sistema
                             </Typography>
                             <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                                Consulta todos los movimientos, bajas y donaciones realizados
+                                Consulta todos los movimientos, asignaciones, préstamos, bajas, donaciones, colaboradores y documentos
                             </Typography>
                             
                             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -934,19 +1055,6 @@ const HistorialPage = () => {
                                 >
                                     {mostrarFiltros ? 'Ocultar filtros' : 'Mostrar filtros'}
                                 </GradientButton>
-                                <Button
-                                    variant="outlined"
-                                    startIcon={<DownloadIcon />}
-                                    onClick={handleExportExcel}
-                                    disabled={exportLoading}
-                                    sx={{
-                                        borderColor: 'white',
-                                        color: 'white',
-                                        '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
-                                    }}
-                                >
-                                    {exportLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'Exportar Excel'}
-                                </Button>
                             </Stack>
 
                             {apiError && (
@@ -962,18 +1070,21 @@ const HistorialPage = () => {
 
                         {/* Stats Cards */}
                         <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                            <Grid item xs={12} sm={6} md={4}>
-                                <StatCard icon={HistoryIcon} title="TOTAL REGISTROS" value={historialCompleto.length} color={colors.primary} loading={loading} />
+                            <Grid item xs={12} sm={6} md={3}>
+                                <StatCard icon={HistoryIcon} title="TOTAL REGISTROS" value={historialCompleto.length + asignaciones.length + prestamos.length + documentos.length} color={colors.primary} loading={loading} />
                             </Grid>
-                            <Grid item xs={12} sm={6} md={4}>
-                                <StatCard icon={DeleteForeverIcon} title="BAJAS" value={bajas.length} color={colors.error} loading={loading} />
+                            <Grid item xs={12} sm={6} md={3}>
+                                <StatCard icon={AssignmentIcon} title="ASIGNACIONES" value={asignaciones.length} color={colors.primary} loading={loading} />
                             </Grid>
-                            <Grid item xs={12} sm={6} md={4}>
-                                <StatCard icon={VolunteerActivismIcon} title="DONACIONES" value={donaciones.length} color={colors.secondary} loading={loading} />
+                            <Grid item xs={12} sm={6} md={3}>
+                                <StatCard icon={PersonIcon} title="PRÉSTAMOS" value={prestamos.length} color={colors.warning} loading={loading} />
+                            </Grid>
+                            <Grid item xs={12} sm={6} md={3}>
+                                <StatCard icon={PeopleIcon} title="COLABORADORES" value={colaboradores.length} color={colors.success} loading={loading} />
                             </Grid>
                         </Grid>
 
-                        {/* Filtros */}
+                        {/* Filtros Mejorados */}
                         {mostrarFiltros && (
                             <FilterPaper>
                                 <Fade in={mostrarFiltros}>
@@ -982,7 +1093,7 @@ const HistorialPage = () => {
                                             <Grid item xs={12} md={4}>
                                                 <TextField
                                                     fullWidth
-                                                    placeholder="Buscar por producto, descripción o usuario..."
+                                                    placeholder="Buscar por producto, colaborador, documento..."
                                                     value={filtros.busqueda}
                                                     onChange={(e) => handleFiltroChange('busqueda', e.target.value)}
                                                     InputProps={{
@@ -996,26 +1107,10 @@ const HistorialPage = () => {
                                                     size="small"
                                                 />
                                             </Grid>
-                                            <Grid item xs={12} md={2}>
-                                                <FormControl fullWidth size="small">
-                                                    <InputLabel>Origen</InputLabel>
-                                                    <Select
-                                                        value={filtros.origen}
-                                                        onChange={(e) => handleFiltroChange('origen', e.target.value)}
-                                                        label="Origen"
-                                                    >
-                                                        {origenesUnicos.map(o => (
-                                                            <MenuItem key={o} value={o}>
-                                                                {o === 'todos' ? 'Todos' : o.charAt(0).toUpperCase() + o.slice(1)}
-                                                            </MenuItem>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                            </Grid>
                                             <Grid item xs={12} md={3}>
                                                 <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
                                                     <DatePicker
-                                                        label="Desde"
+                                                        label="Fecha desde"
                                                         value={filtros.fechaInicio}
                                                         onChange={(date) => handleFiltroChange('fechaInicio', date)}
                                                         slotProps={{ textField: { size: 'small', fullWidth: true } }}
@@ -1025,17 +1120,35 @@ const HistorialPage = () => {
                                             <Grid item xs={12} md={3}>
                                                 <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
                                                     <DatePicker
-                                                        label="Hasta"
+                                                        label="Fecha hasta"
                                                         value={filtros.fechaFin}
                                                         onChange={(date) => handleFiltroChange('fechaFin', date)}
                                                         slotProps={{ textField: { size: 'small', fullWidth: true } }}
                                                     />
                                                 </LocalizationProvider>
                                             </Grid>
+                                            {tabValue === 6 && (
+                                                <Grid item xs={12} md={2}>
+                                                    <FormControl fullWidth size="small">
+                                                        <InputLabel>Tipo Documento</InputLabel>
+                                                        <Select
+                                                            value={filtros.tipoDocumento}
+                                                            onChange={(e) => handleFiltroChange('tipoDocumento', e.target.value)}
+                                                            label="Tipo Documento"
+                                                        >
+                                                            {tiposDocumentoOptions.map(option => (
+                                                                <MenuItem key={option.value} value={option.value}>
+                                                                    {option.label}
+                                                                </MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
+                                                </Grid>
+                                            )}
                                         </Grid>
                                         <Box display="flex" justifyContent="flex-end" mt={2}>
                                             <Button size="small" onClick={limpiarFiltros} startIcon={<ClearIcon />} variant="outlined" sx={{ mr: 1 }}>
-                                                Limpiar
+                                                Limpiar filtros
                                             </Button>
                                             <Button size="small" onClick={() => setMostrarFiltros(false)} variant="contained">
                                                 Aplicar
@@ -1055,9 +1168,14 @@ const HistorialPage = () => {
                                 scrollButtons="auto"
                                 sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
                             >
-                                <Tab icon={<HistoryIcon />} label={isMobile ? "" : "TODOS"} iconPosition="start" />
-                                <Tab icon={<DeleteForeverIcon />} label={isMobile ? "" : "BAJAS"} iconPosition="start" />
-                                <Tab icon={<VolunteerActivismIcon />} label={isMobile ? "" : "DONACIONES"} iconPosition="start" />
+                                {tabs.map((tab, index) => (
+                                    <Tab 
+                                        key={index}
+                                        icon={tab.icon} 
+                                        label={isMobile ? "" : tab.label} 
+                                        iconPosition="start" 
+                                    />
+                                ))}
                             </Tabs>
 
                             {/* Panel de Todos */}
@@ -1066,7 +1184,7 @@ const HistorialPage = () => {
                                     <Table size={isTablet ? 'small' : 'medium'} stickyHeader>
                                         <TableHead>
                                             <TableRow>
-                                                <StyledTableCell>Origen</StyledTableCell>
+                                                <StyledTableCell>Tipo</StyledTableCell>
                                                 <StyledTableCell>
                                                     <TableSortLabel active={orderBy === 'fecha'} direction={order} onClick={() => handleRequestSort('fecha')}>
                                                         Fecha
@@ -1074,23 +1192,22 @@ const HistorialPage = () => {
                                                 </StyledTableCell>
                                                 <StyledTableCell>
                                                     <TableSortLabel active={orderBy === 'producto'} direction={order} onClick={() => handleRequestSort('producto')}>
-                                                        Producto
+                                                        Descripción
                                                     </TableSortLabel>
                                                 </StyledTableCell>
-                                                <StyledTableCell>Acción</StyledTableCell>
-                                                <StyledTableCell>Descripción</StyledTableCell>
+                                                <StyledTableCell>Detalle</StyledTableCell>
                                                 <StyledTableCell>Usuario</StyledTableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {loading ? (
-                                                <TableRow><TableCell colSpan={6} align="center"><CircularProgress /></TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={5} align="center"><CircularProgress /></TableCell></TableRow>
                                             ) : paginatedData.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                                                    <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
                                                         <HistoryIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
                                                         <Typography variant="h6">No hay registros</Typography>
-                                                        <Typography variant="body2" color="text.secondary">No se encontraron movimientos en el historial</Typography>
+                                                        <Typography variant="body2" color="text.secondary">No se encontraron movimientos con los filtros aplicados</Typography>
                                                     </TableCell>
                                                 </TableRow>
                                             ) : (
@@ -1098,32 +1215,131 @@ const HistorialPage = () => {
                                                     <StyledTableRow key={generarKeyUnica(item, index)} hover>
                                                         <TableCell>
                                                             <Chip
-                                                                icon={getIconoPorOrigen(item.origen, item.accion)}
-                                                                label={getLabelPorOrigen(item.origen, item.accion)}
+                                                                icon={getIconoPorTipo(item.origen || item.tipo)}
+                                                                label={getLabelPorTipo(item.origen || item.tipo)}
                                                                 size="small"
                                                                 sx={{
-                                                                    bgcolor: alpha(getColorPorOrigen(item.origen, item.accion), 0.1),
-                                                                    color: getColorPorOrigen(item.origen, item.accion)
+                                                                    bgcolor: alpha(getColorPorTipo(item.origen || item.tipo), 0.1),
+                                                                    color: getColorPorTipo(item.origen || item.tipo)
                                                                 }}
                                                             />
                                                         </TableCell>
                                                         <TableCell>{getFechaTexto(item)}</TableCell>
                                                         <TableCell>
                                                             <Typography variant="body2" fontWeight={500}>
-                                                                {item.producto_nombre || 'N/A'}
+                                                                {item.descripcion || item.producto_nombre || item.nombre || item.filename || 'N/A'}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Chip label={item.accion} size="small" variant="outlined" />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Tooltip title={item.descripcion || ''}>
-                                                                <Typography variant="body2" sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                    {item.descripcion || 'Sin descripción'}
+                                                            {item.filename && (
+                                                                <Button
+                                                                    size="small"
+                                                                    startIcon={<PdfIcon />}
+                                                                    onClick={() => handleDescargarDocumento(item.filename, item.tipo === 'anexo' ? 'Anexo' : 'Documento')}
+                                                                    disabled={downloadingDoc}
+                                                                    sx={{ textTransform: 'none' }}
+                                                                >
+                                                                    {downloadingDoc ? 'Descargando...' : 'Ver PDF'}
+                                                                </Button>
+                                                            )}
+                                                            {item.origen === 'asignacion' && (
+                                                                <Typography variant="body2">
+                                                                    Producto: {item.producto_nombre} → Colaborador: {item.colaborador_nombre}
                                                                 </Typography>
-                                                            </Tooltip>
+                                                            )}
+                                                            {item.origen === 'prestamo' && (
+                                                                <Typography variant="body2">
+                                                                    Préstamo a: {item.colaborador_nombre}
+                                                                </Typography>
+                                                            )}
                                                         </TableCell>
-                                                        <TableCell>{item.usuario_responsable || 'Sistema'}</TableCell>
+                                                        <TableCell>{item.usuario_responsable || item.usuario_creacion || 'Sistema'}</TableCell>
+                                                    </StyledTableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </StyledTableContainer>
+                            </TabPanel>
+
+                            {/* Panel de Asignaciones */}
+                            <TabPanel value={tabValue} index={1}>
+                                <StyledTableContainer>
+                                    <Table size={isTablet ? 'small' : 'medium'}>
+                                        <TableHead>
+                                            <TableRow>
+                                                <StyledTableCell>Fecha</StyledTableCell>
+                                                <StyledTableCell>Producto</StyledTableCell>
+                                                <StyledTableCell>Colaborador</StyledTableCell>
+                                                <StyledTableCell>Motivo</StyledTableCell>
+                                                <StyledTableCell>Estado</StyledTableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {loading ? (
+                                                <TableRow><TableCell colSpan={5} align="center"><CircularProgress /></TableCell></TableRow>
+                                            ) : paginatedData.length === 0 ? (
+                                                <TableRow><TableCell colSpan={5} align="center">No hay asignaciones registradas</TableCell></TableRow>
+                                            ) : (
+                                                paginatedData.map((item, index) => (
+                                                    <StyledTableRow key={generarKeyUnica(item, index)} hover>
+                                                        <TableCell>{getFechaTexto(item)}</TableCell>
+                                                        <TableCell>{item.producto_nombre || 'N/A'}</TableCell>
+                                                        <TableCell>{item.colaborador_nombre || 'N/A'}</TableCell>
+                                                        <TableCell>{item.motivo || '-'}</TableCell>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                label={item.fecha_devolucion ? 'Finalizada' : 'Activa'} 
+                                                                size="small"
+                                                                sx={{
+                                                                    bgcolor: item.fecha_devolucion ? alpha(colors.success, 0.1) : alpha(colors.warning, 0.1),
+                                                                    color: item.fecha_devolucion ? colors.success : colors.warning
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                    </StyledTableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </StyledTableContainer>
+                            </TabPanel>
+
+                            {/* Panel de Préstamos */}
+                            <TabPanel value={tabValue} index={2}>
+                                <StyledTableContainer>
+                                    <Table size={isTablet ? 'small' : 'medium'}>
+                                        <TableHead>
+                                            <TableRow>
+                                                <StyledTableCell>Fecha</StyledTableCell>
+                                                <StyledTableCell>Producto</StyledTableCell>
+                                                <StyledTableCell>Colaborador</StyledTableCell>
+                                                <StyledTableCell>Fecha Devolución</StyledTableCell>
+                                                <StyledTableCell>Estado</StyledTableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {loading ? (
+                                                <TableRow><TableCell colSpan={5} align="center"><CircularProgress /></TableCell></TableRow>
+                                            ) : paginatedData.length === 0 ? (
+                                                <TableRow><TableCell colSpan={5} align="center">No hay préstamos registrados</TableCell></TableRow>
+                                            ) : (
+                                                paginatedData.map((item, index) => (
+                                                    <StyledTableRow key={generarKeyUnica(item, index)} hover>
+                                                        <TableCell>{getFechaTexto(item)}</TableCell>
+                                                        <TableCell>{item.producto_nombre || 'N/A'}</TableCell>
+                                                        <TableCell>{item.colaborador_nombre || 'N/A'}</TableCell>
+                                                        <TableCell>{item.fecha_devolucion ? new Date(item.fecha_devolucion).toLocaleDateString() : 'Pendiente'}</TableCell>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                label={item.fecha_devolucion ? 'Devuelto' : 'Prestado'} 
+                                                                size="small"
+                                                                sx={{
+                                                                    bgcolor: item.fecha_devolucion ? alpha(colors.success, 0.1) : alpha(colors.warning, 0.1),
+                                                                    color: item.fecha_devolucion ? colors.success : colors.warning
+                                                                }}
+                                                            />
+                                                        </TableCell>
                                                     </StyledTableRow>
                                                 ))
                                             )}
@@ -1133,7 +1349,7 @@ const HistorialPage = () => {
                             </TabPanel>
 
                             {/* Panel de Bajas */}
-                            <TabPanel value={tabValue} index={1}>
+                            <TabPanel value={tabValue} index={3}>
                                 <StyledTableContainer>
                                     <Table size={isTablet ? 'small' : 'medium'}>
                                         <TableHead>
@@ -1148,16 +1364,16 @@ const HistorialPage = () => {
                                         <TableBody>
                                             {loading ? (
                                                 <TableRow><TableCell colSpan={5} align="center"><CircularProgress /></TableCell></TableRow>
-                                            ) : bajas.length === 0 ? (
+                                            ) : paginatedData.length === 0 ? (
                                                 <TableRow><TableCell colSpan={5} align="center">No hay bajas registradas</TableCell></TableRow>
                                             ) : (
-                                                bajas.map((item, index) => (
+                                                paginatedData.map((item, index) => (
                                                     <StyledTableRow key={generarKeyUnica(item, index)} hover>
                                                         <TableCell>{getFechaTexto(item)}</TableCell>
                                                         <TableCell>{item.producto_nombre || 'N/A'}</TableCell>
                                                         <TableCell>{item.motivo_baja || item.descripcion || 'Sin motivo'}</TableCell>
                                                         <TableCell>{item.observaciones || '-'}</TableCell>
-                                                        <TableCell>{item.usuario_responsable || item.autorizado_por || 'Sistema'}</TableCell>
+                                                        <TableCell>{item.usuario_responsable || 'Sistema'}</TableCell>
                                                     </StyledTableRow>
                                                 ))
                                             )}
@@ -1167,7 +1383,7 @@ const HistorialPage = () => {
                             </TabPanel>
 
                             {/* Panel de Donaciones */}
-                            <TabPanel value={tabValue} index={2}>
+                            <TabPanel value={tabValue} index={4}>
                                 <StyledTableContainer>
                                     <Table size={isTablet ? 'small' : 'medium'}>
                                         <TableHead>
@@ -1182,16 +1398,122 @@ const HistorialPage = () => {
                                         <TableBody>
                                             {loading ? (
                                                 <TableRow><TableCell colSpan={5} align="center"><CircularProgress /></TableCell></TableRow>
-                                            ) : donaciones.length === 0 ? (
+                                            ) : paginatedData.length === 0 ? (
                                                 <TableRow><TableCell colSpan={5} align="center">No hay donaciones registradas</TableCell></TableRow>
                                             ) : (
-                                                donaciones.map((item, index) => (
+                                                paginatedData.map((item, index) => (
                                                     <StyledTableRow key={generarKeyUnica(item, index)} hover>
                                                         <TableCell>{getFechaTexto(item)}</TableCell>
                                                         <TableCell>{item.producto_nombre || 'N/A'}</TableCell>
                                                         <TableCell>{item.beneficiario || item.descripcion || 'N/A'}</TableCell>
                                                         <TableCell>{item.direccion || '-'}</TableCell>
                                                         <TableCell>{item.usuario_responsable || 'Sistema'}</TableCell>
+                                                    </StyledTableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </StyledTableContainer>
+                            </TabPanel>
+
+                            {/* Panel de Colaboradores */}
+                            <TabPanel value={tabValue} index={5}>
+                                <StyledTableContainer>
+                                    <Table size={isTablet ? 'small' : 'medium'}>
+                                        <TableHead>
+                                            <TableRow>
+                                                <StyledTableCell>Nombre</StyledTableCell>
+                                                <StyledTableCell>RUT</StyledTableCell>
+                                                <StyledTableCell>Cargo</StyledTableCell>
+                                                <StyledTableCell>Departamento</StyledTableCell>
+                                                <StyledTableCell>Email</StyledTableCell>
+                                                <StyledTableCell>Estado</StyledTableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {loading ? (
+                                                <TableRow><TableCell colSpan={6} align="center"><CircularProgress /></TableCell></TableRow>
+                                            ) : paginatedData.length === 0 ? (
+                                                <TableRow><TableCell colSpan={6} align="center">No hay colaboradores registrados</TableCell></TableRow>
+                                            ) : (
+                                                paginatedData.map((item, index) => (
+                                                    <StyledTableRow key={generarKeyUnica(item, index)} hover>
+                                                        <TableCell>{item.nombre || 'N/A'}</TableCell>
+                                                        <TableCell>{item.rut || 'N/A'}</TableCell>
+                                                        <TableCell>{item.cargo || '-'}</TableCell>
+                                                        <TableCell>{item.departamento || '-'}</TableCell>
+                                                        <TableCell>{item.email || '-'}</TableCell>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                label={item.estado || 'ACTIVO'} 
+                                                                size="small"
+                                                                sx={{
+                                                                    bgcolor: (item.estado === 'ACTIVO') ? alpha(colors.success, 0.1) : alpha(colors.error, 0.1),
+                                                                    color: (item.estado === 'ACTIVO') ? colors.success : colors.error
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                    </StyledTableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </StyledTableContainer>
+                            </TabPanel>
+
+                            {/* Panel de Documentos */}
+                            <TabPanel value={tabValue} index={6}>
+                                <StyledTableContainer>
+                                    <Table size={isTablet ? 'small' : 'medium'}>
+                                        <TableHead>
+                                            <TableRow>
+                                                <StyledTableCell>Tipo</StyledTableCell>
+                                                <StyledTableCell>Documento</StyledTableCell>
+                                                <StyledTableCell>Fecha</StyledTableCell>
+                                                <StyledTableCell>Acciones</StyledTableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {loading ? (
+                                                <TableRow><TableCell colSpan={4} align="center"><CircularProgress /></TableCell></TableRow>
+                                            ) : paginatedData.length === 0 ? (
+                                                <TableRow><TableCell colSpan={4} align="center">No hay documentos disponibles</TableCell></TableRow>
+                                            ) : (
+                                                paginatedData.map((item, index) => (
+                                                    <StyledTableRow key={generarKeyUnica(item, index)} hover>
+                                                        <TableCell>
+                                                            <Chip 
+                                                                icon={item.tipo === 'anexo' ? <DescriptionIcon /> : (item.tipo === 'asignacion' ? <AssignmentIcon /> : <ReceiptIcon />)}
+                                                                label={item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' ? 'Acta Asignación' : 'Acta Recepción')}
+                                                                size="small"
+                                                                sx={{
+                                                                    bgcolor: item.tipo === 'anexo' ? alpha('#8B5CF6', 0.1) : (item.tipo === 'asignacion' ? alpha(colors.primary, 0.1) : alpha(colors.success, 0.1)),
+                                                                    color: item.tipo === 'anexo' ? '#8B5CF6' : (item.tipo === 'asignacion' ? colors.primary : colors.success)
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                                                {item.filename}
+                                                            </Typography>
+                                                        </TableCell>
+                                                        <TableCell>{getFechaTexto(item)}</TableCell>
+                                                        <TableCell>
+                                                            <Button
+                                                                size="small"
+                                                                variant="contained"
+                                                                startIcon={downloadingDoc ? <CircularProgress size={16} /> : <PdfIcon />}
+                                                                onClick={() => handleDescargarDocumento(item.filename, item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' ? 'Acta Asignación' : 'Acta Recepción'))}
+                                                                disabled={downloadingDoc}
+                                                                sx={{
+                                                                    bgcolor: '#dc2626',
+                                                                    '&:hover': { bgcolor: '#b91c1c' },
+                                                                    textTransform: 'none'
+                                                                }}
+                                                            >
+                                                                {downloadingDoc ? 'Descargando...' : 'Descargar PDF'}
+                                                            </Button>
+                                                        </TableCell>
                                                     </StyledTableRow>
                                                 ))
                                             )}

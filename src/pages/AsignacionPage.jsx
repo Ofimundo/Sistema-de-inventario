@@ -1,4 +1,4 @@
-// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CORREGIDA
+// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CORREGIDA (CON ACTUALIZACIÓN AUTOMÁTICA)
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Box,
@@ -6,7 +6,6 @@ import {
     Typography,
     Button,
     IconButton,
-    Tooltip,
     TextField,
     InputAdornment,
     Grid,
@@ -45,11 +44,8 @@ import {
     Step,
     StepLabel,
     StepContent,
-    LinearProgress,
     Checkbox,
     FormControlLabel,
-    RadioGroup,
-    Radio,
     Divider
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
@@ -60,7 +56,6 @@ import {
     Person as PersonIcon,
     Inventory as InventoryIcon,
     Assignment as AssignmentIcon,
-    Check as CheckIcon,
     Home as HomeIcon,
     FilterListOff as FilterListOffIcon,
     Store as StoreIcon,
@@ -68,15 +63,12 @@ import {
     Close as CloseIcon,
     CheckCircle as CheckCircleIcon,
     Visibility as VisibilityIcon,
-    Download as DownloadIcon,
     PictureAsPdf as PdfIcon,
     Description as DescriptionIcon,
-    CheckBox as CheckBoxIcon,
     Clear as ClearIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import colaboradorService from '../services/colaboradorService';
 import RecepcionDialog from '../components/RecepcionDialog';
 
 // ============================================
@@ -136,9 +128,6 @@ const getEstadoColor = (estadoId) => {
     const id = Number(estadoId);
     return ESTADO_COLOR[id] || '#6B7280';
 };
-
-// URL BASE para descargas
-const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
 
 // ============================================
 // CHECKLIST ITEMS
@@ -203,7 +192,6 @@ const generarPDFChecklist = async (checklistData, producto, colaborador, ticketI
                     .checklist-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
                     .checklist-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; font-weight: bold; }
                     .checklist-table td { border: 1px solid #000; padding: 6px 8px; font-size: 11px; }
-                    .check-ok { font-weight: bold; }
                     .specs-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000; }
                     .specs-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; font-weight: bold; width: 50%; }
                     .specs-table td { border: 1px solid #000; padding: 8px; font-size: 12px; }
@@ -241,7 +229,7 @@ const generarPDFChecklist = async (checklistData, producto, colaborador, ticketI
                             <tr><td style="border: 1px solid #000;"><strong>CPU</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.cpu || '_________________'}</td></tr>
                             <tr><td style="border: 1px solid #000;"><strong>RAM</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.ram || '_________________'}</td></tr>
                             <tr><td style="border: 1px solid #000;"><strong>Disco</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.disco || '_________________'}</td></tr>
-                            <tr><td style="border: 1px solid #000;"><strong>GPU</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.gpu || '_________________'}</td></tr>
+                            <td><td style="border: 1px solid #000;"><strong>GPU</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.gpu || '_________________'}</td></tr>
                             <tr><td style="border: 1px solid #000;"><strong>Tipo</strong></td><td style="border: 1px solid #000;">${especificacionesTecnicas.tipo || '_________________'}</td></tr>
                         </tbody>
                     </table>
@@ -279,6 +267,20 @@ const generarPDFChecklist = async (checklistData, producto, colaborador, ticketI
         console.error('Error generando checklist:', error);
         return false;
     }
+};
+
+// ============================================
+// FUNCIÓN PARA DESCARGAR PDF
+// ============================================
+const descargarPDF = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
 };
 
 // ============================================
@@ -395,26 +397,282 @@ const FirmaDibujadaComponent = ({ onFirmaGuardada, label, height = 120 }) => {
 // COMPONENTE DE DIÁLOGO CON CHECKLIST INTEGRADO
 // ============================================
 const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onSuccess }) => {
-    // ... (todo el código del diálogo se mantiene igual)
-    // [Se omite por brevedad pero debe incluirse completo]
+    const [step, setStep] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [colaboradores, setColaboradores] = useState([]);
+    const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
+    const [searchColaborador, setSearchColaborador] = useState('');
+    const [motivo, setMotivo] = useState('');
+    const [fechaDevolucion, setFechaDevolucion] = useState('');
+    const [firmaData, setFirmaData] = useState('');
+    const [checklistItems, setChecklistItems] = useState(CHECKLIST_ITEMS.map(item => ({ ...item, ok: false, observacion: '' })));
+    const [usuarioConforme, setUsuarioConforme] = useState(false);
+    const [ticketInfo, setTicketInfo] = useState({ ticket: '', tecnico: '' });
+    const [especificacionesTecnicas, setEspecificacionesTecnicas] = useState({ cpu: '', ram: '', disco: '', gpu: '', tipo: '' });
+
+    const esPrestamo = tipoAccion === 'prestamo';
+
+    useEffect(() => {
+        if (open) {
+            cargarColaboradores();
+            setStep(0);
+            setColaboradorSeleccionado(null);
+            setMotivo('');
+            setFechaDevolucion('');
+            setFirmaData('');
+            setChecklistItems(CHECKLIST_ITEMS.map(item => ({ ...item, ok: false, observacion: '' })));
+            setUsuarioConforme(false);
+            setTicketInfo({ ticket: '', tecnico: '' });
+            setEspecificacionesTecnicas({
+                cpu: '',
+                ram: '',
+                disco: '',
+                gpu: '',
+                tipo: producto?.nombre || ''
+            });
+        }
+    }, [open, producto]);
+
+    const cargarColaboradores = async () => {
+        try {
+            const response = await api.get('/colaboradores');
+            const colaboradoresData = response.data.data || response.data || [];
+            setColaboradores(colaboradoresData);
+        } catch (error) {
+            console.error('Error cargando colaboradores:', error);
+        }
+    };
+
+    const handleChecklistChange = (index, field, value) => {
+        const nuevos = [...checklistItems];
+        nuevos[index][field] = value;
+        setChecklistItems(nuevos);
+    };
+
+    const handleGuardarFirma = (firma) => {
+        setFirmaData(firma);
+    };
+
+    const handleSubmit = async () => {
+        if (!colaboradorSeleccionado) {
+            onSuccess({ error: true, message: 'Debe seleccionar un colaborador' });
+            return;
+        }
+        if (!motivo) {
+            onSuccess({ error: true, message: 'Debe ingresar un motivo' });
+            return;
+        }
+        if (esPrestamo && !fechaDevolucion) {
+            onSuccess({ error: true, message: 'Debe ingresar una fecha de devolución para el préstamo' });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const colaboradorId = colaboradorSeleccionado.id;
+
+            const checklistCompleto = {
+                fecha: new Date().toISOString(),
+                producto: { id: producto.id, nombre: producto.nombre, numero_serie: producto.numero_serie },
+                colaborador: colaboradorSeleccionado,
+                items: checklistItems,
+                usuarioConforme,
+                ticketInfo,
+                especificacionesTecnicas
+            };
+            localStorage.setItem(`checklist_producto_${producto.id}`, JSON.stringify(checklistCompleto));
+
+            const asignacionData = {
+                producto_id: producto.id,
+                colaborador_id: colaboradorId,
+                motivo: motivo,
+                es_prestamo: esPrestamo ? 1 : 0,
+                fecha_devolucion: esPrestamo ? fechaDevolucion : null,
+                firma_trabajador: firmaData,
+                observaciones: JSON.stringify({ checklist: checklistItems, especificaciones: especificacionesTecnicas, ticket: ticketInfo })
+            };
+
+            const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            
+            const response = await fetch(`${API_BASE_URL}/asignaciones`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(asignacionData)
+            });
+
+            const contentType = response.headers.get('content-type');
+            
+            if (contentType && contentType.includes('application/pdf')) {
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = `acta_asignacion_${Date.now()}.pdf`;
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (match && match[1]) {
+                        filename = match[1].replace(/['"]/g, '');
+                    }
+                }
+                descargarPDF(blob, filename);
+                await generarPDFChecklist(checklistCompleto, producto, colaboradorSeleccionado, ticketInfo, especificacionesTecnicas);
+                onSuccess({ message: esPrestamo ? 'Préstamo registrado correctamente' : 'Asignación registrada correctamente', documentoGenerado: true, refresh: true });
+            } else {
+                const data = await response.json();
+                if (data.success) {
+                    await generarPDFChecklist(checklistCompleto, producto, colaboradorSeleccionado, ticketInfo, especificacionesTecnicas);
+                    onSuccess({ message: esPrestamo ? 'Préstamo registrado correctamente' : 'Asignación registrada correctamente', refresh: true });
+                } else {
+                    throw new Error(data.message || 'Error al registrar');
+                }
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            onSuccess({ error: true, message: error.message || 'Error al procesar la solicitud' });
+        } finally {
+            setLoading(false);
+            onClose();
+        }
+    };
+
+    const getStepContent = (stepIndex) => {
+        switch (stepIndex) {
+            case 0:
+                return (
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Seleccionar Colaborador</Typography>
+                        <TextField 
+                            fullWidth 
+                            placeholder="Buscar colaborador por nombre o RUT..." 
+                            value={searchColaborador} 
+                            onChange={(e) => setSearchColaborador(e.target.value)} 
+                            size="small" 
+                            sx={{ mb: 2 }} 
+                        />
+                        <Box sx={{ maxHeight: 400, overflow: 'auto', mb: 2 }}>
+                            {colaboradores
+                                .filter(c => c.nombre?.toLowerCase().includes(searchColaborador.toLowerCase()) || c.rut?.includes(searchColaborador))
+                                .map(col => (
+                                    <Paper 
+                                        key={col.id} 
+                                        onClick={() => setColaboradorSeleccionado(col)} 
+                                        sx={{ 
+                                            p: 1.5, 
+                                            mb: 1, 
+                                            cursor: 'pointer', 
+                                            bgcolor: colaboradorSeleccionado?.id === col.id ? alpha(colors.primary, 0.1) : 'transparent', 
+                                            border: colaboradorSeleccionado?.id === col.id ? `1px solid ${colors.primary}` : `1px solid ${colors.border}` 
+                                        }}
+                                    >
+                                        <Typography variant="body2" fontWeight={500}>{col.nombre}</Typography>
+                                        <Typography variant="caption" color="text.secondary">RUT: {col.rut} | {col.cargo || 'Sin cargo'}</Typography>
+                                    </Paper>
+                                ))}
+                            {colaboradores.filter(c => c.nombre?.toLowerCase().includes(searchColaborador.toLowerCase()) || c.rut?.includes(searchColaborador)).length === 0 && (
+                                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                                    No se encontraron colaboradores
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                );
+            case 1:
+                return (
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Información de {esPrestamo ? 'Préstamo' : 'Asignación'}</Typography>
+                        <TextField fullWidth label="Motivo" multiline rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} sx={{ mb: 2 }} />
+                        {esPrestamo && (
+                            <TextField fullWidth type="date" label="Fecha de Devolución" value={fechaDevolucion} onChange={(e) => setFechaDevolucion(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ mb: 2 }} />
+                        )}
+                        <TextField fullWidth label="Ticket / ID Referencia" placeholder="Ticket o número de referencia" value={ticketInfo.ticket} onChange={(e) => setTicketInfo({ ...ticketInfo, ticket: e.target.value })} sx={{ mb: 2 }} />
+                    </Box>
+                );
+            case 2:
+                return (
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Especificaciones Técnicas</Typography>
+                        <Grid container spacing={1}>
+                            <Grid item xs={12}><TextField fullWidth label="CPU" size="small" value={especificacionesTecnicas.cpu} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, cpu: e.target.value })} /></Grid>
+                            <Grid item xs={6}><TextField fullWidth label="RAM" size="small" value={especificacionesTecnicas.ram} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, ram: e.target.value })} /></Grid>
+                            <Grid item xs={6}><TextField fullWidth label="Disco" size="small" value={especificacionesTecnicas.disco} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, disco: e.target.value })} /></Grid>
+                            <Grid item xs={6}><TextField fullWidth label="GPU" size="small" value={especificacionesTecnicas.gpu} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, gpu: e.target.value })} /></Grid>
+                            <Grid item xs={6}><TextField fullWidth label="Tipo" size="small" value={especificacionesTecnicas.tipo} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, tipo: e.target.value })} /></Grid>
+                        </Grid>
+                    </Box>
+                );
+            case 3:
+                return (
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Checklist de Entrega</Typography>
+                        <Box sx={{ maxHeight: 400, overflow: 'auto', mb: 2 }}>
+                            {checklistItems.map((item, idx) => (
+                                <Box key={item.id} sx={{ mb: 2, p: 1, border: `1px solid ${colors.border}` }}>
+                                    <FormControlLabel control={<Checkbox checked={item.ok} onChange={(e) => handleChecklistChange(idx, 'ok', e.target.checked)} />} label={<Typography variant="body2" fontWeight={500}>{item.label}</Typography>} />
+                                    <TextField fullWidth size="small" placeholder="Observación (opcional)" value={item.observacion} onChange={(e) => handleChecklistChange(idx, 'observacion', e.target.value)} />
+                                </Box>
+                            ))}
+                        </Box>
+                        <Divider sx={{ my: 2 }} />
+                        <FormControlLabel control={<Checkbox checked={usuarioConforme} onChange={(e) => setUsuarioConforme(e.target.checked)} />} label="El usuario declara que el equipo fue entregado conforme a lo indicado" />
+                    </Box>
+                );
+            case 4:
+                return (
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Firma Digital</Typography>
+                        <FirmaDibujadaComponent onFirmaGuardada={handleGuardarFirma} label="Firma del Trabajador" height={150} />
+                    </Box>
+                );
+            default:
+                return null;
+        }
+    };
+
+    if (!open || !producto) return null;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+            <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}`, bgcolor: alpha(esPrestamo ? colors.warning : colors.primary, 0.1) }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <Avatar sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}>
+                            {esPrestamo ? <PersonIcon /> : <AssignmentIcon />}
+                        </Avatar>
+                        <Typography variant="h6" fontWeight={600}>
+                            {esPrestamo ? 'Registrar Préstamo' : 'Registrar Asignación'} - {producto.nombre}
+                        </Typography>
+                    </Box>
+                    <IconButton onClick={onClose}><CloseIcon /></IconButton>
+                </Box>
+            </DialogTitle>
+            <DialogContent dividers>
+                <Stepper activeStep={step} orientation="vertical">
+                    <Step><StepLabel>Seleccionar Colaborador</StepLabel><StepContent>{getStepContent(0)}</StepContent></Step>
+                    <Step><StepLabel>Información del {esPrestamo ? 'Préstamo' : 'Asignación'}</StepLabel><StepContent>{getStepContent(1)}</StepContent></Step>
+                    <Step><StepLabel>Especificaciones Técnicas</StepLabel><StepContent>{getStepContent(2)}</StepContent></Step>
+                    <Step><StepLabel>Checklist de Entrega</StepLabel><StepContent>{getStepContent(3)}</StepContent></Step>
+                    <Step><StepLabel>Firma Digital</StepLabel><StepContent>{getStepContent(4)}</StepContent></Step>
+                </Stepper>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={loading}>Cancelar</Button>
+                {step > 0 && <Button onClick={() => setStep(step - 1)} disabled={loading}>Atrás</Button>}
+                {step < 4 ? (
+                    <Button variant="contained" onClick={() => setStep(step + 1)} disabled={loading}>Siguiente</Button>
+                ) : (
+                    <Button variant="contained" onClick={handleSubmit} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : null}>
+                        {loading ? 'Procesando...' : (esPrestamo ? 'Registrar Préstamo' : 'Registrar Asignación')}
+                    </Button>
+                )}
+            </DialogActions>
+        </Dialog>
+    );
 };
 
 // ============================================
-// COMPONENTES STYLED
-// ============================================
-const StyledCard = styled(Card)(({ theme }) => ({
-    height: '100%', borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}`, transition: 'all 0.3s ease-in-out',
-    '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }
-}));
-
-const FilterPaper = styled(Paper)(({ theme }) => ({ padding: theme.spacing(2), marginBottom: theme.spacing(3), borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}` }));
-
-const StyledTableContainer = styled(TableContainer)(({ theme }) => ({ borderRadius: 0, border: `1px solid ${colors.border}`, overflowX: 'auto', backgroundColor: theme.palette.background.paper }));
-
-const StyledTableCell = styled(TableCell)(({ theme }) => ({ fontWeight: 600, backgroundColor: alpha(colors.primary, 0.02), borderBottom: `1px solid ${colors.border}` }));
-
-// ============================================
-// COMPONENTE DE DETALLES CON DOCUMENTOS - VERSIÓN CORREGIDA
+// COMPONENTE DE DETALLES CON DOCUMENTOS
 // ============================================
 const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
     const [downloading, setDownloading] = useState({
@@ -440,11 +698,10 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
         try {
             const docs = [];
             const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
             
-            // Buscar acta de asignación
             try {
-                const response = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacion.id}/asignacion`, {
-                    method: 'GET',
+                const response = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/asignacion`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -460,11 +717,9 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                 console.log('No se encontró acta de asignación');
             }
             
-            // Buscar acta de recepción
             if (asignacion.fecha_devolucion) {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacion.id}/recepcion`, {
-                        method: 'GET',
+                    const response = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/recepcion`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const data = await response.json();
@@ -499,7 +754,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
         }
     };
 
-    // Descargar acta de asignación
     const handleDescargarActaAsignacion = async () => {
         if (downloading.asignacion) return;
         
@@ -507,47 +761,30 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
         
         try {
             const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
             
-            // Buscar el documento primero
-            const busquedaResponse = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacion.id}/asignacion`, {
-                method: 'GET',
+            const busquedaResponse = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/asignacion`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await busquedaResponse.json();
             
             if (data.success && data.data?.filename) {
-                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${encodeURIComponent(data.data.filename)}`;
-                const response = await fetch(downloadUrl, {
-                    method: 'GET',
+                const downloadResponse = await fetch(`${API_BASE_URL}/asignaciones/descargar/${encodeURIComponent(data.data.filename)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = data.data.filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                    alert('✅ Acta de Asignación descargada correctamente');
-                } else {
-                    alert('❌ No se pudo descargar el acta de asignación');
+                if (downloadResponse.ok) {
+                    const blob = await downloadResponse.blob();
+                    descargarPDF(blob, data.data.filename);
                 }
-            } else {
-                alert('❌ No se encontró el acta de asignación');
             }
         } catch (error) {
             console.error('Error descargando acta de asignación:', error);
-            alert('Error al descargar el acta de asignación');
         } finally {
             setDownloading(prev => ({ ...prev, asignacion: false }));
         }
     };
 
-    // Descargar acta de recepción
     const handleDescargarActaRecepcion = async () => {
         if (downloading.recepcion) return;
         
@@ -555,51 +792,35 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
         
         try {
             const token = localStorage.getItem('token');
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
             
-            const busquedaResponse = await fetch(`${API_BASE_URL}/api/asignaciones/buscar-documento/${asignacion.id}/recepcion`, {
-                method: 'GET',
+            const busquedaResponse = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/recepcion`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await busquedaResponse.json();
             
             if (data.success && data.data?.filename) {
-                const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${encodeURIComponent(data.data.filename)}`;
-                const response = await fetch(downloadUrl, {
-                    method: 'GET',
+                const downloadResponse = await fetch(`${API_BASE_URL}/asignaciones/descargar/${encodeURIComponent(data.data.filename)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = data.data.filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                    alert('✅ Acta de Recepción descargada correctamente');
-                } else {
-                    alert('❌ No se pudo descargar el acta de recepción');
+                if (downloadResponse.ok) {
+                    const blob = await downloadResponse.blob();
+                    descargarPDF(blob, data.data.filename);
                 }
-            } else {
-                alert('❌ No se encontró el acta de recepción');
             }
         } catch (error) {
             console.error('Error descargando acta de recepción:', error);
-            alert('Error al descargar el acta de recepción');
         } finally {
             setDownloading(prev => ({ ...prev, recepcion: false }));
         }
     };
 
-    // Descargar checklist
     const handleDescargarChecklist = async () => {
         if (downloading.checklist) return;
         
         if (!checklistData) {
-            alert('⚠️ No hay checklist disponible para esta asignación');
+            console.error('No hay checklist disponible');
             return;
         }
         
@@ -613,10 +834,8 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                 checklistData.ticketInfo || { ticket: '', tecnico: '' },
                 checklistData.especificacionesTecnicas || { cpu: '', ram: '', disco: '', gpu: '', tipo: '' }
             );
-            alert('✅ Checklist descargado correctamente');
         } catch (error) {
             console.error('Error descargando checklist:', error);
-            alert('Error al descargar el checklist');
         } finally {
             setDownloading(prev => ({ ...prev, checklist: false }));
         }
@@ -639,7 +858,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
 
             <DialogContent dividers>
                 <Grid container spacing={2}>
-                    {/* Información del Equipo */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>📦 Información del Equipo</Typography>
@@ -664,7 +882,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                         </Paper>
                     </Grid>
                     
-                    {/* Información del Colaborador */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>👤 Información del Colaborador</Typography>
@@ -689,7 +906,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                         </Paper>
                     </Grid>
                     
-                    {/* Detalles de la Operación */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>📋 Detalles de la Operación</Typography>
@@ -722,7 +938,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                         </Paper>
                     </Grid>
                     
-                    {/* SECCIÓN DE DOCUMENTOS - BOTONES INDIVIDUALES */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>📄 Documentos Disponibles</Typography>
@@ -734,27 +949,23 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                                 </Box>
                             ) : (
                                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
-                                    {/* Botón Acta de Asignación - Solo si existe */}
-                                    {documentos.some(d => d.tipo === 'asignacion') && (
-                                        <Button
-                                            fullWidth
-                                            variant="contained"
-                                            startIcon={downloading.asignacion ? <CircularProgress size={20} color="inherit" /> : <PdfIcon />}
-                                            onClick={handleDescargarActaAsignacion}
-                                            disabled={downloading.asignacion}
-                                            sx={{
-                                                bgcolor: '#dc2626',
-                                                '&:hover': { bgcolor: '#b91c1c' },
-                                                py: 1.5,
-                                                textTransform: 'none',
-                                                fontWeight: 600
-                                            }}
-                                        >
-                                            {downloading.asignacion ? 'Descargando...' : '📄 Acta de Asignación'}
-                                        </Button>
-                                    )}
+                                    <Button
+                                        fullWidth
+                                        variant="contained"
+                                        startIcon={downloading.asignacion ? <CircularProgress size={20} color="inherit" /> : <PdfIcon />}
+                                        onClick={handleDescargarActaAsignacion}
+                                        disabled={downloading.asignacion}
+                                        sx={{
+                                            bgcolor: '#dc2626',
+                                            '&:hover': { bgcolor: '#b91c1c' },
+                                            py: 1.5,
+                                            textTransform: 'none',
+                                            fontWeight: 600
+                                        }}
+                                    >
+                                        {downloading.asignacion ? 'Descargando...' : '📄 Acta de Asignación'}
+                                    </Button>
                                     
-                                    {/* Botón Acta de Recepción - Solo si existe y hay devolución */}
                                     {documentos.some(d => d.tipo === 'recepcion') && (
                                         <Button
                                             fullWidth
@@ -778,7 +989,6 @@ const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
                         </Paper>
                     </Grid>
                     
-                    {/* Lista de verificación de entrega */}
                     <Grid item xs={12}>
                         <Paper variant="outlined" sx={{ p: 2 }}>
                             <Typography variant="subtitle2" fontWeight={600} gutterBottom>✅ Lista de verificación de entrega</Typography>
@@ -850,6 +1060,20 @@ const productosServiceLocal = {
 };
 
 // ============================================
+// COMPONENTES STYLED
+// ============================================
+const StyledCard = styled(Card)(({ theme }) => ({
+    height: '100%', borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}`, transition: 'all 0.3s ease-in-out',
+    '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }
+}));
+
+const FilterPaper = styled(Paper)(({ theme }) => ({ padding: theme.spacing(2), marginBottom: theme.spacing(3), borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}` }));
+
+const StyledTableContainer = styled(TableContainer)(({ theme }) => ({ borderRadius: 0, border: `1px solid ${colors.border}`, overflowX: 'auto', backgroundColor: theme.palette.background.paper }));
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({ fontWeight: 600, backgroundColor: alpha(colors.primary, 0.02), borderBottom: `1px solid ${colors.border}` }));
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const AsignacionPage = () => {
@@ -874,20 +1098,13 @@ const AsignacionPage = () => {
     const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [apiError, setApiError] = useState(false);
-    const [downloadingDoc, setDownloadingDoc] = useState(false);
 
     const showSnackbar = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
     const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
     const handleGoHome = () => navigate('/dashboard');
 
-    const handleDescargarDocumento = async (asignacionId, tipo) => {
-        // Esta función ya no se usa porque eliminamos los botones PDF de la tabla
-        // Se mantiene por si se necesita en otro lugar
-    };
-
-    const fetchData = useCallback(async (showRefresh = false) => {
-        if (showRefresh) setRefreshing(true); else setLoading(true);
-        setApiError(false);
+    // Función para cargar datos
+    const cargarProductosYAsignaciones = useCallback(async () => {
         try {
             const filterParams = {};
             if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
@@ -898,34 +1115,7 @@ const AsignacionPage = () => {
             const productosProcesados = todosLosProductos.map(p => ({ ...p, id_estado_equipo: Number(p.id_estado_equipo) || 1 }));
             const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
             setProductos(productosFiltrados);
-            try {
-                const asignacionesResponse = await api.get('/asignaciones/activas');
-                let asignaciones = [];
-                if (asignacionesResponse.data) {
-                    if (asignacionesResponse.data.success && Array.isArray(asignacionesResponse.data.data)) { asignaciones = asignacionesResponse.data.data; } 
-                    else if (Array.isArray(asignacionesResponse.data)) { asignaciones = asignacionesResponse.data; }
-                }
-                const activas = asignaciones.filter(a => !a.fecha_devolucion);
-                setAsignacionesActivas(activas);
-            } catch (err) { console.error('Error cargando asignaciones:', err); }
-            try { const bodegasData = await productosServiceLocal.getBodegas(); setBodegas(bodegasData || []); } 
-            catch (err) { console.error('Error cargando bodegas:', err); }
-        } catch (error) { console.error('Error cargando datos:', error); setApiError(true); showSnackbar('Error al cargar los datos', 'error'); } 
-        finally { setLoading(false); setRefreshing(false); }
-    }, [searchTerm, filters.bodega_id]);
-
-    useEffect(() => { fetchData(); }, [fetchData]);
-
-    const refreshData = useCallback(async () => {
-        setRefreshing(true);
-        try {
-            const productosData = await productosServiceLocal.getProductos(searchTerm, { bodega_id: filters.bodega_id });
-            let todosLosProductos = [];
-            if (productosData && Array.isArray(productosData)) { todosLosProductos = productosData; } 
-            else if (productosData && productosData.data && Array.isArray(productosData.data)) { todosLosProductos = productosData.data; }
-            const productosProcesados = todosLosProductos.map(p => ({ ...p, id_estado_equipo: Number(p.id_estado_equipo) || 1 }));
-            const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
-            setProductos(productosFiltrados);
+            
             const asignacionesResponse = await api.get('/asignaciones/activas');
             let asignaciones = [];
             if (asignacionesResponse.data) {
@@ -934,9 +1124,44 @@ const AsignacionPage = () => {
             }
             const activas = asignaciones.filter(a => !a.fecha_devolucion);
             setAsignacionesActivas(activas);
-        } catch (error) { console.error('Error refrescando datos:', error); showSnackbar('Error al actualizar los datos', 'error'); } 
-        finally { setRefreshing(false); }
+            
+            const bodegasData = await productosServiceLocal.getBodegas();
+            setBodegas(bodegasData || []);
+        } catch (error) {
+            console.error('Error cargando datos:', error);
+            setApiError(true);
+            showSnackbar('Error al cargar los datos', 'error');
+        }
     }, [searchTerm, filters.bodega_id]);
+
+    const fetchData = useCallback(async (showRefresh = false) => {
+        if (showRefresh) setRefreshing(true); else setLoading(true);
+        setApiError(false);
+        try {
+            await cargarProductosYAsignaciones();
+        } catch (error) {
+            console.error('Error cargando datos:', error);
+            setApiError(true);
+            showSnackbar('Error al cargar los datos', 'error');
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [cargarProductosYAsignaciones]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const refreshData = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await cargarProductosYAsignaciones();
+        } catch (error) {
+            console.error('Error refrescando datos:', error);
+            showSnackbar('Error al actualizar los datos', 'error');
+        } finally {
+            setRefreshing(false);
+        }
+    }, [cargarProductosYAsignaciones]);
 
     const handleAsignar = (producto) => {
         if (producto.id_estado_equipo !== 1) { showSnackbar(`Este producto no está disponible para asignación. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning'); return; }
@@ -960,20 +1185,28 @@ const AsignacionPage = () => {
         else { showSnackbar('No hay información de asignación para este producto', 'info'); }
     };
 
-    const handleChecklistSuccess = (result) => {
-        showSnackbar(result.message || 'Proceso completado exitosamente', 'success');
+    const handleChecklistSuccess = async (result) => {
+        if (result?.error) {
+            showSnackbar(result.message, 'error');
+        } else {
+            showSnackbar(result.message || 'Proceso completado exitosamente', 'success');
+            // Actualizar los datos después de una asignación exitosa
+            if (result.refresh) {
+                await refreshData();
+            }
+        }
         setOpenChecklistDialog(false);
         setProductoSeleccionado(null);
         setTipoAccionActual(null);
-        setTimeout(() => { refreshData(); }, 500);
     };
 
-    const handleRecepcionSuccess = () => {
+    const handleRecepcionSuccess = async () => {
         showSnackbar('Recepción completada exitosamente', 'success');
         setOpenRecepcion(false);
         setProductoSeleccionado(null);
         setAsignacionSeleccionada(null);
-        refreshData();
+        // Actualizar los datos después de una recepción exitosa
+        await refreshData();
     };
 
     const handleClearFilters = () => { setSearchTerm(''); setFilters({ bodega_id: '', tipo_estado: 'todos' }); };

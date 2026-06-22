@@ -4,7 +4,7 @@ require("dotenv").config();
 
 // Configuración para conectar a la máquina virtual
 const dbConfig = {
-  server: process.env.DB_SERVER || "3.229.187.205",  // ← IP de tu máquina virtual
+  server: process.env.DB_SERVER || "54.167.124.101",  // ← IP de tu máquina virtual
   port: Number(process.env.DB_PORT) || 1433,          // ← Puerto de SQL Server es 1433, no 5000
   database: process.env.DB_DATABASE || "THE_COOLER_SGCX",
   user: process.env.DB_USER || "user_inventario",     // ← El usuario que creaste
