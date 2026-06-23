@@ -1,4 +1,4 @@
-// src/services/anexosService.js
+// src/services/anexosService.js - VERSIÓN CORREGIDA
 import api from './api';
 
 const API_BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:3001/api';
@@ -48,7 +48,8 @@ export const anexosService = {
 
     getAnexos: async () => {
         try {
-            const response = await api.get('/anexos');
+            // 🔥 AGREGAR TIMESTAMP PARA EVITAR CACHÉ
+            const response = await api.get('/anexos?_t=' + Date.now());
             return response.data;
         } catch (error) {
             console.error('Error obteniendo anexos:', error);
@@ -58,7 +59,7 @@ export const anexosService = {
 
     getAnexoById: async (id) => {
         try {
-            const response = await api.get(`/anexos/${id}`);
+            const response = await api.get(`/anexos/${id}?_t=` + Date.now());
             return response.data;
         } catch (error) {
             console.error(`Error obteniendo anexo ${id}:`, error);
@@ -69,7 +70,7 @@ export const anexosService = {
     descargarAnexo: async (id) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE_URL}/api/anexos/descargar/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/anexos/descargar/${id}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -87,12 +88,12 @@ export const anexosService = {
         }
     },
 
-    actualizarEstado: async (id, data) => {
+    eliminarAnexo: async (id) => {
         try {
-            const response = await api.put(`/anexos/${id}/estado`, data);
+            const response = await api.delete(`/anexos/${id}`);
             return response.data;
         } catch (error) {
-            console.error(`Error actualizando estado del anexo ${id}:`, error);
+            console.error(`Error eliminando anexo ${id}:`, error);
             throw error;
         }
     }

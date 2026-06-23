@@ -1,8 +1,8 @@
-// src/services/asignacionService.js - VERSIÓN COMPLETA CORREGIDA
+// src/services/asignacionService.js - VERSIÓN CORREGIDA CON CONEXIÓN LOCAL
 import api from './api';
 
-// URL BASE
-const API_BASE_URL = 'https://sistema-inventario-backend-p3xg.onrender.com';
+// URL BASE - Usar variable de entorno o localhost por defecto
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 console.log('🔧 API_BASE_URL en asignacionService:', API_BASE_URL);
 
 export const asignacionService = {
@@ -308,7 +308,8 @@ export const asignacionService = {
             
             console.log(`📤 Descargando: ${filename}`);
             
-            const downloadUrl = `${API_BASE_URL}/api/asignaciones/descargar/${encodeURIComponent(filename)}`;
+            // Usar API_BASE_URL para la descarga
+            const downloadUrl = `${API_BASE_URL}/asignaciones/descargar/${encodeURIComponent(filename)}`;
             console.log('📥 URL de descarga:', downloadUrl);
             
             const token = localStorage.getItem('token');
@@ -352,7 +353,7 @@ export const asignacionService = {
             console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
             
             const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta/${asignacionId}`;
+            const url = `${API_BASE_URL}/asignaciones/descargar-acta/${asignacionId}`;
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -391,7 +392,7 @@ export const asignacionService = {
             console.log(`📤 Descargando acta de recepción para ${asignacionId}...`);
             
             const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/api/asignaciones/descargar-acta-recepcion/${asignacionId}`;
+            const url = `${API_BASE_URL}/asignaciones/descargar-acta-recepcion/${asignacionId}`;
             
             const response = await fetch(url, {
                 method: 'GET',

@@ -1,4 +1,4 @@
-// backend/routes/anexosRoutes.js - VERSIÓN CORREGIDA (GUARDA FIRMAS COMO ARCHIVOS)
+// backend/routes/anexosRoutes.js - VERSIÓN COMPLETAMENTE LIMPIA (SIN ESTADO, SIN FIRMAS)
 const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
@@ -9,7 +9,6 @@ const PDFDocument = require('pdfkit');
 // Directorios
 const ANEXOS_DIR = path.join(__dirname, '../uploads/anexos');
 const ASSETS_DIR = path.join(__dirname, '../assets');
-const FIRMAS_DIR = path.join(__dirname, '../uploads/firmas');
 
 // Asegurar que los directorios existen
 if (!fs.existsSync(ANEXOS_DIR)) {
@@ -17,10 +16,6 @@ if (!fs.existsSync(ANEXOS_DIR)) {
 }
 if (!fs.existsSync(ASSETS_DIR)) {
     fs.mkdirSync(ASSETS_DIR, { recursive: true });
-}
-if (!fs.existsSync(FIRMAS_DIR)) {
-    fs.mkdirSync(FIRMAS_DIR, { recursive: true });
-    console.log(`📁 Directorio de firmas creado: ${FIRMAS_DIR}`);
 }
 
 // Colores del degradado de Ofimundo
@@ -51,8 +46,6 @@ const CONFIG = {
     
     footerOffset: 80,
     footerLineWidth: 4,
-    
-    signaturesMarginTop: 40,
 };
 
 // Función para interpolar colores
@@ -112,7 +105,6 @@ function formatearFecha(fecha) {
 function drawHeader(doc, logoPath) {
     const LOGO_WIDTH = 120;
     
-    // Dibujar hojas decorativas en esquina superior derecha
     const hojasPath = path.join(ASSETS_DIR, 'hojas.png');
     if (fs.existsSync(hojasPath)) {
         doc.image(hojasPath, doc.page.width - 110, 0, { width: 110 });
@@ -131,7 +123,6 @@ function drawFooter(doc) {
     const footerY = doc.page.height - CONFIG.footerOffset;
     const lineY = footerY - 3;
     
-    // Línea degradada de borde a borde
     const sections = 100;
     const sectionWidth = doc.page.width / sections;
     for (let i = 0; i <= sections / 2; i++) {
@@ -147,7 +138,6 @@ function drawFooter(doc) {
         doc.rect((sections / 2 + i) * sectionWidth, lineY, sectionWidth + 0.5, CONFIG.footerLineWidth).fill();
     }
     
-    // 3 columnas alineadas con márgenes
     const leftX = CONFIG.marginLeft;
     const rightX_end = doc.page.width - CONFIG.marginRight;
     const totalColWidth = rightX_end - leftX;
@@ -157,81 +147,28 @@ function drawFooter(doc) {
     const lineSpacing = 10;
     const startY = footerY + 5;
     
-    // Columna izquierda
     doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#333333');
     doc.text('Ofimundo', leftX, startY, { align: 'left', width: colWidth });
     doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#444444');
     doc.text('Teléfono +56 2 2810 4700', leftX, startY + lineSpacing, { align: 'left', width: colWidth });
     doc.text('Lota 2305, Providencia', leftX, startY + lineSpacing * 2, { align: 'left', width: colWidth });
     
-    // Columna centro
     doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#555555');
     doc.text('Visita nuestro sitio web:', centerX, startY, { align: 'center', width: colWidth });
     doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#0A66C2');
     doc.text('www.ofimundo.cl', centerX, startY + lineSpacing, { align: 'center', width: colWidth });
     
-    // Columna derecha
     doc.font('Calibri').fontSize(CONFIG.footerSize).fillColor('#555555');
     doc.text('Más información en:', rightX, startY, { align: 'right', width: colWidth });
     doc.font('Calibri-Bold').fontSize(CONFIG.footerSize + 1).fillColor('#0A66C2');
     doc.text('hola@ofimundo.cl', rightX, startY + lineSpacing, { align: 'right', width: colWidth });
 }
 
-// Función para cargar imagen de firma desde archivo
-function cargarFirmaDesdeArchivo(idAnexo, tipo) {
-    try {
-        const firmaPath = path.join(FIRMAS_DIR, `firma_${tipo}_${idAnexo}.png`);
-        if (fs.existsSync(firmaPath)) {
-            return fs.readFileSync(firmaPath);
-        }
-        return null;
-    } catch (error) {
-        console.error('Error cargando firma:', error);
-        return null;
-    }
-}
-
-// Función para guardar firma como archivo
-function guardarFirmaComoArchivo(idAnexo, firmaBase64, tipo) {
-    try {
-        if (!firmaBase64 || !firmaBase64.startsWith('data:image')) {
-            return false;
-        }
-        
-        const base64Data = firmaBase64.split(',')[1];
-        if (!base64Data) return false;
-        
-        const imgBuffer = Buffer.from(base64Data, 'base64');
-        const firmaPath = path.join(FIRMAS_DIR, `firma_${tipo}_${idAnexo}.png`);
-        fs.writeFileSync(firmaPath, imgBuffer);
-        console.log(`✅ Firma ${tipo} guardada en: ${firmaPath}`);
-        return true;
-    } catch (error) {
-        console.error('Error guardando firma:', error);
-        return false;
-    }
-}
-
-// Función para dibujar firma en PDF
-function dibujarFirma(doc, idAnexo, tipo, x, y, nombrePorDefecto) {
-    try {
-        const firmaPath = path.join(FIRMAS_DIR, `firma_${tipo}_${idAnexo}.png`);
-        if (fs.existsSync(firmaPath)) {
-            doc.image(firmaPath, x, y - 40, { width: 150, height: 40, align: 'center' });
-            return true;
-        }
-    } catch (err) {
-        console.log('⚠️ Error al dibujar firma:', err.message);
-    }
-    doc.font('Calibri').fontSize(9).text(nombrePorDefecto || '_________________________', x, y + 5);
-    return false;
-}
-
-// Función para generar PDF del anexo (con firmas desde archivos)
-async function generarAnexoPDF(datos, idAnexo = null) {
+// Función para generar PDF del anexo (SIN FIRMAS Y SIN ESTADO EN LA TABLA)
+async function generarAnexoPDF(datos) {
     return new Promise((resolve, reject) => {
         try {
-            const { colaborador, producto, empresa, fecha, firma_trabajador } = datos;
+            const { colaborador, producto, empresa, fecha } = datos;
             const fechaFormateada = formatearFecha(fecha);
             
             const doc = new PDFDocument({ 
@@ -244,7 +181,6 @@ async function generarAnexoPDF(datos, idAnexo = null) {
                 size: 'LETTER'
             });
             
-            // Registrar fuentes Calibri
             doc.registerFont('Calibri', path.join(ASSETS_DIR, 'calibri.ttf'));
             doc.registerFont('Calibri-Bold', path.join(ASSETS_DIR, 'calibrib.ttf'));
             
@@ -305,7 +241,8 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.moveDown(CONFIG.paragraphSpacing);
 
             const tableLeft = CONFIG.marginLeft;
-            const colWidths = [85, 85, 95, 105, 84];
+            // 🔥 ELIMINADA LA COLUMNA "Estado" - ahora son 4 columnas
+            const colWidths = [100, 100, 110, 130];
             const titleY = doc.y;
 
             doc.font('Calibri-Bold').fontSize(CONFIG.tableTextSize);
@@ -313,7 +250,6 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.text('Marca', tableLeft + colWidths[0], titleY);
             doc.text('Modelo', tableLeft + colWidths[0] + colWidths[1], titleY);
             doc.text('N° Serie', tableLeft + colWidths[0] + colWidths[1] + colWidths[2], titleY);
-            doc.text('Estado', tableLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], titleY);
 
             let lineY = titleY + 12;
             doc.moveTo(tableLeft, lineY).lineTo(tableLeft + pageWidth, lineY).stroke();
@@ -324,7 +260,6 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.text(producto.marca || 'N/A', tableLeft + colWidths[0], rowY);
             doc.text(producto.modelo || 'N/A', tableLeft + colWidths[0] + colWidths[1], rowY);
             doc.text(producto.numero_serie || 'N/A', tableLeft + colWidths[0] + colWidths[1] + colWidths[2], rowY);
-            doc.text(producto.condicion || 'NUEVO', tableLeft + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], rowY);
 
             rowY += 14;
             doc.moveTo(tableLeft, rowY).lineTo(tableLeft + pageWidth, rowY).stroke();
@@ -414,50 +349,7 @@ async function generarAnexoPDF(datos, idAnexo = null) {
             doc.font('Calibri').fontSize(CONFIG.textSize);
             doc.text('Para todos los efectos legales y contractuales procedentes, el presente Anexo forma parte íntegra del contrato de trabajo, manteniéndose vigentes todas las otras cláusulas pactadas y no modificadas por el presente instrumento.', { width: pageWidth, align: 'justify' });
             doc.moveDown(CONFIG.paragraphSpacing);
-            doc.text('El presente anexo se firma de acuerdo con la Ley N° 19.799 sobre "Documentos electrónicos, firma electrónica y servicios de certificación de dicha firma".', { width: pageWidth, align: 'justify' });
-            doc.moveDown(CONFIG.paragraphSpacing);
             doc.text('La copia del presente Anexo al Contrato de Trabajo se envía de manera automática al correo electrónico personal informado por el Trabajador, y ha quedado disponible para ambas partes en el portal (BUK), al cual tiene acceso el Trabajador.', { width: pageWidth, align: 'justify' });
-            
-            doc.moveDown(CONFIG.signaturesMarginTop / 10);
-            
-            doc.font('Calibri-Bold').fontSize(12);
-            doc.text('FIRMAS', { align: 'center' });
-            doc.moveDown(2);
-            
-            const firmaY = doc.y;
-            const leftFirmaX = CONFIG.marginLeft + 10;
-            const rightFirmaX = doc.page.width - CONFIG.marginRight - 150 - 10;
-            
-            // FIRMA DEL TRABAJADOR
-            doc.font('Calibri').fontSize(11);
-            doc.text('_________________________', leftFirmaX, firmaY);
-            doc.text('_________________________', rightFirmaX, firmaY);
-            doc.moveDown(0.8);
-            
-            // Usar firmas desde archivos si existen
-            if (idAnexo) {
-                // Intentar dibujar firma desde archivo
-                if (fs.existsSync(path.join(FIRMAS_DIR, `firma_trabajador_${idAnexo}.png`))) {
-                    doc.image(path.join(FIRMAS_DIR, `firma_trabajador_${idAnexo}.png`), leftFirmaX, firmaY - 40, { width: 150, height: 40, align: 'center' });
-                } else {
-                    doc.text(firma_trabajador || colaborador.nombre, leftFirmaX, firmaY + 5);
-                }
-                
-                if (fs.existsSync(path.join(FIRMAS_DIR, `firma_gerente_${idAnexo}.png`))) {
-                    doc.image(path.join(FIRMAS_DIR, `firma_gerente_${idAnexo}.png`), rightFirmaX, firmaY - 40, { width: 150, height: 40, align: 'center' });
-                } else {
-                    doc.text(representante, rightFirmaX, firmaY + 5);
-                }
-            } else {
-                doc.text(firma_trabajador || colaborador.nombre, leftFirmaX, firmaY + 5);
-                doc.text(representante, rightFirmaX, firmaY + 5);
-            }
-            
-            doc.moveDown(0.8);
-            
-            doc.font('Calibri').fontSize(9);
-            doc.text('FIRMA TRABAJADOR', leftFirmaX, doc.y);
-            doc.text('Gerente General', rightFirmaX, doc.y);
             
             drawFooter(doc);
             
@@ -526,11 +418,10 @@ router.post('/colaborador-temporal', async (req, res) => {
             .input('cargo', sql.NVarChar, cargo || null)
             .input('departamento', sql.NVarChar, departamento || null)
             .input('direccion', sql.NVarChar, direccion || null)
-            .input('estado', sql.NVarChar, 'ACTIVO')
             .query(`
-                INSERT INTO INV.colaboradores (nombre, rut, email, cargo, departamento, direccion, estado)
+                INSERT INTO INV.colaboradores (nombre, rut, email, cargo, departamento, direccion)
                 OUTPUT INSERTED.id
-                VALUES (@nombre, @rut, @email, @cargo, @departamento, @direccion, @estado)
+                VALUES (@nombre, @rut, @email, @cargo, @departamento, @direccion)
             `);
         res.json({ success: true, data: { id: result.recordset[0].id }, existente: false });
     } catch (error) {
@@ -538,6 +429,9 @@ router.post('/colaborador-temporal', async (req, res) => {
     }
 });
 
+// ============================================
+// GENERAR ANEXO
+// ============================================
 router.post('/generar', async (req, res) => {
     let pool;
     let transaction;
@@ -545,7 +439,7 @@ router.post('/generar', async (req, res) => {
     try {
         console.log('📥 POST /api/anexos/generar');
         
-        const { colaborador, producto, empresa, observaciones, firma_trabajador, asignacion_id } = req.body;
+        const { colaborador, producto, empresa, observaciones, asignacion_id } = req.body;
         
         if (!colaborador?.id || !producto?.id || !empresa) {
             return res.status(400).json({ success: false, message: 'Datos incompletos' });
@@ -568,29 +462,26 @@ router.post('/generar', async (req, res) => {
                 .input('cargo', sql.NVarChar, colaborador.cargo || null)
                 .input('departamento', sql.NVarChar, colaborador.departamento || null)
                 .input('direccion', sql.NVarChar, colaborador.direccion || null)
-                .input('estado', sql.NVarChar, 'ACTIVO')
                 .query(`
-                    INSERT INTO INV.colaboradores (nombre, rut, email, cargo, departamento, direccion, estado)
+                    INSERT INTO INV.colaboradores (nombre, rut, email, cargo, departamento, direccion)
                     OUTPUT INSERTED.id
-                    VALUES (@nombre, @rut, @email, @cargo, @departamento, @direccion, @estado)
+                    VALUES (@nombre, @rut, @email, @cargo, @departamento, @direccion)
                 `);
             colaboradorId = newColab.recordset[0].id;
         }
         
+        // Insertar anexo sin estado ni firmas
         const result = await transaction.request()
             .input('colaborador_id', sql.Int, colaboradorId)
             .input('producto_id', sql.Int, producto.id)
             .input('asignacion_id', sql.Int, asignacion_id || null)
             .input('empresa', sql.NVarChar, empresa)
             .input('observaciones', sql.NVarChar(500), (observaciones || '').substring(0, 500))
-            .input('firma_trabajador', sql.NVarChar(500), (firma_trabajador || colaborador.nombre).substring(0, 500))
-            .input('firma_gerente', sql.NVarChar(500), null)
-            .input('estado', sql.NVarChar, 'PENDIENTE')
             .input('usuario_creacion', sql.NVarChar, req.user?.usuario || 'Sistema')
             .query(`
-                INSERT INTO INV.anexos (colaborador_id, producto_id, asignacion_id, empresa, observaciones, firma_trabajador, firma_gerente, estado, usuario_creacion, fecha_creacion, fecha_anexo)
+                INSERT INTO INV.anexos (colaborador_id, producto_id, asignacion_id, empresa, observaciones, usuario_creacion, fecha_creacion, fecha_anexo)
                 OUTPUT INSERTED.id
-                VALUES (@colaborador_id, @producto_id, @asignacion_id, @empresa, @observaciones, @firma_trabajador, @firma_gerente, @estado, @usuario_creacion, GETDATE(), GETDATE())
+                VALUES (@colaborador_id, @producto_id, @asignacion_id, @empresa, @observaciones, @usuario_creacion, GETDATE(), GETDATE())
             `);
         
         const anexoId = result.recordset[0].id;
@@ -600,9 +491,8 @@ router.post('/generar', async (req, res) => {
             colaborador: { ...colaborador, id: colaboradorId },
             producto: producto,
             empresa: empresa,
-            fecha: new Date(),
-            firma_trabajador: firma_trabajador || colaborador.nombre
-        }, null);
+            fecha: new Date()
+        });
         
         const filename = `anexo_${empresa.replace(/\s/g, '_')}_${colaborador.nombre.replace(/\s/g, '_')}_${Date.now()}.pdf`;
         const filepath = path.join(ANEXOS_DIR, filename);
@@ -628,24 +518,46 @@ router.post('/generar', async (req, res) => {
     }
 });
 
+// ============================================
+// OBTENER ANEXOS - SIN ESTADO
+// ============================================
 router.get('/', async (req, res) => {
     try {
         const pool = await getConnection();
+        
         const result = await pool.request().query(`
-            SELECT a.*, 
-                   c.nombre as colaborador_nombre, c.rut as colaborador_rut,
-                   p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo
+            SELECT 
+                a.id, 
+                a.colaborador_id, 
+                a.producto_id, 
+                a.asignacion_id, 
+                a.empresa, 
+                a.observaciones, 
+                a.documento_generado, 
+                a.fecha_creacion, 
+                a.fecha_anexo,
+                c.nombre as colaborador_nombre, 
+                c.rut as colaborador_rut,
+                p.nombre as producto_nombre, 
+                p.numero_serie, 
+                p.marca, 
+                p.modelo
             FROM INV.anexos a
             LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
             LEFT JOIN INV.productos p ON a.producto_id = p.id
             ORDER BY a.fecha_creacion DESC
         `);
+        
         res.json({ success: true, data: result.recordset });
     } catch (error) {
+        console.error('❌ Error en GET /anexos:', error);
         res.status(500).json({ success: false, message: error.message, data: [] });
     }
 });
 
+// ============================================
+// OBTENER ANEXO POR ID - SIN ESTADO
+// ============================================
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -654,9 +566,22 @@ router.get('/:id', async (req, res) => {
         const result = await pool.request()
             .input('id', sql.Int, id)
             .query(`
-                SELECT a.*, 
-                       c.nombre as colaborador_nombre, c.rut as colaborador_rut,
-                       p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo
+                SELECT 
+                    a.id, 
+                    a.colaborador_id, 
+                    a.producto_id, 
+                    a.asignacion_id, 
+                    a.empresa, 
+                    a.observaciones, 
+                    a.documento_generado, 
+                    a.fecha_creacion, 
+                    a.fecha_anexo,
+                    c.nombre as colaborador_nombre, 
+                    c.rut as colaborador_rut,
+                    p.nombre as producto_nombre, 
+                    p.numero_serie, 
+                    p.marca, 
+                    p.modelo
                 FROM INV.anexos a
                 LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
                 LEFT JOIN INV.productos p ON a.producto_id = p.id
@@ -675,142 +600,8 @@ router.get('/:id', async (req, res) => {
 });
 
 // ============================================
-// ENDPOINT PARA FIRMAR ANEXO (GUARDA FIRMAS COMO ARCHIVOS)
+// DESCARGAR ANEXO
 // ============================================
-router.put('/:id/firmar', async (req, res) => {
-    let pool;
-    let transaction;
-    
-    try {
-        const { id } = req.params;
-        const { firma_trabajador, firma_gerente } = req.body;
-        
-        console.log(`📥 PUT /api/anexos/${id}/firmar`);
-        
-        if (!id) {
-            return res.status(400).json({ success: false, message: 'ID del anexo requerido' });
-        }
-        
-        if (!firma_trabajador) {
-            return res.status(400).json({ success: false, message: 'La firma del trabajador es requerida' });
-        }
-        
-        if (!firma_gerente) {
-            return res.status(400).json({ success: false, message: 'La firma del gerente es requerida' });
-        }
-        
-        pool = await getConnection();
-        transaction = pool.transaction();
-        await transaction.begin();
-        
-        // Obtener datos completos del anexo
-        const anexoResult = await transaction.request()
-            .input('id', sql.Int, id)
-            .query(`
-                SELECT a.*, 
-                       c.nombre as colaborador_nombre, c.rut as colaborador_rut,
-                       p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo
-                FROM INV.anexos a
-                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                LEFT JOIN INV.productos p ON a.producto_id = p.id
-                WHERE a.id = @id
-            `);
-        
-        if (anexoResult.recordset.length === 0) {
-            await transaction.rollback();
-            return res.status(404).json({ success: false, message: 'Anexo no encontrado' });
-        }
-        
-        const anexo = anexoResult.recordset[0];
-        
-        if (anexo.estado === 'FIRMADO') {
-            await transaction.rollback();
-            return res.status(400).json({ success: false, message: 'Este anexo ya está firmado' });
-        }
-        
-        // Guardar firmas como archivos (NO en la base de datos)
-        const firmaTrabajadorGuardada = guardarFirmaComoArchivo(id, firma_trabajador, 'trabajador');
-        const firmaGerenteGuardada = guardarFirmaComoArchivo(id, firma_gerente, 'gerente');
-        
-        if (!firmaTrabajadorGuardada) {
-            await transaction.rollback();
-            return res.status(400).json({ success: false, message: 'Error al guardar la firma del trabajador' });
-        }
-        
-        if (!firmaGerenteGuardada) {
-            await transaction.rollback();
-            return res.status(400).json({ success: false, message: 'Error al guardar la firma del gerente' });
-        }
-        
-        // Actualizar solo el estado en la base de datos (NO guardar las firmas en la BD)
-        await transaction.request()
-            .input('id', sql.Int, id)
-            .input('estado', sql.NVarChar, 'FIRMADO')
-            .input('fecha_firma', sql.DateTime, new Date())
-            .query(`
-                UPDATE INV.anexos 
-                SET estado = @estado,
-                    fecha_firma = @fecha_firma
-                WHERE id = @id
-            `);
-        
-        await transaction.commit();
-        console.log('✅ Anexo firmado correctamente, firmas guardadas como archivos');
-        
-        // GENERAR NUEVO PDF CON LAS FIRMAS
-        console.log('📄 Generando PDF firmado...');
-        
-        const datosPDF = {
-            colaborador: {
-                nombre: anexo.colaborador_nombre,
-                rut: anexo.colaborador_rut,
-                id: anexo.colaborador_id
-            },
-            producto: {
-                nombre: anexo.producto_nombre,
-                marca: anexo.marca || 'N/A',
-                modelo: anexo.modelo || 'N/A',
-                numero_serie: anexo.numero_serie || 'N/A',
-                condicion: 'NUEVO',
-                tipo: 'Equipo'
-            },
-            empresa: anexo.empresa || 'STUEDEMANN S.A.',
-            fecha: anexo.fecha_anexo || new Date(),
-            firma_trabajador: anexo.colaborador_nombre
-        };
-        
-        const pdfBuffer = await generarAnexoPDF(datosPDF, id);
-        
-        if (!pdfBuffer || pdfBuffer.length === 0) {
-            throw new Error('No se pudo generar el PDF firmado');
-        }
-        
-        // Guardar el nuevo PDF con las firmas
-        const filename = `anexo_firmado_${id}_${Date.now()}.pdf`;
-        const filepath = path.join(ANEXOS_DIR, filename);
-        fs.writeFileSync(filepath, pdfBuffer);
-        console.log(`✅ PDF firmado guardado: ${filename} (${pdfBuffer.length} bytes)`);
-        
-        // Actualizar el documento_generado en la base de datos
-        const poolUpdate = await getConnection();
-        await poolUpdate.request()
-            .input('id', sql.Int, id)
-            .input('documento_generado', sql.NVarChar, filename)
-            .query(`UPDATE INV.anexos SET documento_generado = @documento_generado WHERE id = @id`);
-        
-        // Devolver el PDF firmado
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('X-Documento-Firmado', 'true');
-        res.send(pdfBuffer);
-        
-    } catch (error) {
-        if (transaction) await transaction.rollback();
-        console.error('❌ Error al firmar anexo:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
 router.get('/descargar/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -842,6 +633,9 @@ router.get('/descargar/:id', async (req, res) => {
     }
 });
 
+// ============================================
+// ELIMINAR ANEXO
+// ============================================
 router.delete('/:id', async (req, res) => {
     let pool;
     let transaction;
@@ -865,12 +659,6 @@ router.delete('/:id', async (req, res) => {
             const filepath = path.join(ANEXOS_DIR, fileResult.recordset[0].documento_generado);
             if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
         }
-        
-        // Eliminar también las firmas asociadas
-        const firmaTrabajadorPath = path.join(FIRMAS_DIR, `firma_trabajador_${id}.png`);
-        const firmaGerentePath = path.join(FIRMAS_DIR, `firma_gerente_${id}.png`);
-        if (fs.existsSync(firmaTrabajadorPath)) fs.unlinkSync(firmaTrabajadorPath);
-        if (fs.existsSync(firmaGerentePath)) fs.unlinkSync(firmaGerentePath);
         
         await transaction.commit();
         res.json({ success: true, message: 'Anexo eliminado correctamente' });

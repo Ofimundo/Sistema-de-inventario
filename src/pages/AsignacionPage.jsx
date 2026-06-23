@@ -1,27 +1,36 @@
-// src/pages/AnexosPage.jsx - VERSIÓN COMPLETA CORREGIDA (SIN PANTALLA EN BLANCO)
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/AsignacionPage.jsx - VERSIÓN COMPLETA CORREGIDA
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Box,
     Paper,
     Typography,
     Button,
-    Stepper,
-    Step,
-    StepLabel,
-    StepContent,
+    IconButton,
     TextField,
+    InputAdornment,
     Grid,
-    Avatar,
-    Chip,
-    Alert,
-    Snackbar,
-    CircularProgress,
+    Card,
+    CardContent,
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
-    IconButton,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Alert,
+    Snackbar,
+    CircularProgress,
+    useTheme,
+    useMediaQuery,
+    Stack,
+    alpha,
+    Container,
+    AppBar,
+    Toolbar,
+    Avatar,
+    Chip,
     Table,
     TableBody,
     TableCell,
@@ -29,40 +38,48 @@ import {
     TableHead,
     TableRow,
     TablePagination,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    InputAdornment,
+    ToggleButton,
+    ToggleButtonGroup,
+    Stepper,
+    Step,
+    StepLabel,
+    StepContent,
+    LinearProgress,
+    Checkbox,
+    FormControlLabel,
     Divider,
-    alpha,
-    Stack,
-    Tooltip,
-    AppBar,
-    Toolbar,
-    Container,
     RadioGroup,
-    Radio,
-    FormControlLabel
+    Radio
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import {
-    Description,
-    Assignment,
-    Person,
-    Business,
-    CheckCircle,
-    Close,
-    Download,
-    Visibility,
-    Search,
-    Delete,
-    Refresh,
-    Home,
-    Warning,
-    Edit
+    Search as SearchIcon,
+    Refresh as RefreshIcon,
+    Error as ErrorIcon,
+    Person as PersonIcon,
+    Inventory as InventoryIcon,
+    Assignment as AssignmentIcon,
+    Check as CheckIcon,
+    Home as HomeIcon,
+    FilterListOff as FilterListOffIcon,
+    Store as StoreIcon,
+    Receipt as ReceiptIcon,
+    Close as CloseIcon,
+    CheckCircle as CheckCircleIcon,
+    Visibility as VisibilityIcon,
+    Download as DownloadIcon,
+    Description as DescriptionIcon,
+    CheckBox as CheckBoxIcon,
+    Clear as ClearIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import colaboradorService from '../services/colaboradorService';
+import RecepcionDialog from '../components/RecepcionDialog';
 
+// ============================================
+// COLORES
+// ============================================
 const colors = {
     primary: '#0A66C2',
     secondary: '#7C3AED',
@@ -80,31 +97,188 @@ const colors = {
     border: '#E5E7EB'
 };
 
+// Mapa de estados
+const ESTADO_TEXTO = {
+    1: 'DISPONIBLE',
+    2: 'ASIGNADO',
+    3: 'EN MANTENCIÓN',
+    4: 'EN REPARACIÓN',
+    5: 'NO DISPONIBLE',
+    6: 'BAJA'
+};
+
+const ESTADO_COLOR = {
+    1: '#10B981',
+    2: '#F59E0B',
+    3: '#3B82F6',
+    4: '#EF4444',
+    5: '#6B7280',
+    6: '#9CA3AF'
+};
+
+const getEstadoTexto = (estadoId) => {
+    const id = Number(estadoId);
+    return ESTADO_TEXTO[id] || 'DESCONOCIDO';
+};
+
+const getEstadoColor = (estadoId) => {
+    const id = Number(estadoId);
+    return ESTADO_COLOR[id] || '#6B7280';
+};
+
+// URL BASE
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+console.log('🔧 API_BASE_URL en AsignacionPage:', API_BASE_URL);
+
 // ============================================
-// FUNCIÓN PARA DESCARGAR PDF (sin pantalla en blanco)
+// CHECKLIST ITEMS
 // ============================================
-const descargarPDF = (blob, filename) => {
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    // IMPORTANTE: No agregar al body, solo hacer click
-    link.click();
-    // Limpiar después de un tiempo
-    setTimeout(() => {
+const CHECKLIST_ITEMS = [
+    { id: 'equipo_fisico', label: 'Equipo revisado físicamente' },
+    { id: 'cargador', label: 'Cargador entregado' },
+    { id: 'mouse', label: 'Mouse entregado' },
+    { id: 'audifonos', label: 'Audífonos entregados' },
+    { id: 'windows_actualizado', label: 'Windows actualizado' },
+    { id: 'drivers', label: 'Drivers instalados' },
+    { id: 'dominio', label: 'Equipo agregado dominio' },
+    { id: 'usuario_configurado', label: 'Usuario configurado' },
+    { id: 'outlook', label: 'Outlook configurado' },
+    { id: 'mfa', label: 'MFA habilitado' },
+    { id: 'teams', label: 'Teams instalado' },
+    { id: 'onedrive', label: 'OneDrive funcionando' },
+    { id: 'softland', label: 'Softland instalado' },
+    { id: 'unidad_red', label: 'Unidad red Softland' },
+    { id: 'vpn', label: 'VPN instalada' },
+    { id: 'vpn_validada', label: 'VPN validada' },
+    { id: 'internet', label: 'Internet validado' },
+    { id: 'recursos_internos', label: 'Acceso recursos internos' },
+    { id: 'antivirus', label: 'Antivirus operativo' },
+    { id: 'firewall', label: 'Firewall activo' }
+];
+
+// ============================================
+// FUNCIÓN PARA GENERAR CHECKLIST
+// ============================================
+const generarPDFChecklist = async (checklistData, producto, colaborador, ticketInfo, especificacionesTecnicas) => {
+    try {
+        const fechaActual = new Date().toLocaleDateString('es-CL', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        
+        const itemsMap = {};
+        if (checklistData.items) {
+            checklistData.items.forEach(item => {
+                itemsMap[item.id] = { ok: item.ok, observacion: item.observacion };
+            });
+        }
+        
+        const contenidoHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Checklist_${colaborador.nombre?.replace(/\s/g, '_') || 'Entrega'}</title>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: 'Arial', sans-serif; background: white; padding: 20px; }
+                    .checklist-container { max-width: 1200px; margin: 0 auto; background: white; border: 1px solid #000; padding: 20px; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                    .header h1 { font-size: 24px; font-weight: bold; margin: 0; }
+                    .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; border: 1px solid #000; padding: 10px; }
+                    .info-row { display: flex; align-items: center; }
+                    .info-label { font-weight: bold; width: 120px; font-size: 12px; }
+                    .info-value { flex: 1; border-bottom: 1px solid #000; padding: 3px 5px; font-size: 12px; }
+                    .checklist-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                    .checklist-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; font-weight: bold; }
+                    .checklist-table td { border: 1px solid #000; padding: 6px 8px; font-size: 11px; }
+                    .specs-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000; }
+                    .specs-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; font-weight: bold; width: 50%; }
+                    .specs-table td { border: 1px solid #000; padding: 8px; font-size: 12px; }
+                    .signature-section { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 20px; }
+                    .signature-box { width: 45%; text-align: center; }
+                    .signature-line { border-top: 1px solid #000; margin-top: 30px; padding-top: 8px; }
+                    .signature-name { font-size: 11px; margin-top: 5px; }
+                    .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="checklist-container">
+                    <div class="header"><h1>CHECKLIST ENTREGA EQUIPOS TI</h1></div>
+                    <div class="info-grid">
+                        <div class="info-row"><div class="info-label">Ticket:</div><div class="info-value">${ticketInfo.ticket || '_______________'}</div></div>
+                        <div class="info-row"><div class="info-label">Fecha:</div><div class="info-value">${fechaActual}</div></div>
+                        <div class="info-row"><div class="info-label">Usuario:</div><div class="info-value">${colaborador.usuario || colaborador.nombre?.split(' ')[0]?.toLowerCase() || '________'}</div></div>
+                        <div class="info-row"><div class="info-label">Clave:</div><div class="info-value">${colaborador.clave || '********'}</div></div>
+                        <div class="info-row"><div class="info-label">Encargado TI:</div><div class="info-value">${ticketInfo.tecnico || '_________________'}</div></div>
+                        <div class="info-row"><div class="info-label">Equipo:</div><div class="info-value">${producto.nombre || '_________________'}</div></div>
+                        <div class="info-row"><div class="info-label">Serie:</div><div class="info-value">${producto.numero_serie || '_________________'}</div></div>
+                    </div>
+                    <table class="checklist-table">
+                        <thead><tr><th style="width: 60%">Item</th><th style="width: 15%">OK</th><th style="width: 25%">Observación</th></tr></thead>
+                        <tbody>
+                            ${CHECKLIST_ITEMS.map(item => {
+                                const itemData = itemsMap[item.id] || { ok: false, observacion: '' };
+                                return `<tr><td>${item.label}</td><td style="text-align: center">${itemData.ok ? '■ Sí' : '□ No'}</td><td>${itemData.observacion || ''}</td></tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    <table class="specs-table">
+                        <thead><tr><th>Especificaciones Técnicas</th><th></th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>CPU</strong></td><td>${especificacionesTecnicas.cpu || '_________________'}</td></tr>
+                            <tr><td><strong>RAM</strong></td><td>${especificacionesTecnicas.ram || '_________________'}</td></tr>
+                            <tr><td><strong>Disco</strong></td><td>${especificacionesTecnicas.disco || '_________________'}</td></tr>
+                            <tr><td><strong>GPU</strong></td><td>${especificacionesTecnicas.gpu || '_________________'}</td></tr>
+                            <tr><td><strong>Tipo</strong></td><td>${especificacionesTecnicas.tipo || '_________________'}</td></tr>
+                        </tbody>
+                    </table>
+                    <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #000;">
+                        <div style="display: flex; align-items: center;">
+                            <span style="font-weight: bold; width: 120px;">Usuario conforme:</span>
+                            <span>${checklistData.usuarioConforme ? '■ Sí' : '□ No'}</span>
+                        </div>
+                    </div>
+                    <div class="signature-section">
+                        <div class="signature-box"><div class="signature-line"></div><div class="signature-name">Nombre Usuario</div><div class="signature-name">${colaborador.nombre || '_________________'}</div></div>
+                        <div class="signature-box"><div class="signature-line"></div><div class="signature-name">Firma Usuario</div></div>
+                        <div class="signature-box"><div class="signature-line"></div><div class="signature-name">Fecha</div><div class="signature-name">${fechaActual}</div></div>
+                    </div>
+                    <div class="footer"><p>Documento generado por Sistema de Gestión de Inventario</p></div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([contenidoHTML], { type: 'text/html' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const nombreColaborador = colaborador.nombre?.replace(/\s/g, '_') || 'Usuario';
+        const filename = `Checklist_${nombreColaborador}_${fechaActual.replace(/\//g, '-')}.html`;
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-    }, 1000);
+        
+        return true;
+    } catch (error) {
+        console.error('Error generando checklist:', error);
+        return false;
+    }
 };
 
 // ============================================
 // COMPONENTE DE FIRMA DIBUJADA
 // ============================================
-const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label = 'Firma' }) => {
-    const canvasRef = React.useRef(null);
+const FirmaDibujadaComponent = ({ onFirmaGuardada, label, height = 120 }) => {
+    const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasSignature, setHasSignature] = useState(false);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
@@ -114,35 +288,24 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            
-            if (valorInicial && valorInicial !== '') {
-                const img = new Image();
-                img.onload = () => {
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    setHasSignature(true);
-                };
-                img.src = valorInicial;
-            }
         }
-    }, [valorInicial]);
+    }, []);
 
     const startDrawing = (e) => {
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
         let clientX, clientY;
-        
         if (e.touches) {
             clientX = e.touches[0].clientX;
             clientY = e.touches[0].clientY;
+            e.preventDefault();
         } else {
             clientX = e.clientX;
             clientY = e.clientY;
         }
-        
+        const ctx = canvas.getContext('2d');
         const x = (clientX - rect.left) * (canvas.width / rect.width);
         const y = (clientY - rect.top) * (canvas.height / rect.height);
-        
-        const ctx = canvas.getContext('2d');
         ctx.beginPath();
         ctx.moveTo(x, y);
         setIsDrawing(true);
@@ -151,11 +314,9 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
     const draw = (e) => {
         if (!isDrawing) return;
         e.preventDefault();
-        
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
         let clientX, clientY;
-        
         if (e.touches) {
             clientX = e.touches[0].clientX;
             clientY = e.touches[0].clientY;
@@ -163,11 +324,9 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
             clientX = e.clientX;
             clientY = e.clientY;
         }
-        
+        const ctx = canvas.getContext('2d');
         const x = (clientX - rect.left) * (canvas.width / rect.width);
         const y = (clientY - rect.top) * (canvas.height / rect.height);
-        
-        const ctx = canvas.getContext('2d');
         ctx.lineTo(x, y);
         ctx.stroke();
         setHasSignature(true);
@@ -177,8 +336,8 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
         setIsDrawing(false);
         if (hasSignature) {
             const canvas = canvasRef.current;
-            const signatureDataUrl = canvas.toDataURL('image/png');
-            onFirmaGuardada(signatureDataUrl);
+            const firmaData = canvas.toDataURL('image/png');
+            onFirmaGuardada(firmaData);
         }
     };
 
@@ -187,27 +346,25 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
         setHasSignature(false);
         onFirmaGuardada('');
     };
 
     return (
-        <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary" gutterBottom>
-                {label}
-            </Typography>
+        <Box sx={{ textAlign: 'center', border: '1px solid #ddd', p: 2, borderRadius: 1, bgcolor: '#fafafa', mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>{label}</Typography>
             <canvas
                 ref={canvasRef}
                 width={450}
                 height={height}
                 style={{
-                    border: `2px solid #333`,
+                    border: `2px solid #000`,
                     backgroundColor: 'white',
                     cursor: 'crosshair',
                     width: '100%',
                     height: 'auto',
-                    touchAction: 'none',
-                    borderRadius: 4
+                    touchAction: 'none'
                 }}
                 onMouseDown={startDrawing}
                 onMouseMove={draw}
@@ -217,124 +374,163 @@ const FirmaDibujada = ({ onFirmaGuardada, valorInicial = '', height = 150, label
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
             />
-            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', gap: 1 }}>
-                <Button size="small" variant="outlined" onClick={clearCanvas} startIcon={<Close />} sx={{ borderRadius: 0 }}>
-                    Limpiar
-                </Button>
-            </Box>
+            <Button size="small" variant="outlined" startIcon={<ClearIcon />} onClick={clearCanvas} sx={{ mt: 1, borderRadius: 0 }}>Limpiar Firma</Button>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>Dibuje su firma en el recuadro</Typography>
         </Box>
     );
 };
 
 // ============================================
-// COMPONENTE DE FIRMA POR TEXTO
+// COMPONENTE DE DIÁLOGO CON CHECKLIST INTEGRADO
 // ============================================
-const FirmaTexto = ({ onFirmaCapturada, valorInicial = '', required = true, label = 'Firma' }) => {
-    const [firma, setFirma] = useState(valorInicial);
-    const [editando, setEditando] = useState(!valorInicial);
-    const [temp, setTemp] = useState(valorInicial || '');
-
-    const guardar = () => {
-        if (required && !temp.trim()) return;
-        setFirma(temp);
-        setEditando(false);
-        onFirmaCapturada(temp);
-    };
-
-    const editar = () => {
-        setTemp(firma);
-        setEditando(true);
-    };
-
-    const cancelar = () => {
-        setTemp(firma);
-        setEditando(false);
-    };
-
-    return (
-        <Box sx={{ border: `1px solid #ddd`, p: 2, borderRadius: 1, bgcolor: '#fafafa' }}>
-            <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Person sx={{ color: '#0A66C2', fontSize: 20 }} />
-                {label} {required && <span style={{ color: '#EF4444' }}>*</span>}
-            </Typography>
-            
-            {editando ? (
-                <>
-                    <TextField
-                        fullWidth
-                        multiline
-                        rows={2}
-                        placeholder="Escriba el nombre completo de la persona que firma"
-                        value={temp}
-                        onChange={(e) => setTemp(e.target.value)}
-                        sx={{ mb: 1 }}
-                        helperText="Ej: Juan Pérez Pérez, RUT: 12.345.678-9"
-                    />
-                    <Box display="flex" gap={1} justifyContent="flex-end">
-                        <Button size="small" variant="outlined" onClick={cancelar} sx={{ borderRadius: 0 }}>Cancelar</Button>
-                        <Button size="small" variant="contained" onClick={guardar} sx={{ borderRadius: 0 }}>Guardar</Button>
-                    </Box>
-                </>
-            ) : (
-                <Box sx={{ p: 1.5, bgcolor: '#e8f5e9', border: `1px solid #4caf50`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                        {firma || (required ? 'Firma pendiente' : 'No especificada')}
-                    </Typography>
-                    <Button size="small" onClick={editar} sx={{ borderRadius: 0 }}>Editar</Button>
-                </Box>
-            )}
-        </Box>
-    );
-};
-
-// ============================================
-// COMPONENTE DE DIÁLOGO PARA FIRMAR ANEXO
-// ============================================
-const FirmarAnexoDialog = ({ open, onClose, anexo, onFirmaExitosa }) => {
+const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onSuccess }) => {
+    const [colaboradores, setColaboradores] = useState([]);
+    const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeStep, setActiveStep] = useState(0);
+    const [checklistItems, setChecklistItems] = useState(CHECKLIST_ITEMS.map(item => ({ ...item, ok: false, observacion: '' })));
+    const [usuarioConforme, setUsuarioConforme] = useState(false);
+    const [ticketInfo, setTicketInfo] = useState({
+        ticket: '',
+        fecha: new Date().toISOString().split('T')[0],
+        tecnico: ''
+    });
+    const [motivo, setMotivo] = useState('');
+    const [observaciones, setObservaciones] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [especificacionesTecnicas, setEspecificacionesTecnicas] = useState({
+        cpu: '',
+        ram: '',
+        disco: '',
+        gpu: '',
+        tipo: ''
+    });
     const [firmaTrabajadorText, setFirmaTrabajadorText] = useState('');
     const [firmaGerenteText, setFirmaGerenteText] = useState('');
     const [firmaTrabajadorDibujo, setFirmaTrabajadorDibujo] = useState('');
     const [firmaGerenteDibujo, setFirmaGerenteDibujo] = useState('');
     const [tipoFirmaTrabajador, setTipoFirmaTrabajador] = useState('texto');
     const [tipoFirmaGerente, setTipoFirmaGerente] = useState('texto');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
 
-    React.useEffect(() => {
-        if (open && anexo) {
-            setFirmaTrabajadorText(anexo.colaborador_nombre || '');
+    useEffect(() => {
+        if (open) {
+            cargarColaboradores();
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            setTicketInfo(prev => ({ ...prev, tecnico: user.nombre || user.usuario || 'Técnico' }));
+            setShowSuccess(false);
+            setActiveStep(0);
+            setError('');
+            setColaboradorSeleccionado(null);
+            setMotivo('');
+            setObservaciones('');
+            setUsuarioConforme(false);
+            setChecklistItems(CHECKLIST_ITEMS.map(item => ({ ...item, ok: false, observacion: '' })));
+            setFirmaTrabajadorText('');
             setFirmaGerenteText('');
             setFirmaTrabajadorDibujo('');
             setFirmaGerenteDibujo('');
-            setError('');
         }
-    }, [open, anexo]);
+    }, [open]);
 
-    const getFirmaTrabajadorFinal = () => {
-        if (tipoFirmaTrabajador === 'dibujo') {
-            return firmaTrabajadorDibujo || '';
+    const cargarColaboradores = async () => {
+        try {
+            const response = await colaboradorService.getColaboradores({ estado: 'ACTIVO' });
+            setColaboradores(response || []);
+        } catch (error) {
+            console.error('Error cargando colaboradores:', error);
         }
-        return firmaTrabajadorText;
     };
 
-    const getFirmaGerenteFinal = () => {
-        if (tipoFirmaGerente === 'dibujo') {
-            return firmaGerenteDibujo || '';
-        }
-        return firmaGerenteText;
+    const colaboradoresFiltrados = colaboradores.filter(col => 
+        col.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        col.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        col.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        col.rut?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const handleCheckChange = (index) => {
+        const newItems = [...checklistItems];
+        newItems[index].ok = !newItems[index].ok;
+        setChecklistItems(newItems);
     };
 
-    const handleFirmar = async () => {
-        const firmaTrabajador = getFirmaTrabajadorFinal();
-        const firmaGerente = getFirmaGerenteFinal();
+    const handleObservacionChange = (index, value) => {
+        const newItems = [...checklistItems];
+        newItems[index].observacion = value;
+        setChecklistItems(newItems);
+    };
 
-        if (!firmaTrabajador) {
-            setError('La firma del trabajador es requerida');
+    const calcularProgreso = () => {
+        const totalItems = checklistItems.length;
+        const itemsOk = checklistItems.filter(item => item.ok).length;
+        return totalItems > 0 ? (itemsOk / totalItems) * 100 : 0;
+    };
+
+    const getFirmaTrabajadorFinal = () => tipoFirmaTrabajador === 'dibujo' ? firmaTrabajadorDibujo || '' : firmaTrabajadorText;
+    const getFirmaGerenteFinal = () => tipoFirmaGerente === 'dibujo' ? firmaGerenteDibujo || '' : firmaGerenteText;
+
+    const handleNext = () => {
+        if (activeStep === 0 && !colaboradorSeleccionado) {
+            setError('Debe seleccionar un colaborador');
             return;
         }
+        if (activeStep === 0 && calcularProgreso() < 100) {
+            setError('Debe completar todos los items del checklist');
+            return;
+        }
+        if (activeStep === 0 && !usuarioConforme) {
+            setError('El usuario debe confirmar la conformidad');
+            return;
+        }
+        setError('');
+        setActiveStep((prev) => prev + 1);
+    };
 
-        if (!firmaGerente) {
-            setError('La firma del gerente es requerida');
+    const handleBack = () => setActiveStep((prev) => prev - 1);
+
+    // FUNCIÓN PARA DESCARGAR ACTA DE ASIGNACIÓN (IGUAL QUE RECEPCIÓN)
+    const descargarActaAsignacion = async (asignacionId) => {
+        try {
+            console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
+            
+            const token = localStorage.getItem('token');
+            const url = `${API_BASE_URL}/asignaciones/descargar-acta-asignacion/${asignacionId}`;
+            console.log('📡 URL:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `acta_asignacion_${asignacionId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            console.log('✅ Acta de asignación descargada');
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Error descargando acta de asignación:', error);
+            return { success: false, error };
+        }
+    };
+
+    const handleFinalizar = async () => {
+        if (!colaboradorSeleccionado) {
+            setError('Debe seleccionar un colaborador');
             return;
         }
 
@@ -342,557 +538,854 @@ const FirmarAnexoDialog = ({ open, onClose, anexo, onFirmaExitosa }) => {
         setError('');
 
         try {
-            const token = localStorage.getItem('token');
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-            
-            const response = await fetch(`${API_BASE_URL}/anexos/${anexo.id}/firmar`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+            const userStr = localStorage.getItem('user');
+            let usuarioResponsable = 'Sistema';
+            if (userStr) {
+                try {
+                    const user = JSON.parse(userStr);
+                    usuarioResponsable = user.nombre || user.usuario || 'Sistema';
+                } catch (e) {
+                    usuarioResponsable = userStr;
+                }
+            }
+
+            const checklistData = {
+                producto: {
+                    id: producto.id,
+                    nombre: producto.nombre,
+                    marca: producto.marca,
+                    modelo: producto.modelo,
+                    numero_serie: producto.numero_serie,
+                    condicion: producto.condicion
                 },
-                body: JSON.stringify({
-                    firma_trabajador: firmaTrabajador,
-                    firma_gerente: firmaGerente
-                })
+                colaborador: {
+                    id: colaboradorSeleccionado.id,
+                    nombre: colaboradorSeleccionado.nombre,
+                    rut: colaboradorSeleccionado.rut,
+                    cargo: colaboradorSeleccionado.cargo,
+                    departamento: colaboradorSeleccionado.departamento,
+                    usuario: colaboradorSeleccionado.usuario || colaboradorSeleccionado.nombre?.split(' ')[0]?.toLowerCase(),
+                    clave: colaboradorSeleccionado.clave || '********'
+                },
+                items: checklistItems,
+                usuarioConforme,
+                fecha: new Date().toISOString(),
+                ticketInfo: ticketInfo,
+                especificacionesTecnicas: especificacionesTecnicas
+            };
+            
+            localStorage.setItem(`checklist_producto_${producto.id}`, JSON.stringify(checklistData));
+            localStorage.setItem(`checklist_fecha_${producto.id}`, new Date().toISOString());
+
+            // 1. Generar y descargar CHECKLIST
+            await generarPDFChecklist(checklistData, producto, {
+                ...colaboradorSeleccionado,
+                usuario: colaboradorSeleccionado.usuario || colaboradorSeleccionado.nombre?.split(' ')[0]?.toLowerCase(),
+                clave: colaboradorSeleccionado.clave || '********'
+            }, ticketInfo, especificacionesTecnicas);
+            
+            console.log('✅ Checklist descargado');
+
+            if (tipoAccion === 'prestamo') {
+                const prestamoResponse = await api.post('/asignaciones', {
+                    producto_id: producto.id,
+                    colaborador_id: colaboradorSeleccionado.id,
+                    motivo: 'PRÉSTAMO TEMPORAL DE EQUIPO',
+                    observaciones: observaciones || `Préstamo registrado el ${new Date().toLocaleDateString()}`,
+                    fecha_asignacion: new Date().toISOString(),
+                    usuario_responsable: usuarioResponsable,
+                    es_prestamo: true
+                });
+
+                if (prestamoResponse.data?.success || prestamoResponse.data?.id) {
+                    setShowSuccess(true);
+                    setLoading(false);
+                    setTimeout(() => {
+                        if (onSuccess) {
+                            onSuccess({ success: true, message: '✅ Préstamo registrado exitosamente', es_prestamo: true });
+                        }
+                        onClose();
+                    }, 2000);
+                } else {
+                    throw new Error(prestamoResponse.data?.message || 'Error al registrar préstamo');
+                }
+                return;
+            }
+
+            // 2. Crear asignación
+            const asignacionResponse = await api.post('/asignaciones', {
+                producto_id: producto.id,
+                colaborador_id: colaboradorSeleccionado.id,
+                motivo: motivo || 'Asignación de equipo',
+                observaciones: observaciones,
+                fecha_asignacion: new Date().toISOString(),
+                usuario_responsable: usuarioResponsable,
+                firma_trabajador: getFirmaTrabajadorFinal(),
+                firma_gerente: getFirmaGerenteFinal(),
+                es_prestamo: false
             });
 
-            const contentType = response.headers.get('content-type');
-            
-            if (contentType && contentType.includes('application/pdf')) {
-                const blob = await response.blob();
-                const contentDisposition = response.headers.get('content-disposition');
-                let filename = `anexo_firmado_${anexo.id}.pdf`;
-                if (contentDisposition) {
-                    const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                    if (match && match[1]) {
-                        filename = match[1].replace(/['"]/g, '');
+            console.log('📝 Respuesta asignación:', asignacionResponse.data);
+
+            if (asignacionResponse.data?.success || asignacionResponse.data?.id) {
+                const newAsignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
+                
+                console.log('🆔 ID de asignación creada:', newAsignacionId);
+                
+                if (newAsignacionId) {
+                    try {
+                        // 3. Generar acta en el servidor
+                        const actaData = {
+                            id_asignacion: newAsignacionId,
+                            colaborador: {
+                                nombre: colaboradorSeleccionado.nombre,
+                                rut: colaboradorSeleccionado.rut,
+                                email: colaboradorSeleccionado.email || '',
+                                cargo: colaboradorSeleccionado.cargo || '',
+                                departamento: colaboradorSeleccionado.departamento || ''
+                            },
+                            producto: {
+                                id: producto.id,
+                                nombre: producto.nombre,
+                                marca: producto.marca || 'N/A',
+                                modelo: producto.modelo || 'N/A',
+                                numero_serie: producto.numero_serie || 'N/A',
+                                especificaciones: especificacionesTecnicas
+                            },
+                            fecha_asignacion: new Date().toISOString(),
+                            motivo: motivo || 'Asignación de equipo',
+                            observaciones: observaciones || 'Sin observaciones',
+                            ticketInfo: ticketInfo,
+                            firma_trabajador: getFirmaTrabajadorFinal(),
+                            firma_gerente: getFirmaGerenteFinal()
+                        };
+                        
+                        console.log('📄 Generando acta en el servidor...');
+                        const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData, {
+                            responseType: 'blob'
+                        });
+                        console.log('📄 Respuesta acta:', actaResponse.data);
+                        
+                        // 4. Descargar acta automáticamente (igual que recepción)
+                        setTimeout(async () => {
+                            console.log('📥 Iniciando descarga automática del acta...');
+                            await descargarActaAsignacion(newAsignacionId);
+                        }, 2000);
+                        
+                    } catch (docError) {
+                        console.error('❌ Error generando acta:', docError);
+                        // Intentar descargar igualmente
+                        setTimeout(async () => {
+                            await descargarActaAsignacion(newAsignacionId);
+                        }, 3000);
                     }
                 }
                 
-                descargarPDF(blob, filename);
+                setShowSuccess(true);
+                setLoading(false);
                 
-                onFirmaExitosa({ success: true, message: 'Anexo firmado y descargado correctamente' });
-                onClose();
-            } else {
-                const data = await response.json();
-                if (data.success) {
-                    onFirmaExitosa(data);
+                setTimeout(() => {
+                    if (onSuccess) {
+                        onSuccess({
+                            success: true,
+                            message: '✅ Asignación completada exitosamente',
+                            asignacion_id: newAsignacionId,
+                            es_prestamo: false
+                        });
+                    }
                     onClose();
-                } else {
-                    setError(data.message || 'Error al firmar el anexo');
-                }
+                }, 2500);
+                
+            } else {
+                throw new Error(asignacionResponse.data?.message || 'Error al procesar');
             }
         } catch (error) {
-            console.error('❌ Error al firmar:', error);
-            setError(error.message || 'Error al firmar el anexo');
-        } finally {
+            console.error('❌ Error:', error);
+            setError(error.response?.data?.message || error.message || 'Error al procesar la transacción');
             setLoading(false);
         }
     };
 
+    const progreso = calcularProgreso();
+
+    // Diálogo de éxito
+    if (showSuccess) {
+        return (
+            <Dialog open={open} onClose={() => {}} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ bgcolor: colors.success, color: 'white', textAlign: 'center', py: 3 }}>
+                    <CheckCircleIcon sx={{ fontSize: 60, mb: 1 }} />
+                    <Typography variant="h5">¡Proceso Exitoso!</Typography>
+                </DialogTitle>
+                <DialogContent sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography variant="body1" gutterBottom>
+                        {tipoAccion === 'asignacion' 
+                            ? 'La asignación se ha completado exitosamente.'
+                            : 'El préstamo se ha registrado exitosamente.'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        {tipoAccion === 'asignacion' 
+                            ? '✅ El checklist y el acta de asignación se están descargando automáticamente.'
+                            : '✅ El checklist se ha descargado automáticamente.'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>Cerrando...</Typography>
+                    <CircularProgress size={30} sx={{ mt: 2 }} />
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f5f5f5' }}>
-                <Box display="flex" alignItems="center" gap={1}>
-                    <CheckCircle sx={{ color: colors.success }} />
-                    <Typography variant="h6" fontWeight={600}>
-                        Firmar Anexo
-                    </Typography>
+            <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}`, bgcolor: alpha(colors.primary, 0.05) }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box display="flex" alignItems="center" gap={1}>
+                        {tipoAccion === 'asignacion' ? <AssignmentIcon sx={{ color: colors.primary }} /> : <PersonIcon sx={{ color: colors.warning }} />}
+                        <Typography variant="h6" fontWeight={600}>{tipoAccion === 'asignacion' ? 'Asignar Producto' : 'Registrar Préstamo'}</Typography>
+                        <Chip label={tipoAccion === 'asignacion' ? 'CON DOCUMENTO' : 'SIN DOCUMENTO'} size="small" sx={{ bgcolor: tipoAccion === 'asignacion' ? colors.primary : colors.warning, color: 'white', fontWeight: 500 }} />
+                    </Box>
+                    <IconButton onClick={onClose}><CloseIcon /></IconButton>
                 </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    ID Anexo: <strong>{anexo?.id}</strong> | Colaborador: <strong>{anexo?.colaborador_nombre}</strong>
-                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Producto: <strong>{producto?.nombre}</strong> | N° Serie: <strong>{producto?.numero_serie || 'N/A'}</strong></Typography>
             </DialogTitle>
-            <DialogContent dividers sx={{ p: 3 }}>
-                <Stack spacing={3}>
-                    <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
-                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                            📄 Resumen del Anexo
-                        </Typography>
-                        <Grid container spacing={1}>
-                            <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">Producto:</Typography>
-                                <Typography variant="body2">{anexo?.producto_nombre || 'N/A'}</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">Serie:</Typography>
-                                <Typography variant="body2">{anexo?.numero_serie || 'N/A'}</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">Empresa:</Typography>
-                                <Typography variant="body2">{anexo?.empresa || 'N/A'}</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                                <Typography variant="caption" color="text.secondary">Fecha:</Typography>
-                                <Typography variant="body2">{anexo?.fecha_creacion ? new Date(anexo.fecha_creacion).toLocaleDateString() : 'N/A'}</Typography>
-                            </Grid>
-                        </Grid>
-                    </Paper>
 
-                    <Divider />
+            <DialogContent dividers>
+                <Stepper activeStep={activeStep} orientation="vertical" sx={{ mb: 3 }}>
+                    <Step>
+                        <StepLabel StepIconComponent={() => (<Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.success, 0.1), color: colors.success }}><CheckBoxIcon sx={{ fontSize: 16 }} /></Avatar>)}>
+                            <Typography variant="subtitle1" fontWeight={600}>Checklist de Entrega</Typography>
+                            <Typography variant="caption" color="text.secondary">Verificar que el equipo está en óptimas condiciones</Typography>
+                        </StepLabel>
+                        <StepContent>
+                            <Box sx={{ mb: 3 }}>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                                    <Typography variant="body2" color="text.secondary">Progreso de verificación</Typography>
+                                    <Typography variant="body2" fontWeight={600} color={progreso === 100 ? colors.success : colors.primary}>{Math.round(progreso)}%</Typography>
+                                </Box>
+                                <LinearProgress variant="determinate" value={progreso} sx={{ height: 8, borderRadius: 4 }} />
+                            </Box>
 
-                    <Box>
-                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                            Firma del Trabajador *
-                        </Typography>
-                        <FormControl component="fieldset" sx={{ mb: 2 }}>
-                            <RadioGroup
-                                row
-                                value={tipoFirmaTrabajador}
-                                onChange={(e) => setTipoFirmaTrabajador(e.target.value)}
-                            >
-                                <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                            </RadioGroup>
-                        </FormControl>
-                        
-                        {tipoFirmaTrabajador === 'texto' ? (
-                            <FirmaTexto
-                                onFirmaCapturada={setFirmaTrabajadorText}
-                                valorInicial={firmaTrabajadorText}
-                                required={true}
-                                label="Firma del Trabajador"
-                            />
-                        ) : (
-                            <FirmaDibujada
-                                onFirmaGuardada={setFirmaTrabajadorDibujo}
-                                valorInicial={firmaTrabajadorDibujo}
-                                height={150}
-                                label="Dibuje su firma aquí"
-                            />
-                        )}
-                    </Box>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>Seleccionar Colaborador *</Typography>
+                            <TextField fullWidth size="small" placeholder="Buscar colaborador..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }} sx={{ mb: 2 }} />
+                            <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto', mb: 2 }}>
+                                {colaboradoresFiltrados.length === 0 ? (
+                                    <Box sx={{ p: 2, textAlign: 'center' }}><Typography color="text.secondary">No hay colaboradores</Typography></Box>
+                                ) : (
+                                    colaboradoresFiltrados.map((col) => (
+                                        <Box key={col.id} sx={{ p: 1.5, borderBottom: `1px solid ${colors.border}`, cursor: 'pointer', bgcolor: colaboradorSeleccionado?.id === col.id ? alpha(colors.primary, 0.05) : 'transparent', '&:hover': { bgcolor: alpha(colors.primary, 0.02) } }} onClick={() => setColaboradorSeleccionado(col)}>
+                                            <Box display="flex" alignItems="center" gap={1}>
+                                                <Avatar sx={{ width: 28, height: 28, bgcolor: alpha(colors.primary, 0.1) }}>{col.nombre?.charAt(0) || '?'}</Avatar>
+                                                <Box flex={1}>
+                                                    <Typography variant="body2" fontWeight={500}>{col.nombre}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">{col.rut} | {col.cargo || 'Sin cargo'}</Typography>
+                                                </Box>
+                                                {colaboradorSeleccionado?.id === col.id && <CheckCircleIcon sx={{ color: colors.success, fontSize: 18 }} />}
+                                            </Box>
+                                        </Box>
+                                    ))
+                                )}
+                            </Paper>
 
-                    <Box>
-                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                            Firma del Gerente General *
-                        </Typography>
-                        <FormControl component="fieldset" sx={{ mb: 2 }}>
-                            <RadioGroup
-                                row
-                                value={tipoFirmaGerente}
-                                onChange={(e) => setTipoFirmaGerente(e.target.value)}
-                            >
-                                <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
-                                <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
-                            </RadioGroup>
-                        </FormControl>
-                        
-                        {tipoFirmaGerente === 'texto' ? (
-                            <FirmaTexto
-                                onFirmaCapturada={setFirmaGerenteText}
-                                valorInicial={firmaGerenteText}
-                                required={true}
-                                label="Firma del Gerente"
-                            />
-                        ) : (
-                            <FirmaDibujada
-                                onFirmaGuardada={setFirmaGerenteDibujo}
-                                valorInicial={firmaGerenteDibujo}
-                                height={150}
-                                label="Dibuje su firma aquí"
-                            />
-                        )}
-                    </Box>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Verificación del Equipo *</Typography>
+                            <Paper variant="outlined" sx={{ p: 2, mb: 2, maxHeight: 400, overflow: 'auto' }}>
+                                {checklistItems.map((item, index) => (
+                                    <Box key={item.id} sx={{ mb: 2 }}>
+                                        <FormControlLabel
+                                            control={<Checkbox checked={item.ok} onChange={() => handleCheckChange(index)} size="small" />}
+                                            label={<Typography variant="body2" sx={{ fontWeight: item.ok ? 'bold' : 'normal' }}>{item.label}</Typography>}
+                                        />
+                                        <TextField
+                                            fullWidth
+                                            size="small"
+                                            placeholder="Observación"
+                                            value={item.observacion}
+                                            onChange={(e) => handleObservacionChange(index, e.target.value)}
+                                            sx={{ mt: 0.5, ml: 3.5, width: 'calc(100% - 28px)' }}
+                                        />
+                                    </Box>
+                                ))}
+                            </Paper>
 
-                    {error && (
-                        <Alert severity="error" sx={{ borderRadius: 1 }}>
-                            {error}
-                        </Alert>
+                            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                                <Typography variant="subtitle2" fontWeight={600} gutterBottom>Información del Ticket</Typography>
+                                <Grid container spacing={1}>
+                                    <Grid item xs={12} sm={4}>
+                                        <TextField fullWidth label="N° Ticket" size="small" value={ticketInfo.ticket} onChange={(e) => setTicketInfo({ ...ticketInfo, ticket: e.target.value })} />
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <TextField fullWidth label="Fecha" size="small" type="date" value={ticketInfo.fecha} onChange={(e) => setTicketInfo({ ...ticketInfo, fecha: e.target.value })} InputLabelProps={{ shrink: true }} />
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <TextField fullWidth label="Técnico" size="small" value={ticketInfo.tecnico} onChange={(e) => setTicketInfo({ ...ticketInfo, tecnico: e.target.value })} />
+                                    </Grid>
+                                </Grid>
+                            </Paper>
+
+                            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                                <Typography variant="subtitle2" fontWeight={600} gutterBottom>Especificaciones Técnicas</Typography>
+                                <Grid container spacing={1}>
+                                    <Grid item xs={12} sm={6}><TextField fullWidth label="CPU" size="small" value={especificacionesTecnicas.cpu} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, cpu: e.target.value })} placeholder="Ej: Intel Core i7-13620H" /></Grid>
+                                    <Grid item xs={12} sm={6}><TextField fullWidth label="RAM" size="small" value={especificacionesTecnicas.ram} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, ram: e.target.value })} placeholder="Ej: 16 GB DDR5 5200 MT/s" /></Grid>
+                                    <Grid item xs={12} sm={6}><TextField fullWidth label="Disco" size="small" value={especificacionesTecnicas.disco} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, disco: e.target.value })} placeholder="Ej: SSD 477 GB" /></Grid>
+                                    <Grid item xs={12} sm={6}><TextField fullWidth label="GPU" size="small" value={especificacionesTecnicas.gpu} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, gpu: e.target.value })} placeholder="Ej: Intel UHD Graphics" /></Grid>
+                                    <Grid item xs={12}><TextField fullWidth label="Tipo" size="small" value={especificacionesTecnicas.tipo} onChange={(e) => setEspecificacionesTecnicas({ ...especificacionesTecnicas, tipo: e.target.value })} placeholder="Ej: Notebook Gama Media" /></Grid>
+                                </Grid>
+                            </Paper>
+
+                            <FormControlLabel 
+                                control={<Checkbox checked={usuarioConforme} onChange={(e) => setUsuarioConforme(e.target.checked)} />} 
+                                label="El usuario confirma que el equipo está en buen estado y funciona correctamente" 
+                            />
+
+                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button variant="contained" onClick={handleNext} disabled={!colaboradorSeleccionado || progreso < 100 || !usuarioConforme} sx={{ borderRadius: 2 }}>Continuar</Button>
+                            </Box>
+                        </StepContent>
+                    </Step>
+
+                    {tipoAccion === 'asignacion' && (
+                        <Step>
+                            <StepLabel StepIconComponent={() => (<Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}><DescriptionIcon sx={{ fontSize: 16 }} /></Avatar>)}>
+                                <Typography variant="subtitle1" fontWeight={600}>Detalles de la Asignación</Typography>
+                                <Typography variant="caption" color="text.secondary">Completa la información de la asignación</Typography>
+                            </StepLabel>
+                            <StepContent>
+                                <TextField 
+                                    fullWidth 
+                                    label="Motivo de asignación *" 
+                                    value={motivo} 
+                                    onChange={(e) => setMotivo(e.target.value)} 
+                                    multiline 
+                                    rows={2} 
+                                    placeholder="Ej: Proyecto específico, Reemplazo de equipo, etc." 
+                                    sx={{ mb: 2 }} 
+                                />
+                                <TextField 
+                                    fullWidth 
+                                    label="Observaciones adicionales" 
+                                    value={observaciones} 
+                                    onChange={(e) => setObservaciones(e.target.value)} 
+                                    multiline 
+                                    rows={2} 
+                                    placeholder="Observaciones importantes sobre la transacción..." 
+                                    sx={{ mb: 2 }} 
+                                />
+
+                                <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>Firma del Trabajador / Colaborador *</Typography>
+                                <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                    <RadioGroup row value={tipoFirmaTrabajador} onChange={(e) => setTipoFirmaTrabajador(e.target.value)}>
+                                        <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                        <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                    </RadioGroup>
+                                </FormControl>
+                                {tipoFirmaTrabajador === 'texto' ? (
+                                    <TextField 
+                                        fullWidth 
+                                        multiline 
+                                        rows={2} 
+                                        placeholder="Escriba el nombre completo de la persona que firma" 
+                                        value={firmaTrabajadorText} 
+                                        onChange={(e) => setFirmaTrabajadorText(e.target.value)} 
+                                        sx={{ mb: 2 }} 
+                                        helperText="Ej: Juan Pérez Pérez, RUT: 12.345.678-9" 
+                                    />
+                                ) : (
+                                    <FirmaDibujadaComponent onFirmaGuardada={setFirmaTrabajadorDibujo} label="Firma del Trabajador" />
+                                )}
+
+                                <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>Firma del Gerente General / Autorizante *</Typography>
+                                <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                    <RadioGroup row value={tipoFirmaGerente} onChange={(e) => setTipoFirmaGerente(e.target.value)}>
+                                        <FormControlLabel value="texto" control={<Radio />} label="Firma por Texto" />
+                                        <FormControlLabel value="dibujo" control={<Radio />} label="Firma Dibujada" />
+                                    </RadioGroup>
+                                </FormControl>
+                                {tipoFirmaGerente === 'texto' ? (
+                                    <TextField 
+                                        fullWidth 
+                                        multiline 
+                                        rows={2} 
+                                        placeholder="Escriba el nombre completo de la persona que firma" 
+                                        value={firmaGerenteText} 
+                                        onChange={(e) => setFirmaGerenteText(e.target.value)} 
+                                        sx={{ mb: 2 }} 
+                                        helperText="Ej: María Eugenia Navalon, Gerente General" 
+                                    />
+                                ) : (
+                                    <FirmaDibujadaComponent onFirmaGuardada={setFirmaGerenteDibujo} label="Firma del Gerente" />
+                                )}
+
+                                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                                    <Button onClick={handleBack} variant="outlined">Atrás</Button>
+                                    <Button 
+                                        variant="contained" 
+                                        onClick={handleFinalizar} 
+                                        disabled={!motivo.trim() || (tipoFirmaTrabajador === 'texto' && !firmaTrabajadorText) || (tipoFirmaGerente === 'texto' && !firmaGerenteText) || loading} 
+                                        sx={{ borderRadius: 2, bgcolor: colors.primary }}
+                                    >
+                                        {loading ? <CircularProgress size={24} /> : 'Finalizar Asignación'}
+                                    </Button>
+                                </Box>
+                            </StepContent>
+                        </Step>
                     )}
-                </Stack>
+
+                    {tipoAccion === 'prestamo' && activeStep === 1 && (
+                        <Step active={true}>
+                            <StepLabel StepIconComponent={() => (<Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.success, 0.1), color: colors.success }}><CheckCircleIcon sx={{ fontSize: 16 }} /></Avatar>)}>
+                                <Typography variant="subtitle1" fontWeight={600}>Confirmar Préstamo</Typography>
+                            </StepLabel>
+                            <StepContent>
+                                <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}><Typography variant="body2"><strong>ℹ️ Préstamo sin documento:</strong> Este préstamo se registrará en el sistema. El checklist se descargará automáticamente.</Typography></Alert>
+                                <Box display="flex" justifyContent="flex-end" gap={2} sx={{ mt: 2 }}>
+                                    <Button onClick={handleBack} variant="outlined">Atrás</Button>
+                                    <Button variant="contained" onClick={handleFinalizar} disabled={loading} sx={{ bgcolor: colors.warning }}>{loading ? <CircularProgress size={24} /> : 'Registrar Préstamo'}</Button>
+                                </Box>
+                            </StepContent>
+                        </Step>
+                    )}
+                </Stepper>
+                {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
             </DialogContent>
+            <DialogActions><Button onClick={onClose} variant="outlined">Cancelar</Button></DialogActions>
+        </Dialog>
+    );
+};
+
+// ============================================
+// COMPONENTES STYLED
+// ============================================
+const StyledCard = styled(Card)(({ theme }) => ({
+    height: '100%', borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}`, transition: 'all 0.3s ease-in-out',
+    '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }
+}));
+
+const FilterPaper = styled(Paper)(({ theme }) => ({ padding: theme.spacing(2), marginBottom: theme.spacing(3), borderRadius: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${colors.border}` }));
+
+const StyledTableContainer = styled(TableContainer)(({ theme }) => ({ borderRadius: 0, border: `1px solid ${colors.border}`, overflowX: 'auto', backgroundColor: theme.palette.background.paper }));
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({ fontWeight: 600, backgroundColor: alpha(colors.primary, 0.02), borderBottom: `1px solid ${colors.border}` }));
+
+// ============================================
+// COMPONENTE DE DETALLES CON DOCUMENTOS
+// ============================================
+const DetallesDialog = ({ open, onClose, asignacion, producto, onRefresh }) => {
+    const [downloading, setDownloading] = useState(false);
+    const [documentos, setDocumentos] = useState([]);
+    const [loadingDocumentos, setLoadingDocumentos] = useState(false);
+    const [checklistData, setChecklistData] = useState(null);
+
+    const esPrestamo = asignacion?.es_prestamo === true || asignacion?.es_prestamo === 1;
+
+    useEffect(() => {
+        if (open && asignacion) {
+            cargarDocumentos();
+            cargarChecklist();
+        }
+    }, [open, asignacion]);
+
+    const cargarDocumentos = async () => {
+        setLoadingDocumentos(true);
+        try {
+            const docs = [];
+            const token = localStorage.getItem('token');
+            
+            // Buscar acta de asignación
+            try {
+                const response = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/asignacion`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                console.log('📋 Documentos encontrados:', data);
+                
+                if (data.success && data.data?.filename) {
+                    docs.push({ tipo: 'asignacion', nombre: 'Acta de Asignación', filename: data.data.filename });
+                } else if (data.filename) {
+                    docs.push({ tipo: 'asignacion', nombre: 'Acta de Asignación', filename: data.filename });
+                }
+            } catch (err) {
+                console.log('No se encontró acta de asignación');
+            }
+            
+            // Buscar acta de recepción
+            if (asignacion.fecha_devolucion) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/asignaciones/buscar-documento/${asignacion.id}/recepcion`, {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const data = await response.json();
+                    if (data.success && data.data?.filename) {
+                        docs.push({ tipo: 'recepcion', nombre: 'Acta de Recepción', filename: data.data.filename });
+                    } else if (data.filename) {
+                        docs.push({ tipo: 'recepcion', nombre: 'Acta de Recepción', filename: data.filename });
+                    }
+                } catch (err) {
+                    console.log('No se encontró acta de recepción');
+                }
+            }
+            setDocumentos(docs);
+        } catch (error) {
+            console.error('Error cargando documentos:', error);
+        } finally {
+            setLoadingDocumentos(false);
+        }
+    };
+
+    const cargarChecklist = async () => {
+        try {
+            const checklistGuardado = localStorage.getItem(`checklist_producto_${asignacion.producto_id}`);
+            if (checklistGuardado) {
+                setChecklistData(JSON.parse(checklistGuardado));
+            }
+        } catch (error) {
+            console.error('Error cargando checklist:', error);
+        }
+    };
+
+    const handleDescargarDocumento = async (filename, tipoDoc) => {
+        if (!filename || downloading) return;
+        setDownloading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const downloadUrl = `${API_BASE_URL}/asignaciones/descargar/${encodeURIComponent(filename)}`;
+            const response = await fetch(downloadUrl, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error descargando:', error);
+            alert(`Error al descargar el ${tipoDoc}`);
+        } finally {
+            setTimeout(() => setDownloading(false), 1000);
+        }
+    };
+
+    const handleDescargarChecklist = async () => {
+        if (checklistData) {
+            await generarPDFChecklist(
+                checklistData, 
+                checklistData.producto, 
+                checklistData.colaborador, 
+                checklistData.ticketInfo || { ticket: '', tecnico: '' },
+                checklistData.especificacionesTecnicas || { cpu: '', ram: '', disco: '', gpu: '', tipo: '' }
+            );
+        }
+    };
+
+    if (!open || !producto || !asignacion) return null;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+            <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}`, bgcolor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1) }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <Avatar sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary }}><AssignmentIcon /></Avatar>
+                        <Typography variant="h6" fontWeight={600}>Detalles de {esPrestamo ? 'Préstamo' : 'Asignación'}</Typography>
+                        {esPrestamo && <Chip label="PRÉSTAMO" size="small" sx={{ bgcolor: colors.warning, color: 'white' }} />}
+                    </Box>
+                    <IconButton onClick={onClose}><CloseIcon /></IconButton>
+                </Box>
+            </DialogTitle>
+
+            <DialogContent dividers>
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Información del Equipo</Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}><Typography variant="caption">Producto:</Typography><Typography variant="body2">{producto?.nombre}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">N° Serie:</Typography><Typography variant="body2">{producto?.numero_serie || 'N/A'}</Typography></Grid>
+                            </Grid>
+                        </Paper>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#fafafa' }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Información del Colaborador</Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={6}><Typography variant="caption">Nombre:</Typography><Typography variant="body2">{asignacion?.colaborador_nombre}</Typography></Grid>
+                                <Grid item xs={6}><Typography variant="caption">RUT:</Typography><Typography variant="body2">{asignacion?.colaborador_rut || '-'}</Typography></Grid>
+                            </Grid>
+                        </Paper>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Detalles de la Operación</Typography>
+                            <Grid container spacing={1}>
+                                <Grid item xs={4}><Typography variant="caption">IDENTIFICACIÓN:</Typography><Typography variant="body2" fontFamily="monospace">{asignacion?.id}</Typography></Grid>
+                                <Grid item xs={4}><Typography variant="caption">Fecha:</Typography><Typography variant="body2">{new Date(asignacion?.fecha_asignacion).toLocaleDateString()}</Typography></Grid>
+                                <Grid item xs={4}><Typography variant="caption">Motivo:</Typography><Typography variant="body2">{asignacion?.motivo || '-'}</Typography></Grid>
+                                {asignacion?.fecha_devolucion && (
+                                    <>
+                                        <Grid item xs={6}><Typography variant="caption">Fecha Devolución:</Typography><Typography variant="body2">{new Date(asignacion.fecha_devolucion).toLocaleDateString()}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="caption">Condición:</Typography><Typography variant="body2">{asignacion?.condicion_entrega || '-'}</Typography></Grid>
+                                    </>
+                                )}
+                            </Grid>
+                        </Paper>
+                    </Grid>
+                    
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Documentos</Typography>
+                            <Divider sx={{ mb: 2 }} />
+                            {loadingDocumentos ? (
+                                <Box display="flex" justifyContent="center"><CircularProgress size={24} /></Box>
+                            ) : documentos.length === 0 ? (
+                                <Typography variant="body2" color="text.secondary">No hay documentos disponibles</Typography>
+                            ) : (
+                                documentos.map((doc) => (
+                                    <Box key={doc.tipo} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <DescriptionIcon sx={{ color: colors.primary }} />
+                                            <Typography variant="body2" fontWeight={500}>{doc.nombre}</Typography>
+                                        </Box>
+                                        <Button 
+                                            size="small" 
+                                            variant="contained" 
+                                            startIcon={<DownloadIcon />} 
+                                            onClick={() => handleDescargarDocumento(doc.filename, doc.nombre)} 
+                                            disabled={downloading}
+                                            sx={{ borderRadius: 0 }}
+                                        >
+                                            Descargar
+                                        </Button>
+                                    </Box>
+                                ))
+                            )}
+                        </Paper>
+                    </Grid>
+                    
+                    <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Typography variant="subtitle2" fontWeight={600} gutterBottom>Lista de verificación de entrega</Typography>
+                            <Divider sx={{ mb: 2 }} />
+                            {checklistData ? (
+                                <>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Completado el {new Date(checklistData.fecha).toLocaleDateString()}
+                                    </Typography>
+                                    <Button 
+                                        size="small" 
+                                        startIcon={<DownloadIcon />} 
+                                        onClick={handleDescargarChecklist}
+                                        sx={{ mt: 2, display: 'block', borderRadius: 0 }}
+                                        variant="contained"
+                                        color="primary"
+                                    >
+                                        Descargar Checklist
+                                    </Button>
+                                    <Box sx={{ mt: 2, maxHeight: 200, overflow: 'auto' }}>
+                                        {checklistData.items?.map((item, idx) => (
+                                            <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                                {item.ok ? <CheckCircleIcon sx={{ color: colors.success, fontSize: 16 }} /> : <CloseIcon sx={{ color: colors.error, fontSize: 16 }} />}
+                                                <Typography variant="body2">{item.label}</Typography>
+                                                {item.observacion && <Typography variant="caption" color="text.secondary"> - {item.observacion}</Typography>}
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">No hay checklist disponible para esta asignación</Typography>
+                            )}
+                        </Paper>
+                    </Grid>
+                </Grid>
+            </DialogContent>
+
             <DialogActions>
-                <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 0 }}>
-                    Cancelar
-                </Button>
-                <Button
-                    variant="contained"
-                    onClick={handleFirmar}
-                    disabled={loading}
-                    startIcon={loading ? <CircularProgress size={20} /> : <CheckCircle />}
-                    sx={{ borderRadius: 0, bgcolor: colors.success }}
-                >
-                    {loading ? 'Firmando...' : 'Firmar Anexo'}
-                </Button>
+                <Button onClick={onClose} variant="contained" sx={{ borderRadius: 0 }}>Cerrar</Button>
             </DialogActions>
         </Dialog>
     );
 };
 
 // ============================================
+// SERVICIOS LOCALES
+// ============================================
+const productosServiceLocal = {
+    getProductos: async (searchTerm = '', filters = {}) => {
+        try {
+            let url = '/productos';
+            const params = new URLSearchParams();
+            if (searchTerm) params.append('search', searchTerm);
+            if (filters.bodega_id) params.append('bodega_id', filters.bodega_id);
+            if (params.toString()) url += `?${params.toString()}`;
+            const response = await api.get(url);
+            return response.data.data || response.data || [];
+        } catch (error) { console.error('Error fetching productos:', error); throw error; }
+    },
+    getBodegas: async () => {
+        try { const response = await api.get('/bodegas'); return response.data.data || response.data || []; } 
+        catch (error) { console.error('Error fetching bodegas:', error); return []; }
+    }
+};
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
-const AnexosPage = () => {
+const AsignacionPage = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery('(max-width:600px)');
     const navigate = useNavigate();
-    const isMounted = useRef(true);
     
-    const [activeStep, setActiveStep] = useState(0);
     const [productos, setProductos] = useState([]);
-    const [productoSeleccionado, setProductoSeleccionado] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [colaboradores, setColaboradores] = useState([]);
-    const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
-    const [empresaSeleccionada, setEmpresaSeleccionada] = useState('');
-    const [empresasDisponibles, setEmpresasDisponibles] = useState([]);
-    const [firmaTrabajador, setFirmaTrabajador] = useState('');
-    const [observaciones, setObservaciones] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
-    const [initialLoading, setInitialLoading] = useState(true);
+    const [asignacionesActivas, setAsignacionesActivas] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [verAnexos, setVerAnexos] = useState(false);
-    const [anexos, setAnexos] = useState([]);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [anexoToDelete, setAnexoToDelete] = useState(null);
-    const [eliminando, setEliminando] = useState(false);
-    const [firmarDialogOpen, setFirmarDialogOpen] = useState(false);
-    const [anexoSeleccionado, setAnexoSeleccionado] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filters, setFilters] = useState({ bodega_id: '', tipo_estado: 'todos' });
+    const [bodegas, setBodegas] = useState([]);
+    const [openChecklistDialog, setOpenChecklistDialog] = useState(false);
+    const [openRecepcion, setOpenRecepcion] = useState(false);
+    const [openDetalles, setOpenDetalles] = useState(false);
+    const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+    const [tipoAccionActual, setTipoAccionActual] = useState(null);
+    const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [apiError, setApiError] = useState(false);
 
-    useEffect(() => {
-        isMounted.current = true;
-        return () => {
-            isMounted.current = false;
-        };
-    }, []);
+    const showSnackbar = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+    const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
+    const handleGoHome = () => navigate('/dashboard');
 
-    useEffect(() => {
-        const cargarDatosIniciales = async () => {
-            setInitialLoading(true);
-            await Promise.all([
-                cargarEmpresas(),
-                cargarProductos(),
-                cargarColaboradores(),
-                cargarAnexos()
-            ]);
-            if (isMounted.current) {
-                setInitialLoading(false);
-            }
-        };
-        cargarDatosIniciales();
-    }, []);
-
-    const cargarEmpresas = async () => {
+    const fetchData = useCallback(async (showRefresh = false) => {
+        if (showRefresh) setRefreshing(true); else setLoading(true);
+        setApiError(false);
         try {
-            const response = await api.get('/anexos/empresas');
-            if (response.data?.success && Array.isArray(response.data.data)) {
-                setEmpresasDisponibles(response.data.data);
-                if (response.data.data.length > 0 && !empresaSeleccionada) {
-                    setEmpresaSeleccionada(response.data.data[0]);
+            const filterParams = {};
+            if (filters.bodega_id) filterParams.bodega_id = filters.bodega_id;
+            const productosData = await productosServiceLocal.getProductos(searchTerm, filterParams);
+            let todosLosProductos = [];
+            if (productosData && Array.isArray(productosData)) { todosLosProductos = productosData; } 
+            else if (productosData && productosData.data && Array.isArray(productosData.data)) { todosLosProductos = productosData.data; }
+            const productosProcesados = todosLosProductos.map(p => ({ ...p, id_estado_equipo: Number(p.id_estado_equipo) || 1 }));
+            const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
+            setProductos(productosFiltrados);
+            try {
+                const asignacionesResponse = await api.get('/asignaciones/activas');
+                let asignaciones = [];
+                if (asignacionesResponse.data) {
+                    if (asignacionesResponse.data.success && Array.isArray(asignacionesResponse.data.data)) { asignaciones = asignacionesResponse.data.data; } 
+                    else if (Array.isArray(asignacionesResponse.data)) { asignaciones = asignacionesResponse.data; }
                 }
-            }
-        } catch (error) {
-            console.error('Error cargando empresas:', error);
-            const empresasDefecto = ['STUEDEMANN S.A', 'Global Horizon Spa', 'Latam Lite Spa'];
-            setEmpresasDisponibles(empresasDefecto);
-            setEmpresaSeleccionada('STUEDEMANN S.A');
-        }
-    };
+                const activas = asignaciones.filter(a => !a.fecha_devolucion);
+                setAsignacionesActivas(activas);
+            } catch (err) { console.error('Error cargando asignaciones:', err); }
+            try { const bodegasData = await productosServiceLocal.getBodegas(); setBodegas(bodegasData || []); } 
+            catch (err) { console.error('Error cargando bodegas:', err); }
+        } catch (error) { console.error('Error cargando datos:', error); setApiError(true); showSnackbar('Error al cargar los datos', 'error'); } 
+        finally { setLoading(false); setRefreshing(false); }
+    }, [searchTerm, filters.bodega_id]);
 
-    const cargarProductos = async () => {
-        try {
-            const response = await api.get('/productos');
-            let productosData = [];
-            if (response.data?.data && Array.isArray(response.data.data)) {
-                productosData = response.data.data;
-            } else if (Array.isArray(response.data)) {
-                productosData = response.data;
-            }
-            
-            const productosProcesados = (productosData || []).map(p => ({
-                id: p.id,
-                nombre: p.nombre || 'Sin nombre',
-                marca: p.marca || 'N/A',
-                modelo: p.modelo || 'N/A',
-                numero_serie: p.numero_serie || 'N/A',
-                condicion: p.condicion || 'NUEVO',
-                id_estado_equipo: p.id_estado_equipo || 1,
-                estado_texto: getEstadoTexto(p.id_estado_equipo),
-                colaborador_asignado: p.colaborador_asignado || null
-            }));
-            
-            if (isMounted.current) {
-                setProductos(productosProcesados);
-                console.log(`✅ ${productosProcesados.length} productos cargados`);
-            }
-        } catch (error) {
-            console.error('Error cargando productos:', error);
-            if (isMounted.current) setError('Error al cargar los productos');
-        }
-    };
+    useEffect(() => { fetchData(); }, [fetchData]);
 
-    const cargarColaboradores = async () => {
-        try {
-            const response = await api.get('/colaboradores');
-            let colaboradoresData = [];
-            if (response.data?.data && Array.isArray(response.data.data)) {
-                colaboradoresData = response.data.data;
-            } else if (Array.isArray(response.data)) {
-                colaboradoresData = response.data;
-            }
-            if (isMounted.current) {
-                setColaboradores(colaboradoresData || []);
-                console.log(`✅ ${(colaboradoresData || []).length} colaboradores cargados`);
-            }
-        } catch (error) {
-            console.error('Error cargando colaboradores:', error);
-            if (isMounted.current) setError('Error al cargar los colaboradores');
-        }
-    };
-
-    const cargarAnexos = async () => {
-        try {
-            const response = await api.get('/anexos');
-            console.log('📄 Anexos cargados:', response.data);
-            if (isMounted.current) {
-                let anexosData = [];
-                if (response.data?.success && Array.isArray(response.data.data)) {
-                    anexosData = response.data.data;
-                } else if (Array.isArray(response.data)) {
-                    anexosData = response.data;
-                }
-                setAnexos(anexosData);
-                console.log(`✅ ${anexosData.length} anexos cargados`);
-            }
-        } catch (error) {
-            console.error('Error cargando anexos:', error);
-            if (isMounted.current) setAnexos([]);
-        }
-    };
-
-    const getEstadoTexto = (estadoId) => {
-        const estados = { 1: 'DISPONIBLE', 2: 'ASIGNADO', 3: 'EN MANTENCIÓN', 4: 'EN REPARACIÓN', 5: 'NO DISPONIBLE', 6: 'BAJA' };
-        return estados[estadoId] || 'DESCONOCIDO';
-    };
-
-    const getEstadoColor = (estadoId) => {
-        const colores = { 1: '#10B981', 2: '#F59E0B', 3: '#3B82F6', 4: '#EF4444', 5: '#6B7280', 6: '#9CA3AF' };
-        return colores[estadoId] || '#6B7280';
-    };
-
-    const handleSeleccionarProducto = (producto) => {
-        setProductoSeleccionado(producto);
-        if (producto.colaborador_asignado && producto.colaborador_asignado.id) {
-            setColaboradorSeleccionado({
-                id: producto.colaborador_asignado.id,
-                nombre: producto.colaborador_asignado.nombre || '',
-                rut: producto.colaborador_asignado.rut || '',
-                email: producto.colaborador_asignado.email || '',
-                cargo: producto.colaborador_asignado.cargo || '',
-                departamento: producto.colaborador_asignado.departamento || ''
-            });
-            setFirmaTrabajador(producto.colaborador_asignado.nombre);
-        } else {
-            setColaboradorSeleccionado(null);
-            setFirmaTrabajador('');
-        }
-        setActiveStep(2);
-    };
-
-    const handleSeleccionarColaborador = (colaborador) => {
-        setColaboradorSeleccionado(colaborador);
-        setFirmaTrabajador(colaborador.nombre);
-        setActiveStep(3);
-    };
-
-    // ============================================
-    // GENERAR ANEXO - CORREGIDO
-    // ============================================
-    const handleGenerarAnexo = async () => {
-        if (!productoSeleccionado || !colaboradorSeleccionado) {
-            setError('Faltan datos del producto o colaborador');
-            return;
-        }
-        if (!empresaSeleccionada) {
-            setError('Debe seleccionar una empresa');
-            return;
-        }
-
-        setLoading(true);
-        setError('');
-
-        try {
-            const token = localStorage.getItem('token');
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-            
-            const response = await fetch(`${API_BASE_URL}/anexos/generar`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    colaborador: {
-                        id: colaboradorSeleccionado.id,
-                        nombre: colaboradorSeleccionado.nombre,
-                        rut: colaboradorSeleccionado.rut,
-                        email: colaboradorSeleccionado.email || '',
-                        cargo: colaboradorSeleccionado.cargo || '',
-                        departamento: colaboradorSeleccionado.departamento || '',
-                        direccion: colaboradorSeleccionado.direccion || ''
-                    },
-                    producto: {
-                        id: productoSeleccionado.id,
-                        nombre: productoSeleccionado.nombre,
-                        marca: productoSeleccionado.marca || 'N/A',
-                        modelo: productoSeleccionado.modelo || 'N/A',
-                        numero_serie: productoSeleccionado.numero_serie || 'N/A',
-                        condicion: productoSeleccionado.condicion || 'NUEVO',
-                        tipo: 'Equipo'
-                    },
-                    empresa: empresaSeleccionada,
-                    observaciones: observaciones,
-                    firma_trabajador: firmaTrabajador || colaboradorSeleccionado.nombre,
-                    firma_gerente: null,
-                    asignacion_id: null
-                })
-            });
-
-            const contentType = response.headers.get('content-type');
-            
-            if (contentType && contentType.includes('application/pdf')) {
-                // Es un PDF - descargar automáticamente SIN pantalla en blanco
-                const blob = await response.blob();
-                const contentDisposition = response.headers.get('content-disposition');
-                let filename = `anexo_${empresaSeleccionada.replace(/\s/g, '_')}_${colaboradorSeleccionado.nombre.replace(/\s/g, '_')}_${Date.now()}.pdf`;
-                if (contentDisposition) {
-                    const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                    if (match && match[1]) {
-                        filename = match[1].replace(/['"]/g, '');
-                    }
-                }
-                
-                descargarPDF(blob, filename);
-                setSuccess('Anexo generado correctamente');
-                setActiveStep(4);
-                await cargarAnexos();
-                setTimeout(() => {
-                    if (isMounted.current) {
-                        setActiveStep(0);
-                        setProductoSeleccionado(null);
-                        setColaboradorSeleccionado(null);
-                        setFirmaTrabajador('');
-                        setObservaciones('');
-                        setSearchTerm('');
-                    }
-                }, 3000);
-            } else {
-                // Es JSON - procesar normalmente
-                const data = await response.json();
-                if (data.success) {
-                    setSuccess('Anexo generado correctamente');
-                    setActiveStep(4);
-                    await cargarAnexos();
-                    setTimeout(() => {
-                        if (isMounted.current) {
-                            setActiveStep(0);
-                            setProductoSeleccionado(null);
-                            setColaboradorSeleccionado(null);
-                            setFirmaTrabajador('');
-                            setObservaciones('');
-                            setSearchTerm('');
-                        }
-                    }, 3000);
-                } else {
-                    throw new Error(data.message || 'Error al generar el anexo');
-                }
-            }
-        } catch (error) {
-            console.error('Error generando anexo:', error);
-            setError(error.message || 'Error al generar el anexo');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDescargarAnexo = async (anexo) => {
-        try {
-            const response = await api.get(`/anexos/descargar/${anexo.id}`, { responseType: 'blob' });
-            const contentType = response.headers['content-type'] || 'application/pdf';
-            const blob = new Blob([response.data], { type: contentType });
-            
-            const isPdf = contentType.toLowerCase().includes('pdf') || anexo.documento_generado?.endsWith('.pdf');
-            const defaultFilename = `anexo_${anexo.id}.${isPdf ? 'pdf' : 'docx'}`;
-            const filename = anexo.documento_generado || defaultFilename;
-            
-            descargarPDF(blob, filename);
-            setSuccess('Documento descargado correctamente');
-        } catch (error) {
-            console.error('Error:', error);
-            setError('Error al descargar el documento');
-        }
-    };
-
-    const handleFirmarAnexo = (anexo) => {
-        setAnexoSeleccionado(anexo);
-        setFirmarDialogOpen(true);
-    };
-
-    const handleFirmaExitosa = (response) => {
-        setSuccess('✅ Anexo firmado correctamente');
-        cargarAnexos();
-        setTimeout(() => {
-            setSuccess('');
-        }, 5000);
-    };
-
-    const handleEliminarAnexo = (anexo) => {
-        setAnexoToDelete(anexo);
-        setDeleteDialogOpen(true);
-    };
-
-    // ============================================
-    // ELIMINAR ANEXO - CORREGIDO (sin pantalla en blanco)
-    // ============================================
-    const confirmarEliminar = async () => {
-        if (!anexoToDelete) return;
-        setEliminando(true);
-        try {
-            const response = await api.delete(`/anexos/${anexoToDelete.id}`);
-            if (response.data.success) {
-                setSuccess('Anexo eliminado correctamente');
-                await cargarAnexos();
-                setDeleteDialogOpen(false);
-                setTimeout(() => setAnexoToDelete(null), 300);
-            } else {
-                setError(response.data.message || 'Error al eliminar el anexo');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            setError(error.response?.data?.message || 'Error al eliminar el anexo');
-        } finally {
-            setEliminando(false);
-        }
-    };
-
-    const refreshData = async () => {
+    const refreshData = useCallback(async () => {
         setRefreshing(true);
-        await Promise.all([cargarEmpresas(), cargarProductos(), cargarColaboradores(), cargarAnexos()]);
-        setRefreshing(false);
-        setSuccess('Datos actualizados correctamente');
+        try {
+            const productosData = await productosServiceLocal.getProductos(searchTerm, { bodega_id: filters.bodega_id });
+            let todosLosProductos = [];
+            if (productosData && Array.isArray(productosData)) { todosLosProductos = productosData; } 
+            else if (productosData && productosData.data && Array.isArray(productosData.data)) { todosLosProductos = productosData.data; }
+            const productosProcesados = todosLosProductos.map(p => ({ ...p, id_estado_equipo: Number(p.id_estado_equipo) || 1 }));
+            const productosFiltrados = productosProcesados.filter(p => p.id_estado_equipo !== 6);
+            setProductos(productosFiltrados);
+            const asignacionesResponse = await api.get('/asignaciones/activas');
+            let asignaciones = [];
+            if (asignacionesResponse.data) {
+                if (asignacionesResponse.data.success && Array.isArray(asignacionesResponse.data.data)) { asignaciones = asignacionesResponse.data.data; } 
+                else if (Array.isArray(asignacionesResponse.data)) { asignaciones = asignacionesResponse.data; }
+            }
+            const activas = asignaciones.filter(a => !a.fecha_devolucion);
+            setAsignacionesActivas(activas);
+        } catch (error) { console.error('Error refrescando datos:', error); showSnackbar('Error al actualizar los datos', 'error'); } 
+        finally { setRefreshing(false); }
+    }, [searchTerm, filters.bodega_id]);
+
+    const handleAsignar = (producto) => {
+        if (producto.id_estado_equipo !== 1) { showSnackbar(`Este producto no está disponible para asignación. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning'); return; }
+        setProductoSeleccionado(producto); setTipoAccionActual('asignacion'); setOpenChecklistDialog(true);
     };
 
-    const handleVolverInicio = () => navigate('/dashboard');
+    const handlePrestamo = (producto) => {
+        if (producto.id_estado_equipo !== 1) { showSnackbar(`Este producto no está disponible para préstamo. Estado actual: ${getEstadoTexto(producto.id_estado_equipo)}`, 'warning'); return; }
+        setProductoSeleccionado(producto); setTipoAccionActual('prestamo'); setOpenChecklistDialog(true);
+    };
 
-    const productosFiltrados = (productos || []).filter(p =>
-        p.nombre?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
-        p.numero_serie?.toLowerCase().includes((searchTerm || '').toLowerCase())
-    );
+    const handleRecibir = (producto) => {
+        const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
+        if (!asignacionActiva) { showSnackbar('No se encontró una asignación activa para este producto', 'error'); return; }
+        setProductoSeleccionado(producto); setAsignacionSeleccionada(asignacionActiva); setOpenRecepcion(true);
+    };
 
-    const colaboradoresFiltrados = (colaboradores || []).filter(c =>
-        c.nombre?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
-        c.rut?.toLowerCase().includes((searchTerm || '').toLowerCase())
-    );
+    const handleVerDetalles = (producto) => {
+        const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
+        if (asignacionActiva) { setAsignacionSeleccionada(asignacionActiva); setProductoSeleccionado(producto); setOpenDetalles(true); } 
+        else { showSnackbar('No hay información de asignación para este producto', 'info'); }
+    };
 
-    if (initialLoading) {
+    const handleChecklistSuccess = (result) => {
+        showSnackbar(result.message || 'Proceso completado exitosamente', 'success');
+        setOpenChecklistDialog(false);
+        setProductoSeleccionado(null);
+        setTipoAccionActual(null);
+        setTimeout(() => { refreshData(); }, 500);
+    };
+
+    const handleRecepcionSuccess = () => {
+        showSnackbar('Recepción completada exitosamente', 'success');
+        setOpenRecepcion(false);
+        setProductoSeleccionado(null);
+        setAsignacionSeleccionada(null);
+        refreshData();
+    };
+
+    const handleClearFilters = () => { setSearchTerm(''); setFilters({ bodega_id: '', tipo_estado: 'todos' }); };
+    const handleChangePage = (event, newPage) => setPage(newPage);
+    const handleChangeRowsPerPage = (event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); };
+    const handleTipoEstadoChange = (event, newValue) => { if (newValue !== null) { setFilters({ ...filters, tipo_estado: newValue }); setPage(0); } };
+    const getAsignacionActiva = (productoId) => asignacionesActivas.find(a => a.producto_id === productoId);
+
+    const filteredProductos = productos.filter(producto => {
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = (producto.nombre?.toLowerCase().includes(term) || producto.marca?.toLowerCase().includes(term) || producto.numero_serie?.toLowerCase().includes(term) || (producto.modelo && producto.modelo.toLowerCase().includes(term)));
+            if (!matchesSearch) return false;
+        }
+        const asignacionActiva = getAsignacionActiva(producto.id);
+        const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
+        switch (filters.tipo_estado) {
+            case 'disponibles': return producto.id_estado_equipo === 1;
+            case 'asignados': return producto.id_estado_equipo === 2 && !esPrestamo;
+            case 'prestamos': return producto.id_estado_equipo === 2 && esPrestamo;
+            default: return true;
+        }
+    });
+
+    const paginatedProductos = filteredProductos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    const activeFiltersCount = (filters.bodega_id ? 1 : 0) + (filters.tipo_estado !== 'todos' ? 1 : 0) + (searchTerm ? 1 : 0);
+    const totalDisponibles = productos.filter(p => p.id_estado_equipo === 1).length;
+    const totalAsignados = productos.filter(p => p.id_estado_equipo === 2).length;
+    const totalPrestamos = asignacionesActivas.filter(a => a.es_prestamo === true || a.es_prestamo === 1).length;
+    const totalAsignacionesNormales = asignacionesActivas.filter(a => !(a.es_prestamo === true || a.es_prestamo === 1)).length;
+
+    if (loading && productos.length === 0) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: colors.background }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: colors.background }}>
                 <CircularProgress />
-                <Typography sx={{ ml: 2 }}>Cargando...</Typography>
+                <Typography sx={{ ml: 2 }}>Cargando sistema de asignaciones...</Typography>
             </Box>
         );
     }
@@ -901,503 +1394,71 @@ const AnexosPage = () => {
         <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
             <AppBar position="static" elevation={0} sx={{ bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
                 <Toolbar>
-                    <IconButton edge="start" onClick={handleVolverInicio} sx={{ mr: 2 }}>
-                        <Home />
-                    </IconButton>
-                    <Description sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
-                        Anexos de Contrato
-                    </Typography>
-                    <IconButton onClick={refreshData} disabled={refreshing}>
-                        {refreshing ? <CircularProgress size={24} /> : <Refresh />}
-                    </IconButton>
+                    <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}><HomeIcon /></IconButton>
+                    <AssignmentIcon sx={{ mr: 1, color: colors.primary }} />
+                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones</Typography>
+                    <IconButton color="inherit" onClick={() => refreshData()} disabled={refreshing}>{refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}</IconButton>
                 </Toolbar>
             </AppBar>
-
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Anexos de Contrato</Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Generación de anexos de entrega de herramientas de trabajo</Typography>
-                    
-                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                        <Button 
-                            variant={!verAnexos ? 'contained' : 'outlined'}
-                            onClick={() => setVerAnexos(false)}
-                            startIcon={<Description />}
-                            sx={{ 
-                                bgcolor: !verAnexos ? 'white' : 'transparent',
-                                color: !verAnexos ? colors.primary : 'white',
-                                borderColor: 'white',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
-                            }}
-                        >
-                            Nuevo Anexo
-                        </Button>
-                        <Button 
-                            variant={verAnexos ? 'contained' : 'outlined'}
-                            onClick={() => { setVerAnexos(true); cargarAnexos(); }}
-                            startIcon={<Visibility />}
-                            sx={{ 
-                                bgcolor: verAnexos ? 'white' : 'transparent',
-                                color: verAnexos ? colors.primary : 'white',
-                                borderColor: 'white',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
-                            }}
-                        >
-                            Ver Anexos Generados
-                        </Button>
-                    </Box>
+                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones</Typography>
+                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Asigna productos a colaboradores con control de inventario</Typography>
+                    {apiError && (<Alert severity="warning" sx={{ mt: 3, borderRadius: 0 }} icon={<ErrorIcon />} action={<Button color="inherit" size="small" onClick={() => refreshData()} sx={{ borderRadius: 0 }}>REINTENTAR</Button>}>No se pudo conectar con el servidor. Verifica tu conexión.</Alert>)}
                 </Paper>
 
-                {!verAnexos ? (
-                    <Paper sx={{ p: 3 }}>
-                        <Stepper activeStep={activeStep} orientation="vertical">
-                            <Step>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>
-                                        <Business />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 1: Seleccionar Empresa</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Selecciona la empresa para el anexo
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <FormControl fullWidth sx={{ mb: 2 }}>
-                                        <InputLabel>Empresa</InputLabel>
-                                        <Select 
-                                            value={empresaSeleccionada} 
-                                            onChange={(e) => setEmpresaSeleccionada(e.target.value)} 
-                                            label="Empresa"
-                                        >
-                                            {empresasDisponibles.map((emp) => (
-                                                <MenuItem key={emp} value={emp}>{emp}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                        <Button 
-                                            variant="contained" 
-                                            onClick={() => setActiveStep(1)} 
-                                            disabled={!empresaSeleccionada}
-                                        >
-                                            Continuar
-                                        </Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
+                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
+                    <Grid item xs={12} sm={6} md={3}><StyledCard><CardContent><Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 48, height: 48, mb: 1 }}><CheckCircleIcon /></Avatar><Typography variant="h4" sx={{ fontWeight: 700 }}>{totalDisponibles}</Typography><Typography variant="body2" sx={{ color: 'text.secondary' }}>Productos Disponibles</Typography></CardContent></StyledCard></Grid>
+                    <Grid item xs={12} sm={6} md={3}><StyledCard><CardContent><Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 48, height: 48, mb: 1 }}><AssignmentIcon /></Avatar><Typography variant="h4" sx={{ fontWeight: 700 }}>{totalAsignacionesNormales}</Typography><Typography variant="body2" sx={{ color: 'text.secondary' }}>Asignaciones Activas</Typography></CardContent></StyledCard></Grid>
+                    <Grid item xs={12} sm={6} md={3}><StyledCard><CardContent><Avatar sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, width: 48, height: 48, mb: 1 }}><PersonIcon /></Avatar><Typography variant="h4" sx={{ fontWeight: 700 }}>{totalPrestamos}</Typography><Typography variant="body2" sx={{ color: 'text.secondary' }}>Préstamos Activos</Typography></CardContent></StyledCard></Grid>
+                    <Grid item xs={12} sm={6} md={3}><StyledCard><CardContent><Avatar sx={{ bgcolor: alpha(colors.error, 0.1), color: colors.error, width: 48, height: 48, mb: 1 }}><InventoryIcon /></Avatar><Typography variant="h4" sx={{ fontWeight: 700 }}>{totalAsignados}</Typography><Typography variant="body2" sx={{ color: 'text.secondary' }}>Total Asignados</Typography></CardContent></StyledCard></Grid>
+                </Grid>
 
-                            <Step>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}>
-                                        <Assignment />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 2: Seleccionar Producto</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Selecciona el equipo que se entregará
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder="Buscar producto por nombre, serie o marca..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        InputProps={{
-                                            startAdornment: <InputAdornment position="start"><Search /></InputAdornment>
-                                        }}
-                                        sx={{ mb: 2 }}
-                                    />
-                                    <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto' }}>
-                                        {productosFiltrados.length === 0 ? (
-                                            <Box sx={{ p: 3, textAlign: 'center' }}>
-                                                <Typography color="text.secondary">No hay productos disponibles</Typography>
-                                                <Button size="small" onClick={refreshData} sx={{ mt: 1 }}>
-                                                    Recargar productos
-                                                </Button>
-                                            </Box>
-                                        ) : (
-                                            productosFiltrados.map((producto) => (
-                                                <Box
-                                                    key={producto.id}
-                                                    sx={{
-                                                        p: 2,
-                                                        borderBottom: `1px solid ${colors.border}`,
-                                                        cursor: 'pointer',
-                                                        bgcolor: productoSeleccionado?.id === producto.id ? alpha(colors.primary, 0.05) : 'transparent',
-                                                        '&:hover': { bgcolor: alpha(colors.primary, 0.02) }
-                                                    }}
-                                                    onClick={() => handleSeleccionarProducto(producto)}
-                                                >
-                                                    <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                                                        <Box flex={1}>
-                                                            <Typography variant="body1" fontWeight={500}>{producto.nombre}</Typography>
-                                                            <Typography variant="caption" color="text.secondary" display="block">
-                                                                Serie: {producto.numero_serie || 'N/A'} | Marca: {producto.marca || 'N/A'}
-                                                            </Typography>
-                                                        </Box>
-                                                        <Chip 
-                                                            label={producto.estado_texto} 
-                                                            size="small"
-                                                            sx={{ 
-                                                                bgcolor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1),
-                                                                color: getEstadoColor(producto.id_estado_equipo)
-                                                            }}
-                                                        />
-                                                    </Box>
-                                                </Box>
-                                            ))
-                                        )}
-                                    </Paper>
-                                    <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
-                                        <Button onClick={() => setActiveStep(0)} variant="outlined">Atrás</Button>
-                                        <Button variant="contained" onClick={() => setActiveStep(2)} disabled={!productoSeleccionado}>Continuar</Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
+                <FilterPaper>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} md={4}><TextField fullWidth placeholder="Buscar por nombre, marca, modelo o número de serie..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>, endAdornment: searchTerm && (<InputAdornment position="end"><IconButton size="small" onClick={() => setSearchTerm('')}><CloseIcon fontSize="small" /></IconButton></InputAdornment>) }} size="small" /></Grid>
+                        <Grid item xs={6} md={3}><FormControl fullWidth size="small"><InputLabel>Bodega</InputLabel><Select value={filters.bodega_id} onChange={(e) => setFilters({ ...filters, bodega_id: e.target.value })} label="Bodega"><MenuItem value="">Todas</MenuItem>{bodegas.map((b) => (<MenuItem key={b.id} value={b.id}>{b.nombre}</MenuItem>))}</Select></FormControl></Grid>
+                        <Grid item xs={12} md={3}><ToggleButtonGroup value={filters.tipo_estado} exclusive onChange={handleTipoEstadoChange} size="small" fullWidth sx={{ height: 40 }}><ToggleButton value="todos" sx={{ borderRadius: 0, textTransform: 'none' }}>Todos</ToggleButton><ToggleButton value="disponibles" sx={{ borderRadius: 0, textTransform: 'none' }}><CheckCircleIcon sx={{ fontSize: 16, mr: 0.5, color: colors.success }} />Disponibles</ToggleButton><ToggleButton value="asignados" sx={{ borderRadius: 0, textTransform: 'none' }}><AssignmentIcon sx={{ fontSize: 16, mr: 0.5, color: colors.primary }} />Asignados</ToggleButton><ToggleButton value="prestamos" sx={{ borderRadius: 0, textTransform: 'none' }}><PersonIcon sx={{ fontSize: 16, mr: 0.5, color: colors.warning }} />Préstamos</ToggleButton></ToggleButtonGroup></Grid>
+                        <Grid item xs={6} md={2}><Button fullWidth variant="outlined" color="error" startIcon={<FilterListOffIcon />} onClick={handleClearFilters} disabled={activeFiltersCount === 0} sx={{ borderRadius: 0 }}>Limpiar filtros</Button></Grid>
+                    </Grid>
+                </FilterPaper>
 
-                            <Step>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary }}>
-                                        <Person />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 3: Seleccionar Colaborador</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Selecciona el colaborador que recibirá el equipo
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder="Buscar colaborador por nombre, RUT o email..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        sx={{ mb: 2 }}
-                                    />
-                                    <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto', mb: 2 }}>
-                                        {colaboradoresFiltrados.length === 0 ? (
-                                            <Box sx={{ p: 2, textAlign: 'center' }}>
-                                                <Typography color="text.secondary">No hay colaboradores</Typography>
-                                                <Button size="small" onClick={refreshData} sx={{ mt: 1 }}>
-                                                    Recargar colaboradores
-                                                </Button>
-                                            </Box>
-                                        ) : (
-                                            colaboradoresFiltrados.map((col) => (
-                                                <Box
-                                                    key={col.id}
-                                                    sx={{
-                                                        p: 2,
-                                                        borderBottom: `1px solid ${colors.border}`,
-                                                        cursor: 'pointer',
-                                                        bgcolor: colaboradorSeleccionado?.id === col.id ? alpha(colors.primary, 0.05) : 'transparent',
-                                                        '&:hover': { bgcolor: alpha(colors.primary, 0.02) }
-                                                    }}
-                                                    onClick={() => handleSeleccionarColaborador(col)}
-                                                >
-                                                    <Box>
-                                                        <Typography variant="body1" fontWeight={500}>{col.nombre}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            RUT: {col.rut} | {col.cargo || 'Sin cargo'} | {col.departamento || 'Sin departamento'}
-                                                        </Typography>
-                                                        {col.email && (
-                                                            <Typography variant="caption" color="text.secondary" display="block">
-                                                                {col.email}
-                                                            </Typography>
-                                                        )}
-                                                    </Box>
-                                                    {colaboradorSeleccionado?.id === col.id && (
-                                                        <CheckCircle sx={{ color: colors.success }} />
-                                                    )}
-                                                </Box>
-                                            ))
-                                        )}
-                                    </Paper>
-                                    <Box display="flex" justifyContent="space-between">
-                                        <Button onClick={() => setActiveStep(1)} variant="outlined">Atrás</Button>
-                                        <Button variant="contained" onClick={() => setActiveStep(3)} disabled={!colaboradorSeleccionado}>Continuar</Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
-
-                            <Step>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success }}>
-                                        <Business />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 4: Detalles y Generación</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Completa la información para generar el documento
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12}>
-                                            <TextField
-                                                fullWidth
-                                                label="Firma del Trabajador"
-                                                value={firmaTrabajador}
-                                                onChange={(e) => setFirmaTrabajador(e.target.value)}
-                                                helperText="Nombre de quien firma como trabajador"
-                                            />
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <TextField
-                                                fullWidth
-                                                label="Observaciones"
-                                                value={observaciones}
-                                                onChange={(e) => setObservaciones(e.target.value)}
-                                                multiline
-                                                rows={3}
-                                                placeholder="Observaciones adicionales para el anexo..."
-                                            />
-                                        </Grid>
-                                    </Grid>
-
-                                    <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: alpha(colors.info, 0.05) }}>
-                                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>📋 Resumen del documento</Typography>
-                                        <Divider sx={{ mb: 1 }} />
-                                        <Typography variant="body2">
-                                            <strong>Empresa:</strong> {empresaSeleccionada}
-                                        </Typography>
-                                        <Typography variant="body2">
-                                            <strong>Producto:</strong> {productoSeleccionado?.nombre} (Serie: {productoSeleccionado?.numero_serie})
-                                        </Typography>
-                                        <Typography variant="body2">
-                                            <strong>Colaborador:</strong> {colaboradorSeleccionado?.nombre} - {colaboradorSeleccionado?.rut}
-                                        </Typography>
-                                    </Paper>
-
-                                    <Box display="flex" justifyContent="space-between" sx={{ mt: 3 }}>
-                                        <Button onClick={() => setActiveStep(2)} variant="outlined">Atrás</Button>
-                                        <Button
-                                            variant="contained"
-                                            onClick={handleGenerarAnexo}
-                                            disabled={loading}
-                                            sx={{ bgcolor: colors.success }}
-                                        >
-                                            {loading ? <CircularProgress size={24} /> : 'Generar Anexo'}
-                                        </Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
-
-                            <Step>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success }}>
-                                        <CheckCircle />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 5: ¡Anexo Generado!</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        El documento ha sido generado correctamente
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <Alert severity="success" sx={{ mb: 2 }}>
-                                        El anexo ha sido generado correctamente.
-                                    </Alert>
-                                    <Box display="flex" gap={2}>
-                                        <Button 
-                                            variant="outlined" 
-                                            onClick={() => {
-                                                setActiveStep(0);
-                                                setProductoSeleccionado(null);
-                                                setColaboradorSeleccionado(null);
-                                                setFirmaTrabajador('');
-                                                setObservaciones('');
-                                                setSearchTerm('');
-                                                cargarProductos();
-                                                cargarColaboradores();
-                                            }}
-                                        >
-                                            Crear Nuevo Anexo
-                                        </Button>
-                                        <Button variant="contained" onClick={() => { setVerAnexos(true); cargarAnexos(); }}>
-                                            Ver Anexos Generados
-                                        </Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
-                        </Stepper>
-                    </Paper>
-                ) : (
-                    <Paper sx={{ p: 3 }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>📄 Anexos Generados</Typography>
-                        <TableContainer>
-                            <Table>
-                                <TableHead>
-                                    <TableRow sx={{ bgcolor: alpha(colors.primary, 0.05) }}>
-                                        <TableCell><strong>ID</strong></TableCell>
-                                        <TableCell><strong>Colaborador</strong></TableCell>
-                                        <TableCell><strong>Producto</strong></TableCell>
-                                        <TableCell><strong>Empresa</strong></TableCell>
-                                        <TableCell><strong>Fecha</strong></TableCell>
-                                        <TableCell><strong>Estado</strong></TableCell>
-                                        <TableCell align="center"><strong>Acciones</strong></TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {anexos.length > 0 ? (
-                                        anexos.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((anexo) => (
-                                            <TableRow key={anexo.id} hover>
-                                                <TableCell>{anexo.id}</TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight={500}>{anexo.colaborador_nombre || 'N/A'}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">{anexo.colaborador_rut || 'N/A'}</Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">{anexo.producto_nombre || 'N/A'}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">Serie: {anexo.numero_serie || 'N/A'}</Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Chip 
-                                                        label={anexo.empresa || 'N/A'} 
-                                                        size="small"
-                                                        sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>{anexo.fecha_creacion ? new Date(anexo.fecha_creacion).toLocaleDateString() : 'N/A'}</TableCell>
-                                                <TableCell>
-                                                    <Chip 
-                                                        label={anexo.estado || 'PENDIENTE'}
-                                                        size="small"
-                                                        sx={{ 
-                                                            bgcolor: anexo.estado === 'FIRMADO' ? alpha(colors.success, 0.1) : alpha(colors.warning, 0.1),
-                                                            color: anexo.estado === 'FIRMADO' ? colors.success : colors.warning
-                                                        }}
-                                                    />
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    <Stack direction="row" spacing={1} justifyContent="center">
-                                                        {anexo.estado !== 'FIRMADO' && (
-                                                            <Tooltip title="Firmar">
-                                                                <IconButton 
-                                                                    size="small" 
-                                                                    onClick={() => handleFirmarAnexo(anexo)} 
-                                                                    sx={{ color: colors.success }}
-                                                                >
-                                                                    <CheckCircle fontSize="small" />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        )}
-                                                        <Tooltip title="Descargar">
-                                                            <IconButton size="small" onClick={() => handleDescargarAnexo(anexo)} sx={{ color: '#10B981' }}>
-                                                                <Download fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton size="small" onClick={() => handleEliminarAnexo(anexo)} sx={{ color: '#EF4444' }}>
-                                                                <Delete fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </Stack>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                                                <Description sx={{ fontSize: 48, color: '#ccc', mb: 1 }} />
-                                                <Typography color="text.secondary">No hay anexos generados aún</Typography>
-                                                <Button 
-                                                    variant="outlined" 
-                                                    size="small" 
-                                                    onClick={() => setVerAnexos(false)}
-                                                    sx={{ mt: 1 }}
-                                                >
-                                                    Crear primer anexo
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                        {anexos.length > 0 && (
-                            <TablePagination
-                                rowsPerPageOptions={[5, 10, 25]}
-                                component="div"
-                                count={anexos.length}
-                                rowsPerPage={rowsPerPage}
-                                page={page}
-                                onPageChange={(e, newPage) => setPage(newPage)}
-                                onRowsPerPageChange={(e) => {
-                                    setRowsPerPage(parseInt(e.target.value, 10));
-                                    setPage(0);
-                                }}
-                                labelRowsPerPage="Filas por página"
-                            />
-                        )}
-                    </Paper>
-                )}
-
-                {/* Diálogo de confirmación para eliminar */}
-                <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-                    <DialogTitle>
-                        <Box display="flex" alignItems="center" gap={1}>
-                            <Warning sx={{ color: colors.warning }} />
-                            <Typography variant="h6">Confirmar Eliminación</Typography>
-                        </Box>
-                    </DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro que deseas eliminar este anexo?
-                            {anexoToDelete && (
-                                <Box component="span" display="block" mt={1} color="text.secondary">
-                                    <strong>Colaborador:</strong> {anexoToDelete.colaborador_nombre || 'N/A'}<br />
-                                    <strong>Producto:</strong> {anexoToDelete.producto_nombre || 'N/A'}<br />
-                                    <strong>Fecha:</strong> {anexoToDelete.fecha_creacion ? new Date(anexoToDelete.fecha_creacion).toLocaleDateString() : 'N/A'}
-                                </Box>
+                <StyledTableContainer>
+                    <Table size={isMobile ? 'small' : 'medium'}>
+                        <TableHead><TableRow><StyledTableCell>Producto</StyledTableCell><StyledTableCell>Marca</StyledTableCell><StyledTableCell>Modelo</StyledTableCell><StyledTableCell>N° Serie</StyledTableCell><StyledTableCell>Bodega</StyledTableCell><StyledTableCell>Condición</StyledTableCell><StyledTableCell>Estado / Tipo</StyledTableCell><StyledTableCell>Asignado a</StyledTableCell><StyledTableCell align="center">Acciones</StyledTableCell></TableRow></TableHead>
+                        <TableBody>
+                            {paginatedProductos.length === 0 ? (
+                                <TableRow><TableCell colSpan={9} align="center"><InventoryIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} /><Typography variant="h6">No hay productos</Typography><Typography variant="body2" color="text.secondary">No se encontraron productos con los filtros aplicados</Typography></TableCell></TableRow>
+                            ) : (
+                                paginatedProductos.map((producto) => {
+                                    const asignacionActiva = getAsignacionActiva(producto.id);
+                                    const estaDisponible = producto.id_estado_equipo === 1;
+                                    const estaAsignado = producto.id_estado_equipo === 2;
+                                    const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
+                                    return (<TableRow key={`${producto.id}-${producto.numero_serie || producto.id}`} hover>
+                                        <TableCell><Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}><InventoryIcon sx={{ fontSize: 16 }} /></Avatar><Typography variant="body2" fontWeight={500}>{producto.nombre}</Typography></Box></TableCell>
+                                        <TableCell>{producto.marca || '-'}</TableCell><TableCell>{producto.modelo || '-'}</TableCell>
+                                        <TableCell><Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" /></TableCell>
+                                        <TableCell><Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} /></TableCell>
+                                        <TableCell><Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} /></TableCell>
+                                        <TableCell><Stack direction="column" spacing={0.5}><Chip label={getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), color: getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />{asignacionActiva && (<Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />)}</Stack></TableCell>
+                                        <TableCell>{asignacionActiva ? (<Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}><PersonIcon sx={{ fontSize: 14 }} /></Avatar><Typography variant="body2">{asignacionActiva.colaborador_nombre}</Typography></Box>) : (<Typography variant="body2" color="text.secondary">-</Typography>)}</TableCell>
+                                        <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{estaDisponible ? (<><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button><Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button></>) : estaAsignado ? (<><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button><IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}><VisibilityIcon fontSize="small" /></IconButton></>) : (<Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>)}</Stack></TableCell>
+                                    </TableRow>);
+                                })
                             )}
-                        </Typography>
-                        <Typography color="error" variant="body2" sx={{ mt: 2 }}>
-                            Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
-                        <Button 
-                            onClick={confirmarEliminar} 
-                            variant="contained" 
-                            sx={{ bgcolor: colors.error }}
-                            disabled={eliminando}
-                        >
-                            {eliminando ? <CircularProgress size={24} /> : 'Eliminar'}
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                        </TableBody>
+                    </Table>
+                    <TablePagination rowsPerPageOptions={[5, 10, 25, 50]} component="div" count={filteredProductos.length} rowsPerPage={rowsPerPage} page={page} onPageChange={handleChangePage} onRowsPerPageChange={handleChangeRowsPerPage} labelRowsPerPage="Filas" />
+                </StyledTableContainer>
 
-                {/* Diálogo para firmar anexo */}
-                <FirmarAnexoDialog 
-                    open={firmarDialogOpen}
-                    onClose={() => {
-                        setFirmarDialogOpen(false);
-                        setAnexoSeleccionado(null);
-                    }}
-                    anexo={anexoSeleccionado}
-                    onFirmaExitosa={handleFirmaExitosa}
-                />
-
-                <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-                    <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 2 }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
-                <Snackbar open={!!success} autoHideDuration={6000} onClose={() => setSuccess('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-                    <Alert severity="success" onClose={() => setSuccess('')} sx={{ borderRadius: 2 }}>
-                        {success}
-                    </Alert>
-                </Snackbar>
+                <AsignacionConChecklistDialog open={openChecklistDialog} onClose={() => { setOpenChecklistDialog(false); setProductoSeleccionado(null); setTipoAccionActual(null); }} producto={productoSeleccionado} tipoAccion={tipoAccionActual} onSuccess={handleChecklistSuccess} />
+                <RecepcionDialog open={openRecepcion} onClose={() => setOpenRecepcion(false)} producto={productoSeleccionado} asignacion={asignacionSeleccionada} onSuccess={handleRecepcionSuccess} />
+                <DetallesDialog open={openDetalles} onClose={() => setOpenDetalles(false)} asignacion={asignacionSeleccionada} producto={productoSeleccionado} onRefresh={refreshData} />
+                <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}><Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>{snackbar.message}</Alert></Snackbar>
             </Container>
         </Box>
     );
 };
 
-export default AnexosPage;
+export default AsignacionPage;
