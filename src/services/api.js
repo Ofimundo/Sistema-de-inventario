@@ -25,10 +25,6 @@ const getBaseURL = () => {
         return import.meta.env.VITE_API_URL;
     }
     
-    if (process.env && process.env.REACT_APP_API_URL) {
-        console.log('✅ Usando REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-        return process.env.REACT_APP_API_URL;
-    }
     
     // Usar URL local por defecto
     console.log('✅ Usando URL local:', LOCAL_URL);

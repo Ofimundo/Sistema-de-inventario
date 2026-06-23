@@ -354,43 +354,7 @@ const Login = () => {
                             width: '100%',
                         }}
                     >
-                        <Link to="/register" style={{ textDecoration: 'none', width: isMobile ? '100%' : 'auto' }}>
-                            <Button
-                                fullWidth={isMobile}
-                                variant="text"
-                                sx={{
-                                    color: '#667eea',
-                                    textTransform: 'none',
-                                    fontWeight: 500,
-                                    fontSize: isMobile ? '0.9rem' : '0.95rem',
-                                    '&:hover': {
-                                        backgroundColor: alpha('#667eea', 0.04),
-                                    },
-                                }}
-                                disabled={loading}
-                            >
-                                Crear Cuenta
-                            </Button>
-                        </Link>
-
-                        <Link to="/recover-password" style={{ textDecoration: 'none', width: isMobile ? '100%' : 'auto' }}>
-                            <Button
-                                fullWidth={isMobile}
-                                variant="text"
-                                sx={{
-                                    color: '#667eea',
-                                    textTransform: 'none',
-                                    fontWeight: 500,
-                                    fontSize: isMobile ? '0.9rem' : '0.95rem',
-                                    '&:hover': {
-                                        backgroundColor: alpha('#667eea', 0.04),
-                                    },
-                                }}
-                                disabled={loading}
-                            >
-                                ¿Olvidaste tu contraseña?
-                            </Button>
-                        </Link>
+                        
                     </Box>
                 </Box>
 
