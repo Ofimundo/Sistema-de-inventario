@@ -42,6 +42,7 @@ import {
   Stack,
   Chip
 } from "@mui/material";
+import OfilabFooter from "../components/OfilabFooter";
 import { alpha, styled } from "@mui/material/styles";
 import {
   Menu as MenuIcon,
@@ -1005,7 +1006,8 @@ const Dashboard = () => {
   const theme = createTheme({
     palette: {
       mode: darkMode ? "dark" : "light",
-      primary: { main: "#2563EB" },
+      primary: { main: "#7C3AED" },
+      secondary: { main: "#D946EF" },
       background: { default: darkMode ? "#0F172A" : "#F8FAFC", paper: darkMode ? "#1E293B" : "#FFFFFF" },
     },
     shape: { borderRadius: 14 },
@@ -1043,7 +1045,9 @@ const Dashboard = () => {
       }}
     >
       <Toolbar sx={{ justifyContent: "space-between" }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>StockMaster</Typography>
+        <Box display="flex" alignItems="center" gap={1}>
+          <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+        </Box>
         {isMobile && (
           <IconButton onClick={() => setDrawerOpen(false)}>
             <ChevronLeftIcon />
@@ -1080,10 +1084,12 @@ const Dashboard = () => {
               <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start" sx={{ mr: 2 }}>
                 <MenuIcon />
               </IconButton>
-              <DashboardIcon sx={{ mr: 1, color: "primary.main" }} />
-              <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, display: { xs: "none", sm: "block" } }}>
-                Dashboard
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                <Typography variant="h6" sx={{ fontWeight: 700, display: { xs: "none", sm: "block" } }}>
+                  Dashboard
+                </Typography>
+              </Box>
 
               <Tooltip title="Buscar">
                 <IconButton color="inherit" onClick={() => setSearchOpen(true)}>
@@ -1180,7 +1186,7 @@ const Dashboard = () => {
               </Alert>
             )}
 
-            <Paper sx={{ p: { xs: 3, md: 5 }, mb: 4, borderRadius: 4, background: "linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)", color: "white" }}>
+            <Paper sx={{ p: { xs: 3, md: 5 }, mb: 4, borderRadius: 4, background: "linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)", color: "white" }}>
               <Typography variant={isMobile ? "h5" : "h4"} fontWeight={800} gutterBottom>
                 ¡Bienvenido, {user?.nombre || user?.usuario || "Usuario"}!
               </Typography>
@@ -1211,7 +1217,7 @@ const Dashboard = () => {
                   startIcon={exporting ? <CircularProgress size={20} /> : <AssessmentIcon />} 
                   onClick={handleExportExcel}
                   disabled={exporting}
-                  sx={{ textTransform: "none", bgcolor: "white", color: "#2563EB", fontWeight: 600 }}
+                  sx={{ textTransform: "none", bgcolor: "white", color: "#7C3AED", fontWeight: 600 }}
                 >
                   {exporting ? 'Generando...' : 'Reporte Excel'}
                 </Button>
@@ -1312,6 +1318,7 @@ const Dashboard = () => {
               to { transform: rotate(360deg); } 
             }
           `}</style>
+          <OfilabFooter />
         </Box>
       </Box>
     </ThemeProvider>

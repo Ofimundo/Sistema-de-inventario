@@ -113,10 +113,12 @@ import historialService from '../services/historialService';
 
 const drawerWidth = 260;
 
-// Colores corporativos
+import OfilabFooter from '../components/OfilabFooter';
+
+// Colores corporativos OFILAB
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -864,9 +866,9 @@ const HistorialPage = () => {
             }}
         >
             <Toolbar sx={{ justifyContent: 'space-between' }}>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    StockMaster
-                </Typography>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                </Box>
                 {isMobile && (
                     <IconButton onClick={handleDrawerToggle}>
                         <ChevronLeftIcon />
@@ -996,10 +998,12 @@ const HistorialPage = () => {
                             <IconButton color="inherit" onClick={handleDrawerToggle} edge="start" sx={{ mr: 2 }}>
                                 <MenuIcon />
                             </IconButton>
-                            <HistoryIcon sx={{ mr: 1, color: 'primary.main' }} />
-                            <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
-                                Historial del Sistema
-                            </Typography>
+                            <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                                <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                    Historial del Sistema
+                                </Typography>
+                            </Box>
 
                             <IconButton color="inherit" onClick={handleNotificacionesClick}>
                                 <Badge badgeContent={notificacionesNoLeidas} color="error">
@@ -1582,6 +1586,7 @@ const HistorialPage = () => {
                     </Container>
 
                     <ScrollTop />
+                    <OfilabFooter />
                 </Box>
             </Box>
         </ThemeProvider>

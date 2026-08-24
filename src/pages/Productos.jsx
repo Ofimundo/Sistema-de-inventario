@@ -51,6 +51,9 @@ import {
     ListItem,
     ListItemText,
     ListItemAvatar,
+    ListItemButton,
+    ListItemIcon,
+    Drawer,
     Badge,
     Collapse,
     Accordion,
@@ -98,7 +101,14 @@ import {
     LocalOffer as LocalOfferIcon,
     ReceiptLong as ReceiptLongIcon,
     CheckCircle as CheckCircleIcon,
-    RemoveCircleOutline as RemoveCircleOutlineIcon
+    RemoveCircleOutline as RemoveCircleOutlineIcon,
+    Menu as MenuIcon,
+    ChevronLeft as ChevronLeftIcon,
+    Dashboard as DashboardIcon,
+    Warehouse as WarehouseIcon,
+    People as PeopleIcon,
+    Description as DescriptionIcon,
+    Inventory2 as Inventory2Icon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { productosService } from '../services/productos';
@@ -108,10 +118,12 @@ import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { QRCodeSVG } from 'qrcode.react';
 
-// Colores corporativos
+import OfilabFooter from '../components/OfilabFooter';
+
+// Colores corporativos OFILAB
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -4042,6 +4054,21 @@ const Productos = () => {
         return count;
     })();
 
+    const drawerWidth = 260;
+    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+
+    const menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Productos', icon: <InventoryIcon />, path: '/productos' },
+        { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
+        { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
+        { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
+        { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+    ];
+
     if (loading && !dataLoaded) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -4051,40 +4078,93 @@ const Productos = () => {
         );
     }
 
-    return (
-        <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
-            <AppBar 
-                position="static" 
-                elevation={0}
-                sx={{ 
-                    bgcolor: colors.surface, 
-                    color: colors.text.primary,
-                    borderBottom: `1px solid ${colors.border}`
-                }}
-            >
-                <Toolbar>
-                    <IconButton
-                        edge="start"
-                        color="inherit"
-                        onClick={handleGoHome}
-                        sx={{ mr: 2 }}
+    const drawer = (
+        <Drawer
+            variant={isMobile ? 'temporary' : 'persistent'}
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            sx={{
+                width: drawerOpen ? drawerWidth : 0,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+                transition: (theme) => theme.transitions.create('width', {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+                '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E2E8F0' }
+            }}
+        >
+            <Toolbar sx={{ justifyContent: 'space-between' }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                </Box>
+                {isMobile && (
+                    <IconButton onClick={() => setDrawerOpen(false)}>
+                        <ChevronLeftIcon />
+                    </IconButton>
+                )}
+            </Toolbar>
+            <Divider />
+            <List>
+                {menuItems.map(item => (
+                    <ListItemButton 
+                        key={item.text} 
+                        onClick={() => {
+                            navigate(item.path);
+                            if (isMobile) setDrawerOpen(false);
+                        }}
+                        selected={window.location.pathname === item.path}
                     >
-                        <HomeIcon />
-                    </IconButton>
-                    <InventoryIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-                        Gestión de Productos
-                    </Typography>
-                    <Tooltip title="Exportar a Excel">
-                        <IconButton color="inherit" onClick={handleExportExcel} sx={{ mr: 1 }}>
-                            <DownloadIcon />
+                        <ListItemIcon>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} />
+                    </ListItemButton>
+                ))}
+            </List>
+        </Drawer>
+    );
+
+    return (
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: colors.background }}>
+            {drawer}
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <AppBar 
+                    position="fixed" 
+                    elevation={1}
+                    sx={{ 
+                        zIndex: (theme) => theme.zIndex.drawer + 1,
+                        bgcolor: colors.surface, 
+                        color: colors.text.primary,
+                        borderBottom: `1px solid ${colors.border}`
+                    }}
+                >
+                    <Toolbar>
+                        <IconButton
+                            color="inherit"
+                            onClick={() => setDrawerOpen(!drawerOpen)}
+                            edge="start"
+                            sx={{ mr: 1.5 }}
+                        >
+                            <MenuIcon />
                         </IconButton>
-                    </Tooltip>
-                    <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
-                        {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
-                    </IconButton>
-                </Toolbar>
-            </AppBar>
+                        <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                            <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                            <Typography variant="h6" sx={{ fontWeight: 600, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                                Gestión de Productos
+                            </Typography>
+                        </Box>
+                        <Tooltip title="Exportar a Excel">
+                            <IconButton color="inherit" onClick={handleExportExcel} sx={{ mr: 1 }}>
+                                <DownloadIcon />
+                            </IconButton>
+                        </Tooltip>
+                        <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
+                            {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
+                        </IconButton>
+                    </Toolbar>
+                </AppBar>
+
+                <Toolbar />
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper
@@ -4439,16 +4519,18 @@ const Productos = () => {
                                                         </IconButton>
                                                     </Tooltip>
                                                     
-                                                    <Tooltip title={disponible ? "Asignar a colaborador" : "No disponible para asignar"}>
-                                                        <IconButton 
-                                                            size="small" 
-                                                            onClick={() => handleOpenAsignacion(producto)}
-                                                            disabled={!disponible}
-                                                            sx={{ color: colors.success, p: '3px' }}
-                                                        >
-                                                            <AssignmentIndIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    {!producto.es_granel && (
+                                                        <Tooltip title={disponible ? "Asignar a colaborador" : "No disponible para asignar"}>
+                                                            <IconButton 
+                                                                size="small" 
+                                                                onClick={() => handleOpenAsignacion(producto)}
+                                                                disabled={!disponible}
+                                                                sx={{ color: colors.success, p: '3px' }}
+                                                            >
+                                                                <AssignmentIndIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
                                                     
                                                     <Tooltip title="Ver historial de uso">
                                                         <IconButton 
@@ -4593,6 +4675,8 @@ const Productos = () => {
                     </Alert>
                 </Snackbar>
             </Container>
+            <OfilabFooter />
+        </Box>
         </Box>
     );
 };

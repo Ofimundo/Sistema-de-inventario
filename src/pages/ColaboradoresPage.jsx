@@ -60,17 +60,30 @@ import {
     Business as BusinessIcon,
     SortByAlpha as SortByAlphaIcon,
     Clear as ClearIcon,
-    FilterAlt as FilterAltIcon
+    FilterAlt as FilterAltIcon,
+    Menu as MenuIcon,
+    ChevronLeft as ChevronLeftIcon,
+    Dashboard as DashboardIcon,
+    Warehouse as WarehouseIcon,
+    People as PeopleIcon,
+    Assignment as AssignmentIcon,
+    Build as BuildIcon,
+    Description as DescriptionIcon,
+    Inventory2 as Inventory2Icon,
+    History as HistoryIcon
 } from '@mui/icons-material';
+import { Drawer, List, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import colaboradorService from '../services/colaboradorService';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Colores corporativos
+import OfilabFooter from '../components/OfilabFooter';
+
+// Colores corporativos OFILAB
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -960,6 +973,8 @@ const ColaboradoresPage = () => {
     const isMobile = useMediaQuery('(max-width:600px)');
     const isTablet = useMediaQuery('(min-width:601px) and (max-width:960px)');
     const navigate = useNavigate();
+    const drawerWidth = 260;
+    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
 
     // Estados
     const [colaboradores, setColaboradores] = useState([]);
@@ -1325,35 +1340,100 @@ const ColaboradoresPage = () => {
             : 0
     }));
 
-    return (
-        <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
-            <AppBar 
-                position="static" 
-                elevation={0}
-                sx={{ 
-                    bgcolor: colors.surface, 
-                    color: colors.text.primary,
-                    borderBottom: `1px solid ${colors.border}`
-                }}
-            >
-                <Toolbar>
-                    <IconButton
-                        edge="start"
-                        color="inherit"
-                        onClick={handleGoHome}
-                        sx={{ mr: 2 }}
+    const menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Productos', icon: <InventoryIcon />, path: '/productos' },
+        { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
+        { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
+        { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
+        { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+    ];
+
+    const drawer = (
+        <Drawer
+            variant={isMobile ? 'temporary' : 'persistent'}
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            sx={{
+                width: drawerOpen ? drawerWidth : 0,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+                transition: (theme) => theme.transitions.create('width', {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+                '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E2E8F0' }
+            }}
+        >
+            <Toolbar sx={{ justifyContent: 'space-between' }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                </Box>
+                {isMobile && (
+                    <IconButton onClick={() => setDrawerOpen(false)}>
+                        <ChevronLeftIcon />
+                    </IconButton>
+                )}
+            </Toolbar>
+            <Divider />
+            <List>
+                {menuItems.map(item => (
+                    <ListItemButton 
+                        key={item.text} 
+                        onClick={() => {
+                            navigate(item.path);
+                            if (isMobile) setDrawerOpen(false);
+                        }}
+                        selected={window.location.pathname === item.path}
                     >
-                        <HomeIcon />
-                    </IconButton>
-                    <PersonIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
-                        Gestión de Colaboradores
-                    </Typography>
-                    <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
-                        {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
-                    </IconButton>
-                </Toolbar>
-            </AppBar>
+                        <ListItemIcon>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} />
+                    </ListItemButton>
+                ))}
+            </List>
+        </Drawer>
+    );
+
+    return (
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: colors.background }}>
+            {drawer}
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <AppBar 
+                    position="fixed" 
+                    elevation={1}
+                    sx={{ 
+                        zIndex: (theme) => theme.zIndex.drawer + 1,
+                        bgcolor: colors.surface, 
+                        color: colors.text.primary,
+                        borderBottom: `1px solid ${colors.border}`
+                    }}
+                >
+                    <Toolbar>
+                        <IconButton
+                            color="inherit"
+                            onClick={() => setDrawerOpen(!drawerOpen)}
+                            edge="start"
+                            sx={{ mr: 1.5 }}
+                        >
+                            <MenuIcon />
+                        </IconButton>
+                        <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                            <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                Gestión de Colaboradores
+                            </Typography>
+                        </Box>
+                        <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
+                            {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
+                        </IconButton>
+                    </Toolbar>
+                </AppBar>
+
+                <Toolbar />
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 {/* Header con gradiente */}
@@ -1863,6 +1943,8 @@ const ColaboradoresPage = () => {
                     </Alert>
                 </Snackbar>
             </Container>
+            <OfilabFooter />
+        </Box>
         </Box>
     );
 };

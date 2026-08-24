@@ -384,7 +384,7 @@ const asignacionController = {
                 const productoResult = await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
                     .query(`
-                        SELECT id, id_estado_equipo, nombre 
+                        SELECT id, id_estado_equipo, nombre, cantidad, es_granel 
                         FROM INV.productos 
                         WHERE id = @producto_id
                     `);
@@ -442,20 +442,42 @@ const asignacionController = {
                 
                 const nuevaAsignacion = asignacionResult.recordset[0];
                 
-                await transaction.request()
-                    .input('producto_id', sql.Int, producto_id)
-                    .input('nuevo_estado', sql.Int, 2)
-                    .query(`
-                        UPDATE INV.productos 
-                        SET id_estado_equipo = @nuevo_estado
-                        WHERE id = @producto_id
-                    `);
+                const isGranel = producto.es_granel === 1 || producto.es_granel === true;
+                const cantActual = producto.cantidad !== undefined && producto.cantidad !== null ? parseInt(producto.cantidad) : 1;
+                
+                if (isGranel) {
+                    const nuevaCant = Math.max(0, cantActual - 1);
+                    const nuevoEstado = nuevaCant <= 0 ? 5 : 1;
+                    await transaction.request()
+                        .input('producto_id', sql.Int, producto_id)
+                        .input('nueva_cant', sql.Int, nuevaCant)
+                        .input('nuevo_estado', sql.Int, nuevoEstado)
+                        .query(`
+                            UPDATE INV.productos 
+                            SET cantidad = @nueva_cant,
+                                id_estado_equipo = @nuevo_estado
+                            WHERE id = @producto_id
+                        `);
+                } else {
+                    await transaction.request()
+                        .input('producto_id', sql.Int, producto_id)
+                        .input('nuevo_estado', sql.Int, 2)
+                        .query(`
+                            UPDATE INV.productos 
+                            SET id_estado_equipo = @nuevo_estado
+                            WHERE id = @producto_id
+                        `);
+                }
                 
                 const tipoAsignacion = es_prestamo ? 'PRÉSTAMO' : 'ASIGNACION';
+                const detallesHistorial = isGranel 
+                    ? `Entrega a granel: 1 unidad(es). Asignado a colaborador ID: ${colaborador_id}. Motivo: ${motivo}`
+                    : `${tipoAsignacion} de producto a colaborador ID: ${colaborador_id}. Motivo: ${motivo}`;
+
                 await transaction.request()
                     .input('producto_id', sql.Int, producto_id)
-                    .input('accion', sql.NVarChar, tipoAsignacion)
-                    .input('detalles', sql.NVarChar, `${tipoAsignacion} de producto a colaborador ID: ${colaborador_id}. Motivo: ${motivo}`)
+                    .input('accion', sql.NVarChar, isGranel ? 'ENTREGA_GRANEL' : tipoAsignacion)
+                    .input('detalles', sql.NVarChar, detallesHistorial)
                     .input('fecha_hora', sql.DateTime, new Date())
                     .query(`
                         INSERT INTO INV.historial (

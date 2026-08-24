@@ -401,20 +401,12 @@ const RecoverPassword = () => {
     return (
         <Box
             sx={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
+                minHeight: '100vh',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #4C1D95 100%)',
                 p: 2,
-                margin: 0,
-                minHeight: '100vh',
-                width: '100vw',
-                boxSizing: 'border-box',
             }}
         >
             <StyledPaper elevation={3}>
@@ -432,25 +424,25 @@ const RecoverPassword = () => {
                 >
                     <Box
                         sx={{
-                            width: 60,
-                            height: 60,
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                            p: 1.5,
+                            borderRadius: 3,
+                            bgcolor: 'rgba(255, 255, 255, 0.9)',
+                            display: 'inline-flex',
+                            boxShadow: '0 8px 24px rgba(124, 58, 237, 0.15)',
                             mb: 2,
                         }}
                     >
-                        <InventoryIcon sx={{ fontSize: 30, color: 'white' }} />
+                        <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '50px', width: 'auto', objectFit: 'contain' }} />
                     </Box>
 
                     <Typography
                         variant="h5"
                         sx={{
-                            fontWeight: 700,
+                            fontWeight: 800,
                             textAlign: 'center',
-                            color: '#2d3748',
+                            background: 'linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
                             mb: 1,
                         }}
                     >

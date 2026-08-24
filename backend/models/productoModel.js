@@ -90,6 +90,7 @@ function mapDBToFrontend(data) {
     
     mapped.cantidad = data.cantidad !== undefined && data.cantidad !== null ? data.cantidad : 1;
     mapped.es_granel = data.es_granel === 1 || data.es_granel === true ? true : false;
+    mapped.total_utilizado = data.total_utilizado !== undefined ? data.total_utilizado : 0;
     mapped.stock = mapped.cantidad;
     
     const idToEstadoMap = {

@@ -1,4 +1,4 @@
-// src/pages/AnexosPage.jsx - VERSIÓN COMPLETAMENTE LIMPIA (SIN ESTADO, SIN FIRMAS)
+// src/pages/AnexosPage.jsx - GENERACIÓN DE ANEXOS BASADA EN PLANTILLAS WORD OFICIALES Y BD (FILTRADO POR EMPRESA)
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -40,11 +40,17 @@ import {
     Tooltip,
     AppBar,
     Toolbar,
-    Container
+    Container,
+    Drawer,
+    List,
+    ListItemButton,
+    ListItemIcon,
+    ListItemText,
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import {
     Description,
-    Assignment,
     Person,
     Business,
     CheckCircle,
@@ -54,13 +60,25 @@ import {
     Delete,
     Refresh,
     Home,
-    Warning
+    Warning,
+    CalendarToday,
+    FilterList,
+    Menu as MenuIcon,
+    ChevronLeft as ChevronLeftIcon,
+    Dashboard as DashboardIcon,
+    Warehouse as WarehouseIcon,
+    People as PeopleIcon,
+    Assignment as AssignmentIcon,
+    Build as BuildIcon,
+    Inventory2 as Inventory2Icon,
+    History as HistoryIcon
 } from '@mui/icons-material';
 import api from '../services/api';
+import OfilabFooter from '../components/OfilabFooter';
 
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -75,7 +93,7 @@ const colors = {
     border: '#E5E7EB'
 };
 
-const descargarPDF = (blob, filename) => {
+const descargarArchivo = (blob, filename) => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -88,19 +106,32 @@ const descargarPDF = (blob, filename) => {
     }, 100);
 };
 
+const getFechaHoyFormat = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const AnexosPage = () => {
     const navigate = useNavigate();
     const isMounted = useRef(true);
+    const theme = useTheme();
+    const isMobile = useMediaQuery('(max-width:600px)');
+    const drawerWidth = 260;
+    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
     
     const [activeStep, setActiveStep] = useState(0);
-    const [productos, setProductos] = useState([]);
-    const [productoSeleccionado, setProductoSeleccionado] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [colaboradores, setColaboradores] = useState([]);
     const [colaboradorSeleccionado, setColaboradorSeleccionado] = useState(null);
-    const [empresaSeleccionada, setEmpresaSeleccionada] = useState('');
+    const [empresaSeleccionada, setEmpresaSeleccionada] = useState('STUEDEMANN S.A');
     const [empresasDisponibles, setEmpresasDisponibles] = useState([]);
+    const [filtrarPorEmpresa, setFiltrarPorEmpresa] = useState(true);
+    const [fechaAnexo, setFechaAnexo] = useState(getFechaHoyFormat());
     const [observaciones, setObservaciones] = useState('');
+    
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -126,8 +157,7 @@ const AnexosPage = () => {
             setInitialLoading(true);
             await Promise.all([
                 cargarEmpresas(),
-                cargarProductos(),
-                cargarColaboradores(),
+                cargarColaboradores(empresaSeleccionada),
                 cargarAnexos()
             ]);
             if (isMounted.current) {
@@ -136,6 +166,15 @@ const AnexosPage = () => {
         };
         cargarDatosIniciales();
     }, []);
+
+    // Recargar colaboradores cuando cambia la empresa seleccionada o el switch de filtrado
+    useEffect(() => {
+        if (!initialLoading) {
+            const empFiltro = filtrarPorEmpresa ? empresaSeleccionada : 'TODAS';
+            cargarColaboradores(empFiltro);
+            setColaboradorSeleccionado(null);
+        }
+    }, [empresaSeleccionada, filtrarPorEmpresa]);
 
     const cargarEmpresas = async () => {
         try {
@@ -154,41 +193,13 @@ const AnexosPage = () => {
         }
     };
 
-    const cargarProductos = async () => {
+    const cargarColaboradores = async (empresaFiltro = empresaSeleccionada) => {
         try {
-            const response = await api.get('/productos');
-            let productosData = [];
-            if (response.data?.data && Array.isArray(response.data.data)) {
-                productosData = response.data.data;
-            } else if (Array.isArray(response.data)) {
-                productosData = response.data;
-            }
+            const url = (empresaFiltro && empresaFiltro !== 'TODAS')
+                ? `/anexos/colaboradores?empresa=${encodeURIComponent(empresaFiltro)}`
+                : '/anexos/colaboradores';
             
-            const productosProcesados = (productosData || []).map(p => ({
-                id: p.id,
-                nombre: p.nombre || 'Sin nombre',
-                marca: p.marca || 'N/A',
-                modelo: p.modelo || 'N/A',
-                numero_serie: p.numero_serie || 'N/A',
-                condicion: p.condicion || 'NUEVO',
-                id_estado_equipo: p.id_estado_equipo || 1,
-                estado_texto: getEstadoTexto(p.id_estado_equipo),
-                colaborador_asignado: p.colaborador_asignado || null
-            }));
-            
-            if (isMounted.current) {
-                setProductos(productosProcesados);
-                console.log(`✅ ${productosProcesados.length} productos cargados`);
-            }
-        } catch (error) {
-            console.error('Error cargando productos:', error);
-            if (isMounted.current) setError('Error al cargar los productos');
-        }
-    };
-
-    const cargarColaboradores = async () => {
-        try {
-            const response = await api.get('/colaboradores');
+            const response = await api.get(url);
             let colaboradoresData = [];
             if (response.data?.data && Array.isArray(response.data.data)) {
                 colaboradoresData = response.data.data;
@@ -197,7 +208,7 @@ const AnexosPage = () => {
             }
             if (isMounted.current) {
                 setColaboradores(colaboradoresData || []);
-                console.log(`✅ ${(colaboradoresData || []).length} colaboradores cargados`);
+                console.log(`✅ ${(colaboradoresData || []).length} colaboradores cargados (filtro: ${empresaFiltro})`);
             }
         } catch (error) {
             console.error('Error cargando colaboradores:', error);
@@ -208,8 +219,6 @@ const AnexosPage = () => {
     const cargarAnexos = async () => {
         try {
             const response = await api.get('/anexos?_t=' + Date.now());
-            console.log('📄 Respuesta del backend:', response.data);
-            
             if (isMounted.current) {
                 let anexosData = [];
                 if (response.data?.success && Array.isArray(response.data.data)) {
@@ -217,20 +226,7 @@ const AnexosPage = () => {
                 } else if (Array.isArray(response.data)) {
                     anexosData = response.data;
                 }
-                
-                // ELIMINAR CUALQUIER CAMPO "estado"
-                anexosData = anexosData.map(item => {
-                    const cleanItem = {};
-                    Object.keys(item).forEach(key => {
-                        if (key.toLowerCase() !== 'estado' && key.toLowerCase() !== 'status') {
-                            cleanItem[key] = item[key];
-                        }
-                    });
-                    return cleanItem;
-                });
-                
                 setAnexos(anexosData);
-                console.log(`✅ ${anexosData.length} anexos cargados (sin estado)`);
             }
         } catch (error) {
             console.error('Error cargando anexos:', error);
@@ -238,41 +234,30 @@ const AnexosPage = () => {
         }
     };
 
-    const getEstadoTexto = (estadoId) => {
-        const estados = { 1: 'DISPONIBLE', 2: 'ASIGNADO', 3: 'EN MANTENCIÓN', 4: 'EN REPARACIÓN', 5: 'NO DISPONIBLE', 6: 'BAJA' };
-        return estados[estadoId] || 'DESCONOCIDO';
-    };
-
-    const getEstadoColor = (estadoId) => {
-        const colores = { 1: '#10B981', 2: '#F59E0B', 3: '#3B82F6', 4: '#EF4444', 5: '#6B7280', 6: '#9CA3AF' };
-        return colores[estadoId] || '#6B7280';
-    };
-
-    const handleSeleccionarProducto = (producto) => {
-        setProductoSeleccionado(producto);
-        if (producto.colaborador_asignado && producto.colaborador_asignado.id) {
-            setColaboradorSeleccionado({
-                id: producto.colaborador_asignado.id,
-                nombre: producto.colaborador_asignado.nombre || '',
-                rut: producto.colaborador_asignado.rut || '',
-                email: producto.colaborador_asignado.email || '',
-                cargo: producto.colaborador_asignado.cargo || '',
-                departamento: producto.colaborador_asignado.departamento || ''
-            });
-        } else {
-            setColaboradorSeleccionado(null);
-        }
+    const handleSeleccionarColaborador = (colaborador) => {
+        setColaboradorSeleccionado(colaborador);
         setActiveStep(2);
     };
 
-    const handleSeleccionarColaborador = (colaborador) => {
-        setColaboradorSeleccionado(colaborador);
-        setActiveStep(3);
+    const formatearFechaEnEspanolString = (fechaStr) => {
+        if (!fechaStr) return 'N/A';
+        const meses = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ];
+        const parts = fechaStr.split('-');
+        if (parts.length === 3) {
+            const anio = parts[0];
+            const mesIdx = parseInt(parts[1], 10) - 1;
+            const dia = parseInt(parts[2], 10);
+            return `${dia} de ${meses[mesIdx]} del año ${anio}`;
+        }
+        return fechaStr;
     };
 
     const handleGenerarAnexo = async () => {
-        if (!productoSeleccionado || !colaboradorSeleccionado) {
-            setError('Faltan datos del producto o colaborador');
+        if (!colaboradorSeleccionado) {
+            setError('Debe seleccionar un colaborador');
             return;
         }
         if (!empresaSeleccionada) {
@@ -300,30 +285,19 @@ const AnexosPage = () => {
                         rut: colaboradorSeleccionado.rut,
                         email: colaboradorSeleccionado.email || '',
                         cargo: colaboradorSeleccionado.cargo || '',
-                        departamento: colaboradorSeleccionado.departamento || '',
-                        direccion: colaboradorSeleccionado.direccion || ''
-                    },
-                    producto: {
-                        id: productoSeleccionado.id,
-                        nombre: productoSeleccionado.nombre,
-                        marca: productoSeleccionado.marca || 'N/A',
-                        modelo: productoSeleccionado.modelo || 'N/A',
-                        numero_serie: productoSeleccionado.numero_serie || 'N/A',
-                        condicion: productoSeleccionado.condicion || 'NUEVO',
-                        tipo: 'Equipo'
+                        departamento: colaboradorSeleccionado.departamento || ''
                     },
                     empresa: empresaSeleccionada,
-                    observaciones: observaciones,
-                    asignacion_id: null
+                    fecha: fechaAnexo,
+                    equipos: colaboradorSeleccionado.equipos || [],
+                    observaciones: observaciones
                 })
             });
 
-            const contentType = response.headers.get('content-type');
-            
-            if (contentType && contentType.includes('application/pdf')) {
+            if (response.ok) {
                 const blob = await response.blob();
                 const contentDisposition = response.headers.get('content-disposition');
-                let filename = `anexo_${empresaSeleccionada.replace(/\s/g, '_')}_${colaboradorSeleccionado.nombre.replace(/\s/g, '_')}_${Date.now()}.pdf`;
+                let filename = `anexo_${empresaSeleccionada.replace(/\s/g, '_')}_${colaboradorSeleccionado.nombre.replace(/\s/g, '_')}_${Date.now()}.docx`;
                 if (contentDisposition) {
                     const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
                     if (match && match[1]) {
@@ -331,37 +305,13 @@ const AnexosPage = () => {
                     }
                 }
                 
-                descargarPDF(blob, filename);
-                setSuccess('Anexo generado correctamente');
+                descargarArchivo(blob, filename);
+                setSuccess('Anexo generado correctamente en plantilla Word (.docx)');
                 setActiveStep(4);
                 await cargarAnexos();
-                setTimeout(() => {
-                    if (isMounted.current) {
-                        setActiveStep(0);
-                        setProductoSeleccionado(null);
-                        setColaboradorSeleccionado(null);
-                        setObservaciones('');
-                        setSearchTerm('');
-                    }
-                }, 3000);
             } else {
                 const data = await response.json();
-                if (data.success) {
-                    setSuccess('Anexo generado correctamente');
-                    setActiveStep(4);
-                    await cargarAnexos();
-                    setTimeout(() => {
-                        if (isMounted.current) {
-                            setActiveStep(0);
-                            setProductoSeleccionado(null);
-                            setColaboradorSeleccionado(null);
-                            setObservaciones('');
-                            setSearchTerm('');
-                        }
-                    }, 3000);
-                } else {
-                    throw new Error(data.message || 'Error al generar el anexo');
-                }
+                throw new Error(data.message || 'Error al generar el anexo');
             }
         } catch (error) {
             console.error('Error generando anexo:', error);
@@ -374,14 +324,14 @@ const AnexosPage = () => {
     const handleDescargarAnexo = async (anexo) => {
         try {
             const response = await api.get(`/anexos/descargar/${anexo.id}`, { responseType: 'blob' });
-            const contentType = response.headers['content-type'] || 'application/pdf';
+            const contentType = response.headers['content-type'] || 'application/octet-stream';
             const blob = new Blob([response.data], { type: contentType });
             
-            const isPdf = contentType.toLowerCase().includes('pdf') || anexo.documento_generado?.endsWith('.pdf');
-            const defaultFilename = `anexo_${anexo.id}.${isPdf ? 'pdf' : 'docx'}`;
+            const isDocx = anexo.documento_generado?.endsWith('.docx') || contentType.includes('wordprocessingml');
+            const defaultFilename = `anexo_${anexo.id}.${isDocx ? 'docx' : 'pdf'}`;
             const filename = anexo.documento_generado || defaultFilename;
             
-            descargarPDF(blob, filename);
+            descargarArchivo(blob, filename);
             setSuccess('Documento descargado correctamente');
         } catch (error) {
             console.error('Error:', error);
@@ -444,7 +394,8 @@ const AnexosPage = () => {
 
     const refreshData = async () => {
         setRefreshing(true);
-        await Promise.all([cargarEmpresas(), cargarProductos(), cargarColaboradores(), cargarAnexos()]);
+        const empFiltro = filtrarPorEmpresa ? empresaSeleccionada : 'TODAS';
+        await Promise.all([cargarEmpresas(), cargarColaboradores(empFiltro), cargarAnexos()]);
         setRefreshing(false);
         setSuccess('Datos actualizados correctamente');
     };
@@ -455,11 +406,6 @@ const AnexosPage = () => {
         setActiveStep(step);
     };
 
-    const productosFiltrados = (productos || []).filter(p =>
-        p.nombre?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
-        p.numero_serie?.toLowerCase().includes((searchTerm || '').toLowerCase())
-    );
-
     const colaboradoresFiltrados = (colaboradores || []).filter(c =>
         c.nombre?.toLowerCase().includes((searchTerm || '').toLowerCase()) ||
         c.rut?.toLowerCase().includes((searchTerm || '').toLowerCase())
@@ -469,63 +415,143 @@ const AnexosPage = () => {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: colors.background }}>
                 <CircularProgress />
-                <Typography sx={{ ml: 2 }}>Cargando...</Typography>
+                <Typography sx={{ ml: 2 }}>Cargando datos del sistema...</Typography>
             </Box>
         );
     }
 
+    const menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Productos', icon: <Description />, path: '/productos' },
+        { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
+        { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
+        { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
+        { text: 'Anexos', icon: <Description />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+    ];
+
+    const drawer = (
+        <Drawer
+            variant={isMobile ? 'temporary' : 'persistent'}
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            sx={{
+                width: drawerOpen ? drawerWidth : 0,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+                transition: (theme) => theme.transitions.create('width', {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+                '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E2E8F0' }
+            }}
+        >
+            <Toolbar sx={{ justifyContent: 'space-between' }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                </Box>
+                {isMobile && (
+                    <IconButton onClick={() => setDrawerOpen(false)}>
+                        <ChevronLeftIcon />
+                    </IconButton>
+                )}
+            </Toolbar>
+            <Divider />
+            <List>
+                {menuItems.map(item => (
+                    <ListItemButton 
+                        key={item.text} 
+                        onClick={() => {
+                            navigate(item.path);
+                            if (isMobile) setDrawerOpen(false);
+                        }}
+                        selected={window.location.pathname === item.path}
+                    >
+                        <ListItemIcon>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} />
+                    </ListItemButton>
+                ))}
+            </List>
+        </Drawer>
+    );
+
     return (
-        <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
-            <AppBar position="static" elevation={0} sx={{ bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
-                <Toolbar>
-                    <IconButton edge="start" onClick={handleVolverInicio} sx={{ mr: 2 }}>
-                        <Home />
-                    </IconButton>
-                    <Description sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
-                        Anexos de Contrato
-                    </Typography>
-                    <IconButton onClick={refreshData} disabled={refreshing}>
-                        {refreshing ? <CircularProgress size={24} /> : <Refresh />}
-                    </IconButton>
-                </Toolbar>
-            </AppBar>
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: colors.background }}>
+            {drawer}
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <AppBar position="fixed" elevation={1} sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
+                    <Toolbar>
+                        <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start" sx={{ mr: 1.5 }}>
+                            <MenuIcon />
+                        </IconButton>
+                        <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                            <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                Anexos de Contrato
+                            </Typography>
+                        </Box>
+                        <IconButton onClick={refreshData} disabled={refreshing}>
+                            {refreshing ? <CircularProgress size={24} /> : <Refresh />}
+                        </IconButton>
+                    </Toolbar>
+                </AppBar>
+
+                <Toolbar />
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Anexos de Contrato</Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Generación de anexos de entrega de herramientas de trabajo</Typography>
+                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Generación oficial de anexos de entrega de equipos en formato Word (.docx)</Typography>
                     
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                         <Button 
-                            variant={!verAnexos ? 'contained' : 'outlined'}
                             onClick={() => {
                                 setVerAnexos(false);
                                 setActiveStep(0);
                             }}
                             startIcon={<Description />}
                             sx={{ 
-                                bgcolor: !verAnexos ? 'white' : 'transparent',
-                                color: !verAnexos ? colors.primary : 'white',
-                                borderColor: 'white',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
+                                bgcolor: !verAnexos ? '#FFFFFF' : 'transparent',
+                                color: !verAnexos ? colors.primary : '#FFFFFF',
+                                border: '1px solid #FFFFFF',
+                                fontWeight: 700,
+                                textTransform: 'none',
+                                px: 3,
+                                py: 1,
+                                borderRadius: 2,
+                                boxShadow: !verAnexos ? '0 4px 12px rgba(0,0,0,0.15)' : 'none',
+                                '&:hover': { 
+                                    bgcolor: !verAnexos ? '#F3F4F6' : 'rgba(255,255,255,0.15)',
+                                    borderColor: '#FFFFFF'
+                                }
                             }}
                         >
                             Nuevo Anexo
                         </Button>
                         <Button 
-                            variant={verAnexos ? 'contained' : 'outlined'}
                             onClick={() => { 
                                 setVerAnexos(true); 
                                 cargarAnexos(); 
                             }}
                             startIcon={<Visibility />}
                             sx={{ 
-                                bgcolor: verAnexos ? 'white' : 'transparent',
-                                color: verAnexos ? colors.primary : 'white',
-                                borderColor: 'white',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }}
-                            }
+                                bgcolor: verAnexos ? '#FFFFFF' : 'transparent',
+                                color: verAnexos ? colors.primary : '#FFFFFF',
+                                border: '1px solid #FFFFFF',
+                                fontWeight: 700,
+                                textTransform: 'none',
+                                px: 3,
+                                py: 1,
+                                borderRadius: 2,
+                                boxShadow: verAnexos ? '0 4px 12px rgba(0,0,0,0.15)' : 'none',
+                                '&:hover': { 
+                                    bgcolor: verAnexos ? '#F3F4F6' : 'rgba(255,255,255,0.15)',
+                                    borderColor: '#FFFFFF'
+                                }
+                            }}
                         >
                             Ver Anexos Generados
                         </Button>
@@ -535,6 +561,8 @@ const AnexosPage = () => {
                 {!verAnexos ? (
                     <Paper sx={{ p: 3 }}>
                         <Stepper activeStep={activeStep} orientation="vertical">
+                            
+                            {/* PASO 1: EMPRESA */}
                             <Step expanded={activeStep === 0}>
                                 <StepLabel StepIconComponent={() => (
                                     <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 32, height: 32 }}>
@@ -543,7 +571,7 @@ const AnexosPage = () => {
                                 )}>
                                     <Typography variant="h6">Paso 1: Seleccionar Empresa</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Selecciona la empresa para el anexo
+                                        Selecciona la empresa para filtrar los colaboradores y cargar la plantilla correspondiente
                                     </Typography>
                                 </StepLabel>
                                 <StepContent>
@@ -551,7 +579,10 @@ const AnexosPage = () => {
                                         <InputLabel>Empresa</InputLabel>
                                         <Select 
                                             value={empresaSeleccionada} 
-                                            onChange={(e) => setEmpresaSeleccionada(e.target.value)} 
+                                            onChange={(e) => {
+                                                setEmpresaSeleccionada(e.target.value);
+                                                setColaboradorSeleccionado(null);
+                                            }} 
                                             label="Empresa"
                                         >
                                             {empresasDisponibles.map((emp) => (
@@ -571,22 +602,38 @@ const AnexosPage = () => {
                                 </StepContent>
                             </Step>
 
+                            {/* PASO 2: COLABORADOR */}
                             <Step expanded={activeStep === 1}>
                                 <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 32, height: 32 }}>
-                                        <Assignment fontSize="small" />
+                                    <Avatar sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, width: 32, height: 32 }}>
+                                        <Person fontSize="small" />
                                     </Avatar>
                                 )}>
-                                    <Typography variant="h6">Paso 2: Seleccionar Producto</Typography>
+                                    <Typography variant="h6">Paso 2: Seleccionar Colaborador</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Selecciona el equipo que se entregará
+                                        Selecciona el colaborador registrado para la empresa seleccionada
                                     </Typography>
                                 </StepLabel>
                                 <StepContent>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
+                                        <Chip 
+                                            icon={<FilterList fontSize="small" />} 
+                                            label={filtrarPorEmpresa ? `Empresa: ${empresaSeleccionada}` : 'Mostrando colaboradores de TODAS las empresas'} 
+                                            color={filtrarPorEmpresa ? 'primary' : 'default'}
+                                            variant="outlined"
+                                        />
+                                        <Button 
+                                            size="small" 
+                                            onClick={() => setFiltrarPorEmpresa(!filtrarPorEmpresa)}
+                                        >
+                                            {filtrarPorEmpresa ? 'Ver todos los colaboradores' : `Filtrar solo por ${empresaSeleccionada}`}
+                                        </Button>
+                                    </Box>
+
                                     <TextField
                                         fullWidth
                                         size="small"
-                                        placeholder="Buscar producto por nombre, serie o marca..."
+                                        placeholder="Buscar colaborador por nombre o RUT..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         InputProps={{
@@ -594,80 +641,14 @@ const AnexosPage = () => {
                                         }}
                                         sx={{ mb: 2 }}
                                     />
-                                    <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto' }}>
-                                        {productosFiltrados.length === 0 ? (
-                                            <Box sx={{ p: 3, textAlign: 'center' }}>
-                                                <Typography color="text.secondary">No hay productos disponibles</Typography>
-                                                <Button size="small" onClick={refreshData} sx={{ mt: 1 }}>
-                                                    Recargar productos
-                                                </Button>
-                                            </Box>
-                                        ) : (
-                                            productosFiltrados.map((producto) => (
-                                                <Box
-                                                    key={producto.id}
-                                                    sx={{
-                                                        p: 2,
-                                                        borderBottom: `1px solid ${colors.border}`,
-                                                        cursor: 'pointer',
-                                                        bgcolor: productoSeleccionado?.id === producto.id ? alpha(colors.primary, 0.05) : 'transparent',
-                                                        '&:hover': { bgcolor: alpha(colors.primary, 0.02) }
-                                                    }}
-                                                    onClick={() => handleSeleccionarProducto(producto)}
-                                                >
-                                                    <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                                                        <Box flex={1}>
-                                                            <Typography variant="body1" fontWeight={500}>{producto.nombre}</Typography>
-                                                            <Typography variant="caption" color="text.secondary" display="block">
-                                                                Serie: {producto.numero_serie || 'N/A'} | Marca: {producto.marca || 'N/A'}
-                                                            </Typography>
-                                                        </Box>
-                                                        <Chip 
-                                                            label={producto.estado_texto} 
-                                                            size="small"
-                                                            sx={{ 
-                                                                bgcolor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1),
-                                                                color: getEstadoColor(producto.id_estado_equipo)
-                                                            }}
-                                                        />
-                                                    </Box>
-                                                </Box>
-                                            ))
-                                        )}
-                                    </Paper>
-                                    <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
-                                        <Button onClick={() => handleStepChange(0)} variant="outlined">Atrás</Button>
-                                        <Button variant="contained" onClick={() => handleStepChange(2)} disabled={!productoSeleccionado}>Continuar</Button>
-                                    </Box>
-                                </StepContent>
-                            </Step>
-
-                            <Step expanded={activeStep === 2}>
-                                <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, width: 32, height: 32 }}>
-                                        <Person fontSize="small" />
-                                    </Avatar>
-                                )}>
-                                    <Typography variant="h6">Paso 3: Seleccionar Colaborador</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Selecciona el colaborador que recibirá el equipo
-                                    </Typography>
-                                </StepLabel>
-                                <StepContent>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder="Buscar colaborador por nombre, RUT o email..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        sx={{ mb: 2 }}
-                                    />
-                                    <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto', mb: 2 }}>
+                                    <Paper variant="outlined" sx={{ maxHeight: 350, overflow: 'auto', mb: 2 }}>
                                         {colaboradoresFiltrados.length === 0 ? (
-                                            <Box sx={{ p: 2, textAlign: 'center' }}>
-                                                <Typography color="text.secondary">No hay colaboradores</Typography>
-                                                <Button size="small" onClick={refreshData} sx={{ mt: 1 }}>
-                                                    Recargar colaboradores
+                                            <Box sx={{ p: 3, textAlign: 'center' }}>
+                                                <Typography color="text.secondary" gutterBottom>
+                                                    No hay colaboradores registrados para {empresaSeleccionada}
+                                                </Typography>
+                                                <Button size="small" variant="outlined" onClick={() => setFiltrarPorEmpresa(false)}>
+                                                    Ver todos los colaboradores del sistema
                                                 </Button>
                                             </Box>
                                         ) : (
@@ -683,124 +664,181 @@ const AnexosPage = () => {
                                                     }}
                                                     onClick={() => handleSeleccionarColaborador(col)}
                                                 >
-                                                    <Box>
-                                                        <Typography variant="body1" fontWeight={500}>{col.nombre}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            RUT: {col.rut} | {col.cargo || 'Sin cargo'} | {col.departamento || 'Sin departamento'}
-                                                        </Typography>
-                                                        {col.email && (
-                                                            <Typography variant="caption" color="text.secondary" display="block">
-                                                                {col.email}
+                                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                                        <Box>
+                                                            <Typography variant="body1" fontWeight={500}>{col.nombre}</Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                RUT: {col.rut} | {col.cargo || 'Sin cargo'} | {col.departamento || 'Sin departamento'}
                                                             </Typography>
+                                                            {col.empresa && (
+                                                                <Typography variant="caption" display="block" color="text.secondary">
+                                                                    Empresa en BD: <strong>{col.empresa}</strong>
+                                                                </Typography>
+                                                            )}
+                                                            <Typography variant="caption" display="block" color="primary" sx={{ mt: 0.5 }}>
+                                                                📦 Equipos asignados activos: {(col.equipos || []).length}
+                                                            </Typography>
+                                                        </Box>
+                                                        {colaboradorSeleccionado?.id === col.id && (
+                                                            <CheckCircle sx={{ color: colors.success }} />
                                                         )}
                                                     </Box>
-                                                    {colaboradorSeleccionado?.id === col.id && (
-                                                        <CheckCircle sx={{ color: colors.success }} />
-                                                    )}
                                                 </Box>
                                             ))
                                         )}
                                     </Paper>
                                     <Box display="flex" justifyContent="space-between">
-                                        <Button onClick={() => handleStepChange(1)} variant="outlined">Atrás</Button>
-                                        <Button variant="contained" onClick={() => handleStepChange(3)} disabled={!colaboradorSeleccionado}>Continuar</Button>
+                                        <Button onClick={() => handleStepChange(0)} variant="outlined">Atrás</Button>
+                                        <Button variant="contained" onClick={() => handleStepChange(2)} disabled={!colaboradorSeleccionado}>Continuar</Button>
                                     </Box>
                                 </StepContent>
                             </Step>
 
-                            <Step expanded={activeStep === 3}>
+                            {/* PASO 3: FECHA DEL ANEXO Y OBSERVACIONES */}
+                            <Step expanded={activeStep === 2}>
                                 <StepLabel StepIconComponent={() => (
-                                    <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 32, height: 32 }}>
-                                        <Business fontSize="small" />
+                                    <Avatar sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, width: 32, height: 32 }}>
+                                        <CalendarToday fontSize="small" />
                                     </Avatar>
                                 )}>
-                                    <Typography variant="h6">Paso 4: Confirmar y Generar</Typography>
+                                    <Typography variant="h6">Paso 3: Fecha del Anexo y Observaciones</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Confirma los datos para generar el documento
+                                        Ingresa la fecha que se plasmará en el documento Word (marcador &#123;&#123;fecha&#125;&#125;)
                                     </Typography>
                                 </StepLabel>
                                 <StepContent>
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12}>
+                                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                                        <Grid item xs={12} sm={6}>
                                             <TextField
                                                 fullWidth
-                                                label="Observaciones"
+                                                type="date"
+                                                label="Fecha del Anexo"
+                                                value={fechaAnexo}
+                                                onChange={(e) => setFechaAnexo(e.target.value)}
+                                                InputLabelProps={{ shrink: true }}
+                                                helperText={`Se inyectará como: "${formatearFechaEnEspanolString(fechaAnexo)}"`}
+                                            />
+                                        </Grid>
+                                        <Grid item xs={12} sm={6}>
+                                            <TextField
+                                                fullWidth
+                                                label="Observaciones adicionales"
                                                 value={observaciones}
                                                 onChange={(e) => setObservaciones(e.target.value)}
-                                                multiline
-                                                rows={3}
-                                                placeholder="Observaciones adicionales para el anexo..."
+                                                placeholder="Notas internas..."
                                             />
                                         </Grid>
                                     </Grid>
+                                    <Box display="flex" justifyContent="space-between">
+                                        <Button onClick={() => handleStepChange(1)} variant="outlined">Atrás</Button>
+                                        <Button variant="contained" onClick={() => handleStepChange(3)}>Continuar</Button>
+                                    </Box>
+                                </StepContent>
+                            </Step>
 
-                                    <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: alpha(colors.info, 0.05) }}>
-                                        <Typography variant="subtitle2" fontWeight={600} gutterBottom>📋 Resumen del documento</Typography>
-                                        <Divider sx={{ mb: 1 }} />
-                                        <Typography variant="body2">
-                                            <strong>Empresa:</strong> {empresaSeleccionada}
+                            {/* PASO 4: CONFIRMAR Y GENERAR */}
+                            <Step expanded={activeStep === 3}>
+                                <StepLabel StepIconComponent={() => (
+                                    <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 32, height: 32 }}>
+                                        <CheckCircle fontSize="small" />
+                                    </Avatar>
+                                )}>
+                                    <Typography variant="h6">Paso 4: Confirmar y Generar Documento Word</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Verifica los datos exactos que se plasmarán en la plantilla Word
+                                    </Typography>
+                                </StepLabel>
+                                <StepContent>
+                                    <Paper variant="outlined" sx={{ p: 2.5, mb: 3, bgcolor: alpha(colors.info, 0.04) }}>
+                                        <Typography variant="subtitle1" fontWeight={600} gutterBottom color="primary">
+                                            📄 Reemplazo estricto de marcadores de la plantilla
                                         </Typography>
-                                        <Typography variant="body2">
-                                            <strong>Producto:</strong> {productoSeleccionado?.nombre} (Serie: {productoSeleccionado?.numero_serie})
-                                        </Typography>
-                                        <Typography variant="body2">
-                                            <strong>Colaborador:</strong> {colaboradorSeleccionado?.nombre} - {colaboradorSeleccionado?.rut}
-                                        </Typography>
-                                        {observaciones && (
-                                            <Typography variant="body2">
-                                                <strong>Observaciones:</strong> {observaciones}
-                                            </Typography>
-                                        )}
+                                        <Divider sx={{ mb: 2 }} />
+                                        
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    <strong>Empresa empleadora:</strong> {empresaSeleccionada}
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    <strong>&#123;&#123;nombre&#125;&#125;:</strong> {colaboradorSeleccionado?.nombre}
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    <strong>&#123;&#123;rut&#125;&#125;:</strong> {colaboradorSeleccionado?.rut}
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    <strong>&#123;&#123;fecha&#125;&#125;:</strong> {formatearFechaEnEspanolString(fechaAnexo)}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={6}>
+                                                <Typography variant="body2" fontWeight={600} gutterBottom>
+                                                    <strong>Tabla de &#123;&#123;equipos&#125;&#125; a incluir:</strong>
+                                                </Typography>
+                                                {colaboradorSeleccionado?.equipos && colaboradorSeleccionado.equipos.length > 0 ? (
+                                                    <Box component="ul" sx={{ pl: 2, m: 0 }}>
+                                                        {colaboradorSeleccionado.equipos.map((eq, idx) => (
+                                                            <Typography component="li" variant="caption" key={idx} display="list-item">
+                                                                <strong>{eq.tipo}</strong> | Marca: {eq.marca || 'N/A'} | Modelo: {eq.modelo || 'N/A'} | Serie: {eq.numero_serie || 'N/A'}
+                                                            </Typography>
+                                                        ))}
+                                                    </Box>
+                                                ) : (
+                                                    <Typography variant="caption" color="error">
+                                                        Sin equipos asignados activos en la base de datos.
+                                                    </Typography>
+                                                )}
+                                            </Grid>
+                                        </Grid>
                                     </Paper>
 
-                                    <Box display="flex" justifyContent="space-between" sx={{ mt: 3 }}>
+                                    <Box display="flex" justifyContent="space-between">
                                         <Button onClick={() => handleStepChange(2)} variant="outlined">Atrás</Button>
                                         <Button
                                             variant="contained"
                                             onClick={handleGenerarAnexo}
                                             disabled={loading}
-                                            sx={{ bgcolor: colors.success }}
+                                            startIcon={<Download />}
+                                            sx={{ bgcolor: colors.success, '&:hover': { bgcolor: '#059669' } }}
                                         >
-                                            {loading ? <CircularProgress size={24} /> : 'Generar Anexo'}
+                                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Generar Anexo (.docx)'}
                                         </Button>
                                     </Box>
                                 </StepContent>
                             </Step>
 
+                            {/* PASO 5: ÉXITO */}
                             <Step expanded={activeStep === 4}>
                                 <StepLabel StepIconComponent={() => (
                                     <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 32, height: 32 }}>
                                         <CheckCircle fontSize="small" />
                                     </Avatar>
                                 )}>
-                                    <Typography variant="h6">Paso 5: ¡Anexo Generado!</Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        El documento ha sido generado correctamente
-                                    </Typography>
+                                    <Typography variant="h6">¡Anexo Generado con Éxito!</Typography>
                                 </StepLabel>
                                 <StepContent>
                                     <Alert severity="success" sx={{ mb: 2 }}>
-                                        El anexo ha sido generado correctamente.
+                                        El archivo Word (.docx) ha sido generado con éxito y descargado automáticamente.
                                     </Alert>
                                     <Box display="flex" gap={2}>
                                         <Button 
                                             variant="outlined" 
                                             onClick={() => {
                                                 handleStepChange(0);
-                                                setProductoSeleccionado(null);
                                                 setColaboradorSeleccionado(null);
                                                 setObservaciones('');
                                                 setSearchTerm('');
-                                                cargarProductos();
-                                                cargarColaboradores();
+                                                cargarColaboradores(empresaSeleccionada);
                                             }}
                                         >
                                             Crear Nuevo Anexo
                                         </Button>
-                                        <Button variant="contained" onClick={() => { 
-                                            setVerAnexos(true); 
-                                            cargarAnexos(); 
-                                        }}>
+                                        <Button 
+                                            variant="contained" 
+                                            onClick={() => { 
+                                                setVerAnexos(true); 
+                                                cargarAnexos(); 
+                                            }}
+                                        >
                                             Ver Anexos Generados
                                         </Button>
                                     </Box>
@@ -809,6 +847,7 @@ const AnexosPage = () => {
                         </Stepper>
                     </Paper>
                 ) : (
+                    /* SECCIÓN DE VER ANEXOS GENERADOS */
                     <Paper sx={{ p: 3 }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>📄 Anexos Generados</Typography>
                         <TableContainer>
@@ -817,9 +856,8 @@ const AnexosPage = () => {
                                     <TableRow sx={{ bgcolor: alpha(colors.primary, 0.05) }}>
                                         <TableCell><strong>ID</strong></TableCell>
                                         <TableCell><strong>Colaborador</strong></TableCell>
-                                        <TableCell><strong>Producto</strong></TableCell>
                                         <TableCell><strong>Empresa</strong></TableCell>
-                                        <TableCell><strong>Fecha</strong></TableCell>
+                                        <TableCell><strong>Fecha del Anexo</strong></TableCell>
                                         <TableCell align="center"><strong>Acciones</strong></TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -830,11 +868,7 @@ const AnexosPage = () => {
                                                 <TableCell>{anexo.id}</TableCell>
                                                 <TableCell>
                                                     <Typography variant="body2" fontWeight={500}>{anexo.colaborador_nombre || 'N/A'}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">{anexo.colaborador_rut || 'N/A'}</Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">{anexo.producto_nombre || 'N/A'}</Typography>
-                                                    <Typography variant="caption" color="text.secondary">Serie: {anexo.numero_serie || 'N/A'}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">RUT: {anexo.colaborador_rut || 'N/A'}</Typography>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip 
@@ -843,10 +877,10 @@ const AnexosPage = () => {
                                                         sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}
                                                     />
                                                 </TableCell>
-                                                 <TableCell>{formatearFechaSegura(anexo.fecha_creacion)}</TableCell>
+                                                <TableCell>{formatearFechaSegura(anexo.fecha_anexo || anexo.fecha_creacion)}</TableCell>
                                                 <TableCell align="center">
                                                     <Stack direction="row" spacing={1} justifyContent="center">
-                                                        <Tooltip title="Descargar">
+                                                        <Tooltip title="Descargar Word (.docx)">
                                                             <IconButton size="small" onClick={() => handleDescargarAnexo(anexo)} sx={{ color: '#10B981' }}>
                                                                 <Download fontSize="small" />
                                                             </IconButton>
@@ -862,7 +896,7 @@ const AnexosPage = () => {
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                                            <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
                                                 <Description sx={{ fontSize: 48, color: '#ccc', mb: 1 }} />
                                                 <Typography color="text.secondary">No hay anexos generados aún</Typography>
                                                 <Button 
@@ -897,6 +931,7 @@ const AnexosPage = () => {
                     </Paper>
                 )}
 
+                {/* DIÁLOGO DE ELIMINACIÓN */}
                 <Dialog 
                     open={deleteDialogOpen} 
                     onClose={handleCloseDeleteDialog}
@@ -914,8 +949,8 @@ const AnexosPage = () => {
                             {anexoToDelete && (
                                 <Box component="span" display="block" mt={1} color="text.secondary">
                                     <strong>Colaborador:</strong> {anexoToDelete.colaborador_nombre || 'N/A'}<br />
-                                    <strong>Producto:</strong> {anexoToDelete.producto_nombre || 'N/A'}<br />
-                                    <strong>Fecha:</strong> {formatearFechaSegura(anexoToDelete.fecha_creacion)}
+                                    <strong>Empresa:</strong> {anexoToDelete.empresa || 'N/A'}<br />
+                                    <strong>Fecha:</strong> {formatearFechaSegura(anexoToDelete.fecha_anexo || anexoToDelete.fecha_creacion)}
                                 </Box>
                             )}
                         </Typography>
@@ -949,6 +984,8 @@ const AnexosPage = () => {
                     </Alert>
                 </Snackbar>
             </Container>
+            <OfilabFooter />
+        </Box>
         </Box>
     );
 };

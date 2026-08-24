@@ -162,21 +162,12 @@ const Login = () => {
     return (
         <Box
             sx={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
+                minHeight: '100vh',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                p: 2,
-                margin: 0,
-                minHeight: '100vh',
-                width: '100vw',
-                boxSizing: 'border-box',
-                overflow: 'auto',
+                background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #4C1D95 100%)',
+                padding: 2,
             }}
         >
             <StyledPaper elevation={3}>
@@ -191,41 +182,51 @@ const Login = () => {
                         textAlign: 'center',
                     }}
                 >
-                    <Avatar
+                    <Box
                         sx={{
-                            width: isMobile ? 70 : 80,
-                            height: isMobile ? 70 : 80,
                             mb: 2,
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            p: 1.5,
+                            borderRadius: 3,
+                            bgcolor: 'rgba(255, 255, 255, 0.9)',
+                            display: 'inline-flex',
+                            boxShadow: '0 8px 24px rgba(124, 58, 237, 0.15)'
                         }}
                     >
-                        <InventoryIcon sx={{ fontSize: isMobile ? 35 : 40, color: 'white' }} />
-                    </Avatar>
+                        <img 
+                            src="/Logo_transparente.png" 
+                            alt="OFILAB Logo" 
+                            style={{ height: isMobile ? '50px' : '65px', width: 'auto', objectFit: 'contain' }} 
+                        />
+                    </Box>
 
                     <Typography
                         variant={isMobile ? 'h5' : 'h4'}
                         sx={{
-                            fontWeight: 700,
+                            fontWeight: 800,
                             textAlign: 'center',
-                            color: '#2d3748',
+                            background: 'linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
                             lineHeight: 1.2,
                             width: '100%',
+                            letterSpacing: '-0.5px'
                         }}
                     >
-                        StockMaster Pro
+                        OFILAB
                     </Typography>
                     
                     <Typography
-                        variant={isMobile ? 'subtitle1' : 'h6'}
+                        variant={isMobile ? 'subtitle2' : 'subtitle1'}
                         sx={{
                             fontWeight: 500,
                             textAlign: 'center',
-                            color: '#4a5568',
+                            color: '#64748B',
+                            mt: 0.5,
                             mb: 2,
                             width: '100%',
                         }}
                     >
-                        Sistema de Gestión de Inventario
+                        Sistema de Control de Inventario
                     </Typography>
                 </Box>
 
@@ -318,12 +319,13 @@ const Login = () => {
                             mb: 2,
                             py: isMobile ? 1.2 : 1.5,
                             borderRadius: 12,
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            background: 'linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)',
                             textTransform: 'none',
                             fontSize: isMobile ? '0.9rem' : '1rem',
                             fontWeight: 600,
+                            boxShadow: '0 8px 20px rgba(124, 58, 237, 0.3)',
                             '&:hover': {
-                                background: 'linear-gradient(135deg, #5a67d8 0%, #6b46a0 100%)',
+                                background: 'linear-gradient(135deg, #6D28D9 0%, #C084FC 100%)',
                             },
                             '&:disabled': {
                                 background: 'linear-gradient(135deg, #cbd5e0 0%, #a0aec0 100%)',
@@ -337,40 +339,19 @@ const Login = () => {
                         )}
                     </Button>
 
-                    <Divider sx={{ my: 2 }}>
-                        <Typography variant="body2" sx={{ color: '#a0aec0' }}>
-                            O
-                        </Typography>
-                    </Divider>
-
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            flexDirection: isMobile ? 'column' : 'row',
-                            gap: 2,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            mb: 2,
-                            width: '100%',
-                        }}
-                    >
-                        
-                    </Box>
                 </Box>
 
-                <Typography
-                    variant="caption"
-                    sx={{
-                        mt: 3,
-                        color: '#a0aec0',
-                        textAlign: 'center',
-                        fontSize: isMobile ? '0.7rem' : '0.75rem',
-                        width: '100%',
-                        display: 'block',
-                    }}
-                >
-                    © 2026 StockMaster Pro v2.0
-                </Typography>
+                <Box display="flex" alignItems="center" justifyContent="center" gap={0.5} sx={{ mt: 3, width: '100%' }}>
+                    <Typography variant="caption" sx={{ color: '#64748B' }}>
+                        Hecho por
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 800, background: 'linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        OFILAB
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#94A3B8', ml: 0.5 }}>
+                        © {new Date().getFullYear()}
+                    </Typography>
+                </Box>
             </StyledPaper>
         </Box>
     );

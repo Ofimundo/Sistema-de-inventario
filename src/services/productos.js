@@ -68,6 +68,7 @@ export const productosService = {
                     cantidad: producto.cantidad || 1,
                     stock: producto.cantidad || 1,
                     es_granel: producto.es_granel === 1 || producto.es_granel === true ? true : false,
+                    total_utilizado: producto.total_utilizado !== undefined ? producto.total_utilizado : 0,
                     colaborador_asignado: producto.colaborador_asignado || null,
                     historial_uso: producto.historial_uso || [],
                     historial_mantenciones: producto.historial_mantenciones || [],
@@ -170,6 +171,7 @@ export const productosService = {
                     cantidad: producto.cantidad || 1,
                     stock: producto.cantidad || 1,
                     es_granel: producto.es_granel === 1 || producto.es_granel === true ? true : false,
+                    total_utilizado: producto.total_utilizado !== undefined ? producto.total_utilizado : 0,
                     colaborador_asignado: producto.colaborador_asignado || null,
                     historial_uso: producto.historial_uso || [],
                     historial_mantenciones: producto.historial_mantenciones || []

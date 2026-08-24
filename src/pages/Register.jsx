@@ -135,29 +135,26 @@ const Register = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #4C1D95 100%)',
             p: 2
         }}>
             <StyledPaper>
                 <Box sx={{ textAlign: 'center', mb: 3 }}>
                     <Box sx={{
-                        width: 70,
-                        height: 70,
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        mx: 'auto',
+                        p: 1.5,
+                        borderRadius: 3,
+                        bgcolor: 'rgba(255, 255, 255, 0.9)',
+                        display: 'inline-flex',
+                        boxShadow: '0 8px 24px rgba(124, 58, 237, 0.15)',
                         mb: 2
                     }}>
-                        <InventoryIcon sx={{ fontSize: 35, color: 'white' }} />
+                        <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '55px', width: 'auto', objectFit: 'contain' }} />
                     </Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#2d3748' }}>
-                        Crear Cuenta
+                    <Typography variant="h4" sx={{ fontWeight: 800, background: 'linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                        Crear Cuenta - OFILAB
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Completa tus datos para registrarte
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Completa tus datos para registrarte en el sistema
                     </Typography>
                 </Box>
 

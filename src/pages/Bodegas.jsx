@@ -89,12 +89,13 @@ import {
     Build as BuildIcon
 } from '@mui/icons-material';
 import api from '../services/api';
+import OfilabFooter from '../components/OfilabFooter';
 
 const drawerWidth = 260;
 
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -759,7 +760,9 @@ const BodegasPage = () => {
                     }}
                 >
                     <Toolbar>
-                        <Typography variant="h6" sx={{ fontWeight: 700 }}>StockMaster</Typography>
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                        </Box>
                     </Toolbar>
                     <Divider />
                     <List>
@@ -777,13 +780,15 @@ const BodegasPage = () => {
                 </Drawer>
 
                 <Box sx={{ flexGrow: 1 }}>
-                    <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
+                    <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1, bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
                         <Toolbar>
-                            <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start">
+                            <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start" sx={{ mr: 1.5 }}>
                                 <MenuIcon />
                             </IconButton>
-                            <StoreIcon sx={{ mr: 1 }} />
-                            <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Bodegas</Typography>
+                            <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                                <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                                <Typography variant="h6" sx={{ fontWeight: 600 }}>Gestión de Bodegas</Typography>
+                            </Box>
                             
                             <IconButton color="inherit" onClick={handleRefresh} disabled={refreshing}>
                                 {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
@@ -1214,6 +1219,7 @@ const BodegasPage = () => {
 
                         <ScrollTop />
                     </Container>
+                    <OfilabFooter />
                 </Box>
             </Box>
         </ThemeProvider>

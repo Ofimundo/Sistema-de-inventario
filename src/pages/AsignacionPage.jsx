@@ -49,7 +49,12 @@ import {
     FormControlLabel,
     Divider,
     RadioGroup,
-    Radio
+    Radio,
+    Drawer,
+    List,
+    ListItemButton,
+    ListItemIcon,
+    ListItemText
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -70,19 +75,29 @@ import {
     Download as DownloadIcon,
     Description as DescriptionIcon,
     CheckBox as CheckBoxIcon,
-    Clear as ClearIcon
+    Clear as ClearIcon,
+    Outbox as OutboxIcon,
+    Menu as MenuIcon,
+    ChevronLeft as ChevronLeftIcon,
+    Dashboard as DashboardIcon,
+    Warehouse as WarehouseIcon,
+    People as PeopleIcon,
+    Build as BuildIcon,
+    Inventory2 as Inventory2Icon,
+    History as HistoryIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import colaboradorService from '../services/colaboradorService';
 import RecepcionDialog from '../components/RecepcionDialog';
+import OfilabFooter from '../components/OfilabFooter';
 
 // ============================================
 // COLORES
 // ============================================
 const colors = {
-    primary: '#0A66C2',
-    secondary: '#7C3AED',
+    primary: '#7C3AED',
+    secondary: '#D946EF',
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
@@ -1213,12 +1228,137 @@ const productosServiceLocal = {
 };
 
 // ============================================
+// DIÁLOGO PARA DESCONTAR STOCK A GRANEL
+// ============================================
+function DescontarStockDialog({ open, onClose, producto, onSuccess }) {
+    const [cantidad, setCantidad] = useState(1);
+    const [observacion, setObservacion] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (open) {
+            setCantidad(1);
+            setObservacion('');
+            setError('');
+        }
+    }, [open]);
+
+    const handleSubmit = async () => {
+        const cantNum = parseInt(cantidad);
+        const stockActual = producto?.cantidad !== undefined ? producto.cantidad : 1;
+
+        if (isNaN(cantNum) || cantNum <= 0) {
+            setError('Ingresa una cantidad válida mayor a 0');
+            return;
+        }
+
+        if (cantNum > stockActual) {
+            setError(`La cantidad a entregar (${cantNum}) no puede superar el stock disponible (${stockActual})`);
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+
+        try {
+            const response = await api.post(`/productos/${producto.id}/descontar-stock`, {
+                cantidad: cantNum,
+                observacion: observacion.trim()
+            });
+
+            if (response.data && response.data.success) {
+                onSuccess(`Se descontaron ${cantNum} unidad(es) de ${producto.nombre} correctamente`);
+                onClose();
+            } else {
+                setError(response.data?.message || 'Error al descontar stock');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || err.message || 'Error al conectar con el servidor');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!open || !producto) return null;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <OutboxIcon />
+                <Typography variant="h6" fontWeight={700}>Entregar / Descontar Stock a Granel</Typography>
+            </DialogTitle>
+            <DialogContent dividers sx={{ pt: 2 }}>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                
+                <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: alpha(colors.secondary, 0.04), borderColor: alpha(colors.secondary, 0.2) }}>
+                    <Typography variant="subtitle1" fontWeight={700} color={colors.secondary}>
+                        {producto?.nombre}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Marca: <strong>{producto?.marca || 'SIN MARCA'}</strong> | Modelo: <strong>{producto?.modelo || 'SIN MODELO'}</strong>
+                    </Typography>
+                    <Divider sx={{ my: 1 }} />
+                    <Box display="flex" justifyContent="space-between" mt={1}>
+                        <Typography variant="body2">
+                            🟢 Stock Restante (Quedan): <strong>{producto?.cantidad !== undefined ? producto.cantidad : 1} ud.</strong>
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            📤 Utilizados: <strong>{producto?.total_utilizado || 0} ud.</strong>
+                        </Typography>
+                    </Box>
+                </Paper>
+
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Esta entrega descontará la cantidad ingresada del inventario y registrará la salida en el historial.
+                </Alert>
+
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            label="Cantidad a Descontar / Entregar *"
+                            type="number"
+                            value={cantidad}
+                            onChange={(e) => setCantidad(e.target.value)}
+                            size="small"
+                            inputProps={{ min: 1, max: producto?.cantidad || 1 }}
+                            required
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            label="Observación / Destino de Uso (Opcional)"
+                            value={observacion}
+                            onChange={(e) => setObservacion(e.target.value)}
+                            multiline
+                            rows={2}
+                            size="small"
+                            placeholder="Ej: Entrega a colaborador / Uso en oficina central"
+                        />
+                    </Grid>
+                </Grid>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={loading}>Cancelar</Button>
+                <Button onClick={handleSubmit} variant="contained" sx={{ bgcolor: colors.secondary, '&:hover': { bgcolor: alpha(colors.secondary, 0.9) } }} disabled={loading}>
+                    {loading ? <CircularProgress size={24} /> : 'Confirmar Entrega'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const AsignacionPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery('(max-width:600px)');
     const navigate = useNavigate();
+    const drawerWidth = 260;
+    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
     
     const [productos, setProductos] = useState([]);
     const [asignacionesActivas, setAsignacionesActivas] = useState([]);
@@ -1232,6 +1372,7 @@ const AsignacionPage = () => {
     const [openChecklistDialog, setOpenChecklistDialog] = useState(false);
     const [openRecepcion, setOpenRecepcion] = useState(false);
     const [openDetalles, setOpenDetalles] = useState(false);
+    const [openDescontarDialog, setOpenDescontarDialog] = useState(false);
     const [productoSeleccionado, setProductoSeleccionado] = useState(null);
     const [tipoAccionActual, setTipoAccionActual] = useState(null);
     const [asignacionSeleccionada, setAsignacionSeleccionada] = useState(null);
@@ -1371,16 +1512,82 @@ const AsignacionPage = () => {
         );
     }
 
+    const menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Productos', icon: <InventoryIcon />, path: '/productos' },
+        { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
+        { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
+        { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
+        { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+    ];
+
+    const drawer = (
+        <Drawer
+            variant={isMobile ? 'temporary' : 'persistent'}
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            sx={{
+                width: drawerOpen ? drawerWidth : 0,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+                transition: (theme) => theme.transitions.create('width', {
+                    easing: theme.transitions.easing.sharp,
+                    duration: theme.transitions.duration.enteringScreen,
+                }),
+                '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E2E8F0' }
+            }}
+        >
+            <Toolbar sx={{ justifyContent: 'space-between' }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+                </Box>
+                {isMobile && (
+                    <IconButton onClick={() => setDrawerOpen(false)}>
+                        <ChevronLeftIcon />
+                    </IconButton>
+                )}
+            </Toolbar>
+            <Divider />
+            <List>
+                {menuItems.map(item => (
+                    <ListItemButton 
+                        key={item.text} 
+                        onClick={() => {
+                            navigate(item.path);
+                            if (isMobile) setDrawerOpen(false);
+                        }}
+                        selected={window.location.pathname === item.path}
+                    >
+                        <ListItemIcon>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} />
+                    </ListItemButton>
+                ))}
+            </List>
+        </Drawer>
+    );
+
     return (
-        <Box sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
-            <AppBar position="static" elevation={0} sx={{ bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
-                <Toolbar>
-                    <IconButton edge="start" color="inherit" onClick={handleGoHome} sx={{ mr: 2 }}><HomeIcon /></IconButton>
-                    <AssignmentIcon sx={{ mr: 1, color: colors.primary }} />
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>Gestión de Asignaciones</Typography>
-                    <IconButton color="inherit" onClick={() => refreshData()} disabled={refreshing}>{refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}</IconButton>
-                </Toolbar>
-            </AppBar>
+        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: colors.background }}>
+            {drawer}
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <AppBar position="fixed" elevation={1} sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, bgcolor: colors.surface, color: colors.text.primary, borderBottom: `1px solid ${colors.border}` }}>
+                    <Toolbar>
+                        <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start" sx={{ mr: 1.5 }}>
+                            <MenuIcon />
+                        </IconButton>
+                        <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                            <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>Gestión de Asignaciones</Typography>
+                        </Box>
+                        <IconButton color="inherit" onClick={() => refreshData()} disabled={refreshing}>{refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}</IconButton>
+                    </Toolbar>
+                </AppBar>
+
+                <Toolbar />
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
                     <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>Gestión de Asignaciones</Typography>
@@ -1413,18 +1620,43 @@ const AsignacionPage = () => {
                             ) : (
                                 paginatedProductos.map((producto) => {
                                     const asignacionActiva = getAsignacionActiva(producto.id);
+                                    const esGranel = producto.es_granel === 1 || producto.es_granel === true;
                                     const estaAsignado = producto.id_estado_equipo === 2 || !!asignacionActiva;
                                     const estaDisponible = (producto.id_estado_equipo === 1 || !producto.id_estado_equipo) && !asignacionActiva;
                                     const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
                                     return (<TableRow key={`${producto.id}-${producto.numero_serie || producto.id}`} hover>
                                         <TableCell><Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}><InventoryIcon sx={{ fontSize: 16 }} /></Avatar><Typography variant="body2" fontWeight={500}>{producto.nombre}</Typography></Box></TableCell>
                                         <TableCell>{producto.marca || '-'}</TableCell><TableCell>{producto.modelo || '-'}</TableCell>
-                                        <TableCell><Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" /></TableCell>
+                                        <TableCell>
+                                            {esGranel ? (
+                                                <Chip label={`A GRANEL (${producto.cantidad !== undefined ? producto.cantidad : 1} ud.)`} size="small" sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, fontWeight: 600 }} />
+                                            ) : (
+                                                <Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" />
+                                            )}
+                                        </TableCell>
                                         <TableCell><Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} /></TableCell>
                                         <TableCell><Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} /></TableCell>
-                                        <TableCell><Stack direction="column" spacing={0.5}><Chip label={estaAsignado ? (esPrestamo ? 'PRÉSTAMO' : 'ASIGNADO') : getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), 0.1), color: estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />{asignacionActiva && (<Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />)}</Stack></TableCell>
+                                        <TableCell>
+                                            {esGranel ? (
+                                                <Chip label="A GRANEL / INSUMO" size="small" sx={{ backgroundColor: alpha(colors.secondary, 0.1), color: colors.secondary, fontWeight: 600, fontSize: '0.7rem' }} />
+                                            ) : (
+                                                <Stack direction="column" spacing={0.5}><Chip label={estaAsignado ? (esPrestamo ? 'PRÉSTAMO' : 'ASIGNADO') : getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), 0.1), color: estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />{asignacionActiva && (<Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />)}</Stack>
+                                            )}
+                                        </TableCell>
                                         <TableCell>{asignacionActiva ? (<Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}><PersonIcon sx={{ fontSize: 14 }} /></Avatar><Typography variant="body2">{asignacionActiva.colaborador_nombre}</Typography></Box>) : (<Typography variant="body2" color="text.secondary">-</Typography>)}</TableCell>
-                                        <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center" alignItems="center" flexWrap="nowrap">{estaAsignado ? (<><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button><IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}><VisibilityIcon fontSize="small" /></IconButton></>) : estaDisponible ? (<><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button><Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button></>) : (<Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>)}</Stack></TableCell>
+                                        <TableCell align="center">
+                                            <Stack direction="row" spacing={1} justifyContent="center" alignItems="center" flexWrap="nowrap">
+                                                {esGranel ? (
+                                                    <Button variant="contained" size="small" startIcon={<OutboxIcon />} onClick={() => { setProductoSeleccionado(producto); setOpenDescontarDialog(true); }} sx={{ bgcolor: colors.secondary, '&:hover': { bgcolor: alpha(colors.secondary, 0.9) }, borderRadius: 0, minWidth: 120 }}>Descontar Stock</Button>
+                                                ) : estaAsignado ? (
+                                                    <><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button><IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}><VisibilityIcon fontSize="small" /></IconButton></>
+                                                ) : estaDisponible ? (
+                                                    <><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button><Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button></>
+                                                ) : (
+                                                    <Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>
+                                                )}
+                                            </Stack>
+                                        </TableCell>
                                     </TableRow>);
                                 })
                             )}
@@ -1436,8 +1668,11 @@ const AsignacionPage = () => {
                 <AsignacionConChecklistDialog open={openChecklistDialog} onClose={() => { setOpenChecklistDialog(false); setProductoSeleccionado(null); setTipoAccionActual(null); }} producto={productoSeleccionado} tipoAccion={tipoAccionActual} onSuccess={handleChecklistSuccess} />
                 <RecepcionDialog open={openRecepcion} onClose={() => setOpenRecepcion(false)} producto={productoSeleccionado} asignacion={asignacionSeleccionada} onSuccess={handleRecepcionSuccess} />
                 <DetallesDialog open={openDetalles} onClose={() => setOpenDetalles(false)} asignacion={asignacionSeleccionada} producto={productoSeleccionado} onRefresh={refreshData} />
+                <DescontarStockDialog open={openDescontarDialog} onClose={() => setOpenDescontarDialog(false)} producto={productoSeleccionado} onSuccess={(msg) => { showSnackbar(msg, 'success'); refreshData(); }} />
                 <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}><Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 0 }}>{snackbar.message}</Alert></Snackbar>
             </Container>
+            <OfilabFooter />
+        </Box>
         </Box>
     );
 };

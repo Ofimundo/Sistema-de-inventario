@@ -980,6 +980,19 @@ router.get('/', async (req, res) => {
                 p.bodega_id,
                 ISNULL(p.cantidad, 1) as cantidad,
                 ISNULL(p.es_granel, 0) as es_granel,
+                (
+                    SELECT ISNULL(SUM(
+                        CASE 
+                            WHEN h.detalles LIKE 'Entrega a granel: %' AND CHARINDEX('unidad', h.detalles) > 18 
+                            THEN ISNULL(TRY_CAST(SUBSTRING(h.detalles, 19, CHARINDEX('unidad', h.detalles) - 19) AS INT), 1)
+                            WHEN h.accion IN ('ENTREGA_GRANEL', 'DESCUENTO_STOCK', 'DESCUENTO', 'ASIGNACION', 'PRÉSTAMO', 'ENTREGA')
+                            THEN 1
+                            ELSE 0 
+                        END
+                    ), 0)
+                    FROM INV.historial h
+                    WHERE h.producto_id = p.id
+                ) as total_utilizado,
                 b.nombre as bodega_nombre,
                 a.id as asignacion_id,
                 a.es_prestamo,
@@ -1084,6 +1097,7 @@ router.get('/', async (req, res) => {
                 cantidad: producto.cantidad || 1,
                 stock: producto.cantidad || 1,
                 es_granel: producto.es_granel === 1 || producto.es_granel === true ? 1 : 0,
+                total_utilizado: producto.total_utilizado || 0,
                 estado: getEstadoTexto(producto.id_estado_equipo || 1),
                 colaborador_asignado: colaboradorAsignado,
                 asignacion_activa: asignacionActiva,

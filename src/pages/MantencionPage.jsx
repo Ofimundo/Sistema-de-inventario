@@ -86,6 +86,7 @@ import {
 import { productosService } from "../services/productos";
 import { colaboradorService } from "../services/colaboradorService";
 import authService from "../services/auth";
+import OfilabFooter from "../components/OfilabFooter";
 import theme from "../theme";
 
 const drawerWidth = 260;
@@ -632,7 +633,9 @@ const MantencionPage = () => {
       }}
     >
       <Toolbar sx={{ justifyContent: "space-between" }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>StockMaster</Typography>
+        <Box display="flex" alignItems="center" gap={1}>
+          <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+        </Box>
         {isMobile && (
           <IconButton onClick={() => setDrawerOpen(false)}>
             <ChevronLeftIcon />
@@ -678,10 +681,12 @@ const MantencionPage = () => {
               <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)} edge="start" sx={{ mr: 2 }}>
                 <MenuIcon />
               </IconButton>
-              <BuildIcon sx={{ mr: 1, color: "primary.main" }} />
-              <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, display: { xs: "none", sm: "block" } }}>
-                Módulo de Mantenciones
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1.5} sx={{ flexGrow: 1 }}>
+                <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '46px', width: 'auto', objectFit: 'contain' }} />
+                <Typography variant="h6" sx={{ fontWeight: 700, display: { xs: "none", sm: "block" } }}>
+                  Módulo de Mantenciones
+                </Typography>
+              </Box>
 
               <Tooltip title="Buscar">
                 <IconButton color="inherit" onClick={() => setSearchOpen(true)}>
@@ -756,15 +761,15 @@ const MantencionPage = () => {
           >
             <Container maxWidth={false} sx={{ mx: 0, px: { xs: 2, sm: 3, md: 4 } }}>
 
-              {/* Top Banner Card matching Dashboard blue welcome card */}
+              {/* Top Banner Card matching OFILAB welcome card */}
               <Card 
                 sx={{ 
                   p: { xs: 3, sm: 4 }, 
                   mb: 4, 
                   borderRadius: "24px", 
-                  background: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)", 
+                  background: "linear-gradient(135deg, #7C3AED 0%, #D946EF 100%)", 
                   color: "white", 
-                  boxShadow: "0 10px 25px -5px rgba(37, 99, 235, 0.3)",
+                  boxShadow: "0 10px 25px -5px rgba(124, 58, 237, 0.3)",
                   overflow: "visible" 
                 }}
               >
@@ -800,12 +805,12 @@ const MantencionPage = () => {
                     <Stack direction={{ xs: "column", sm: "row", md: "column" }} spacing={1.5} alignItems={{ md: "flex-end" }}>
                       <Button
                         variant="contained"
-                        startIcon={<AddIcon sx={{ color: "#1D4ED8 !important", fontSize: "1.3rem" }} />}
+                        startIcon={<AddIcon sx={{ color: "#7C3AED !important", fontSize: "1.3rem" }} />}
                         onClick={() => setOpenNewDialog(true)}
                         sx={{
                           background: "#FFFFFF !important",
                           backgroundColor: "#FFFFFF !important",
-                          color: "#1D4ED8 !important",
+                          color: "#7C3AED !important",
                           fontWeight: 800,
                           fontSize: "0.95rem",
                           px: 3,
@@ -817,12 +822,12 @@ const MantencionPage = () => {
                           "&.MuiButton-root": {
                             background: "#FFFFFF !important",
                             backgroundColor: "#FFFFFF !important",
-                            color: "#1D4ED8 !important",
+                            color: "#7C3AED !important",
                           },
                           "&:hover": {
                             background: "#F8FAFC !important",
                             backgroundColor: "#F8FAFC !important",
-                            color: "#1E40AF !important",
+                            color: "#6D28D9 !important",
                             transform: "translateY(-2px)",
                             boxShadow: "0 8px 22px rgba(0, 0, 0, 0.3)"
                           }
@@ -849,14 +854,14 @@ const MantencionPage = () => {
                 <Grid container spacing={3} alignItems="center">
                   <Grid item xs={12}>
                     <Stack direction="row" spacing={2.5} alignItems="center">
-                      <Avatar sx={{ bgcolor: "#2563EB", color: "white", width: 52, height: 52 }}>
+                      <Avatar sx={{ bgcolor: "#7C3AED", color: "white", width: 52, height: 52 }}>
                         <CalendarTodayIcon />
                       </Avatar>
                       <Box>
                         <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                           PROGRAMACIÓN SEMESTRAL DE MANTENCIONES
                         </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 800, color: "#1D4ED8", mt: 0.5 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 800, color: "#7C3AED", mt: 0.5 }}>
                           Próxima Mantención General: {proximaMantencionStr}
                         </Typography>
                         <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
@@ -881,7 +886,7 @@ const MantencionPage = () => {
                           Registros totales
                         </Typography>
                       </Box>
-                      <Avatar sx={{ bgcolor: alpha("#2563EB", 0.1), color: "#2563EB", width: 48, height: 48 }}>
+                      <Avatar sx={{ bgcolor: alpha("#7C3AED", 0.1), color: "#7C3AED", width: 48, height: 48 }}>
                         <BuildCircleIcon />
                       </Avatar>
                     </Stack>
@@ -1611,6 +1616,7 @@ const MantencionPage = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      <OfilabFooter />
     </ThemeProvider>
   );
 };

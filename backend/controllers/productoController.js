@@ -1417,7 +1417,7 @@ const productoController = {
                 const productoResult = await transaction.request()
                     .input('id', sql.Int, id)
                     .query(`
-                        SELECT id, nombre, id_estado_equipo 
+                        SELECT id, nombre, id_estado_equipo, cantidad, es_granel 
                         FROM INV.productos WHERE id = @id
                     `);
 
@@ -1485,13 +1485,40 @@ const productoController = {
 
                 const nuevaAsignacion = asignacionResult.recordset[0];
 
-                // Actualizar estado del producto
-                await transaction.request()
-                    .input('id', sql.Int, id)
-                    .input('id_estado_equipo', sql.Int, 2)
-                    .query(`
-                        UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id
-                    `);
+                const isGranel = producto.es_granel === 1 || producto.es_granel === true;
+                const cantActual = producto.cantidad !== undefined && producto.cantidad !== null ? parseInt(producto.cantidad) : 1;
+                
+                if (isGranel) {
+                    const nuevaCant = Math.max(0, cantActual - 1);
+                    const nuevoEstado = nuevaCant <= 0 ? 5 : 1;
+                    await transaction.request()
+                        .input('id', sql.Int, id)
+                        .input('nueva_cant', sql.Int, nuevaCant)
+                        .input('id_estado_equipo', sql.Int, nuevoEstado)
+                        .query(`
+                            UPDATE INV.productos 
+                            SET cantidad = @nueva_cant,
+                                id_estado_equipo = @id_estado_equipo 
+                            WHERE id = @id
+                        `);
+
+                    await transaction.request()
+                        .input('producto_id', sql.Int, id)
+                        .input('accion', sql.NVarChar, 'ENTREGA_GRANEL')
+                        .input('detalles', sql.NVarChar, `Entrega a granel: 1 unidad(es). Asignado a colaborador ID: ${colaborador_id}. Motivo: ${motivo || 'Asignación'}`)
+                        .input('fecha_hora', sql.DateTime, new Date())
+                        .query(`
+                            INSERT INTO INV.historial (producto_id, accion, detalles, fecha_hora)
+                            VALUES (@producto_id, @accion, @detalles, @fecha_hora)
+                        `);
+                } else {
+                    await transaction.request()
+                        .input('id', sql.Int, id)
+                        .input('id_estado_equipo', sql.Int, 2)
+                        .query(`
+                            UPDATE INV.productos SET id_estado_equipo = @id_estado_equipo WHERE id = @id
+                        `);
+                }
 
                 await transaction.commit();
 
