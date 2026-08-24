@@ -88,13 +88,14 @@ class AsignacionModel {
             const asignacion = result.recordset[0];
             console.log('✅ Asignación insertada en [INV].[asignaciones], ID:', asignacion.id);
 
-            // ACTUALIZAR EL ESTADO DEL PRODUCTO A 'ASIGNADO' (SIN CANTIDAD)
+            // ACTUALIZAR EL ESTADO DEL PRODUCTO A 'ASIGNADO' (id_estado_equipo = 2)
             await pool.request()
                 .input('producto_id', sql.Int, data.producto_id)
                 .input('estado', sql.NVarChar, 'ASIGNADO')
+                .input('id_estado_equipo', sql.Int, 2)
                 .query(`
                     UPDATE [INV].[productos] 
-                    SET estado = @estado
+                    SET estado = @estado, id_estado_equipo = @id_estado_equipo
                     WHERE id = @producto_id
                 `);
 
@@ -351,9 +352,10 @@ class AsignacionModel {
                 await transaction.request()
                     .input('producto_id', sql.Int, asignacion.producto_id)
                     .input('estado', sql.NVarChar, 'DISPONIBLE')
+                    .input('id_estado_equipo', sql.Int, 1)
                     .query(`
                         UPDATE [INV].[productos] 
-                        SET estado = @estado
+                        SET estado = @estado, id_estado_equipo = @id_estado_equipo
                         WHERE id = @producto_id
                     `);
 

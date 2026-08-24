@@ -8,6 +8,7 @@ import {
     Button 
 } from '@mui/material';
 import PrivateRoute from './components/PrivateRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import authService from './services/auth';
 
 // Importaciones normales (no lazy para rutas principales)
@@ -25,6 +26,8 @@ const AsignacionPage = lazy(() => import('./pages/AsignacionPage'));
 const ColaboradoresPage = lazy(() => import('./pages/ColaboradoresPage'));
 const StockPage = lazy(() => import('./pages/StockPage'));
 const AnexosPage = lazy(() => import('./pages/AnexosPage'));
+const MantencionPage = lazy(() => import('./pages/MantencionPage'));
+const PublicQRInfoPage = lazy(() => import('./pages/PublicQRInfoPage'));
 
 // Componente para mostrar mientras carga
 const LoadingScreen = () => (
@@ -80,9 +83,10 @@ const NotFoundPage = () => {
 
 function App() {
     return (
-        <Router>
-            <Suspense fallback={<LoadingScreen />}>
-                <Routes>
+        <ErrorBoundary>
+            <Router>
+                <Suspense fallback={<LoadingScreen />}>
+                    <Routes>
                     {/* ============================================ */}
                     {/* RUTAS PÚBLICAS - NO REQUIEREN AUTENTICACIÓN */}
                     {/* ============================================ */}
@@ -90,6 +94,7 @@ function App() {
                     <Route path="/register" element={<Register />} />
                     <Route path="/recover-password" element={<RecoverPassword />} />
                     <Route path="/recover-password/:token" element={<RecoverPassword />} />
+                    <Route path="/qr-info" element={<PublicQRInfoPage />} />
                     
                     {/* ============================================ */}
                     {/* RUTAS PROTEGIDAS - REQUIEREN AUTENTICACIÓN */}
@@ -184,6 +189,16 @@ function App() {
                             </PrivateRoute>
                         } 
                     />
+
+                    {/* MANTENCIONES */}
+                    <Route 
+                        path="/mantenciones" 
+                        element={
+                            <PrivateRoute>
+                                <MantencionPage />
+                            </PrivateRoute>
+                        } 
+                    />
                     
                     {/* ============================================ */}
                     {/* REDIRECCIONES */}
@@ -210,6 +225,7 @@ function App() {
                 </Routes>
             </Suspense>
         </Router>
+    </ErrorBoundary>
     );
 }
 

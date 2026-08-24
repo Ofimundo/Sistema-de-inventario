@@ -135,7 +135,8 @@ export const colaboradorService = {
                 por_empresa: {
                     GLOBAL: 0,
                     DREAMTEC: 0,
-                    OFIMUNDO: 0
+                    OFIMUNDO: 0,
+                    HIWAY: 0
                 }
             };
         } catch (error) {
@@ -150,7 +151,8 @@ export const colaboradorService = {
                 por_empresa: {
                     GLOBAL: 0,
                     DREAMTEC: 0,
-                    OFIMUNDO: 0
+                    OFIMUNDO: 0,
+                    HIWAY: 0
                 }
             };
         }
@@ -180,10 +182,10 @@ export const colaboradorService = {
             if (response.data && response.data.success) {
                 return response.data.data;
             }
-            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'];
+            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'];
         } catch (error) {
             console.error('❌ Error en getEmpresas:', error);
-            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'];
+            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'];
         }
     },
     

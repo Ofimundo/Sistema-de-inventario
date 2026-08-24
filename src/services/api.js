@@ -9,7 +9,7 @@ const getBaseURL = () => {
     // CAMBIA ESTA URL SEGÚN TU BACKEND LOCAL
     // ============================================
     // Si tu backend corre en puerto 3000:
-    const LOCAL_URL = 'http://localhost:3000/api';
+    const LOCAL_URL = 'http://localhost:3001/api';
     
     // Si tu backend corre en puerto 98:
     // const LOCAL_URL = 'http://localhost:98/api';

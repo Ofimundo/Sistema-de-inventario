@@ -84,7 +84,9 @@ import {
     Warning as WarningIcon,
     Cancel as CancelIcon,
     Inventory2 as Inventory2Icon,
-    Visibility as VisibilityIcon
+    Visibility as VisibilityIcon,
+    Description as DescriptionIcon,
+    Build as BuildIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 
@@ -506,7 +508,9 @@ const BodegasPage = () => {
         { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
         { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
         { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
-        { text: 'Stock por Marca/Modelo', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
+        { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
         { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
     ];
 
@@ -743,8 +747,15 @@ const BodegasPage = () => {
                     open={drawerOpen}
                     onClose={() => setDrawerOpen(false)}
                     sx={{
-                        width: drawerWidth,
-                        '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box' }
+                        width: drawerOpen ? drawerWidth : 0,
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        boxSizing: 'border-box',
+                        transition: (theme) => theme.transitions.create('width', {
+                            easing: theme.transitions.easing.sharp,
+                            duration: theme.transitions.duration.enteringScreen,
+                        }),
+                        '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E2E8F0' }
                     }}
                 >
                     <Toolbar>

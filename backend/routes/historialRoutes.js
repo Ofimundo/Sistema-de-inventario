@@ -526,6 +526,7 @@ const getHistorialCompleto = async (req, res) => {
 // ENDPOINTS
 // ============================================
 
+router.get('/', authenticateToken, getHistorialCompleto);
 router.get('/export', authenticateToken, exportarExcel);
 router.get('/exportar/excel', authenticateToken, exportarExcel);
 router.get('/completo', authenticateToken, getHistorialCompleto);

@@ -57,7 +57,8 @@ import {
     AccordionSummary,
     AccordionDetails,
     Autocomplete,
-    Checkbox
+    Checkbox,
+    Switch
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -96,7 +97,8 @@ import {
     Category as CategoryIcon,
     LocalOffer as LocalOfferIcon,
     ReceiptLong as ReceiptLongIcon,
-    CheckCircle as CheckCircleIcon
+    CheckCircle as CheckCircleIcon,
+    RemoveCircleOutline as RemoveCircleOutlineIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { productosService } from '../services/productos';
@@ -104,6 +106,7 @@ import colaboradorService from '../services/colaboradorService';
 import { exportService } from '../services/exportService';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { QRCodeSVG } from 'qrcode.react';
 
 // Colores corporativos
 const colors = {
@@ -265,6 +268,129 @@ const TimelineDot = styled(Box)(({ theme, color = colors.primary }) => ({
     zIndex: 1
 }));
 
+const CATEGORIAS_QR_PERMITIDAS = [
+    'notebook',
+    'audifono', 'audífono', 'audifonos', 'audífonos', 'headset', 'headphone',
+    'mouse', 'raton', 'ratón',
+    'celular', 'smartphone', 'telefono', 'teléfono', 'móvil', 'movil',
+    'teclado', 'keyboard'
+];
+
+const esAptoParaQR = (producto) => {
+    if (!producto) return false;
+    const nombre = (producto.nombre || '').toLowerCase();
+    const categoria = (producto.categoria || producto.tipo || '').toLowerCase();
+    const descripcion = (producto.descripcion || '').toLowerCase();
+
+    return CATEGORIAS_QR_PERMITIDAS.some(cat => 
+        nombre.includes(cat) || categoria.includes(cat) || descripcion.includes(cat)
+    );
+};
+
+// ============================================
+// MODAL DE CÓDIGO QR PARA PRODUCTOS PERMITIDOS
+// ============================================
+function ProductoQRModal({ open, onClose, producto }) {
+    if (!producto) return null;
+
+    const colaboradorNombre = producto.colaborador_asignado?.nombre 
+        ? `${producto.colaborador_asignado.nombre} ${producto.colaborador_asignado.apellido || ''}`.trim()
+        : (producto.colaborador_nombre ? `${producto.colaborador_nombre} ${producto.colaborador_apellido || ''}`.trim() : 'Sin Asignar (En Bodega)');
+
+    // URL que redirige automáticamente a la descarga del PDF de la Ficha Técnica protegida por contraseña (Ofilab2026*)
+    const qrDataText = `${window.location.origin}/qr-info?serie=${encodeURIComponent(producto.numero_serie || '')}&id=${producto.id}`;
+
+    const handleDescargarQR = () => {
+        const svgElement = document.getElementById('qr-code-svg-element')?.querySelector('svg');
+        if (!svgElement) return;
+
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+            canvas.width = 400;
+            canvas.height = 400;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, 400, 400);
+
+            const pngUrl = canvas.toDataURL('image/png');
+            const downloadLink = document.createElement('a');
+            downloadLink.href = pngUrl;
+            downloadLink.download = `QR_${producto.numero_serie || producto.id}.png`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        };
+
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ borderBottom: 1, borderColor: 'divider', py: 1.5, px: 2 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <QrCodeIcon sx={{ color: '#7C3AED', fontSize: 20 }} />
+                        <Typography variant="subtitle1" fontWeight={700}>
+                            Código QR del Equipo
+                        </Typography>
+                    </Box>
+                    <IconButton onClick={onClose} size="small"><CloseIcon fontSize="small" /></IconButton>
+                </Box>
+            </DialogTitle>
+            <DialogContent sx={{ py: 2, px: 2, textAlign: 'center' }}>
+                <Paper 
+                    elevation={0} 
+                    sx={{ 
+                        p: 1.5, 
+                        bgcolor: '#F9FAFB', 
+                        border: '1.5px solid #E5E7EB', 
+                        borderRadius: '12px',
+                        display: 'inline-block',
+                        mx: 'auto',
+                        mb: 0.5
+                    }}
+                >
+                    <Box id="qr-code-svg-element" sx={{ display: 'flex', justifyContent: 'center', p: 1, bgcolor: 'white', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                        <QRCodeSVG 
+                            value={qrDataText} 
+                            size={145}
+                            level="M"
+                            includeMargin={true}
+                        />
+                    </Box>
+
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mt: 1, color: '#111827', fontSize: '0.85rem' }}>
+                        {producto.nombre}
+                    </Typography>
+
+                    <Typography variant="caption" color="primary.main" fontWeight={700} sx={{ display: 'block', fontSize: '0.75rem' }}>
+                        N° Serie: {producto.numero_serie || 'N/A'}
+                    </Typography>
+                </Paper>
+            </DialogContent>
+            <DialogActions sx={{ py: 1.5, px: 2, gap: 1, justifyContent: 'space-between' }}>
+                <Button onClick={onClose} variant="outlined" color="inherit" size="small" sx={{ fontSize: '0.75rem' }}>
+                    Cerrar
+                </Button>
+                <Button 
+                    onClick={handleDescargarQR} 
+                    variant="contained" 
+                    color="primary"
+                    size="small"
+                    startIcon={<DownloadIcon fontSize="small" />}
+                    sx={{ fontWeight: 700, fontSize: '0.75rem', bgcolor: '#1E40AF', '&:hover': { bgcolor: '#1E3A8A' } }}
+                >
+                    Descargar QR
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
 // ============================================
 // COMPONENTE DE FILTROS VISUALES
 // ============================================
@@ -274,6 +400,7 @@ function VisualFilters({ filterType, onFilterChange, counts }) {
         { id: 'disponibles', label: 'Disponibles', icon: <CheckCircleIcon fontSize="small" />, color: colors.success, count: counts.disponibles },
         { id: 'asignados', label: 'Asignados', icon: <AssignmentIndIcon fontSize="small" />, color: colors.info, count: counts.asignados },
         { id: 'prestamos', label: 'Préstamos', icon: <ReceiptLongIcon fontSize="small" />, color: colors.warning, count: counts.prestamos },
+        { id: 'qr', label: 'Equipos con QR', icon: <QrCodeIcon fontSize="small" />, color: '#7C3AED', count: counts.qr },
     ];
 
     return (
@@ -648,6 +775,91 @@ function AdvancedFilters({ filters, onFilterChange, onClearFilters, marcas, esta
                 </FilterChipContainer>
             )}
         </Box>
+    );
+}
+
+// ============================================
+// COMPONENTE PARA MOSTRAR HISTORIAL DE USO / ASIGNACIONES
+// ============================================
+function HistorialUsoRender({ historial = [] }) {
+    if (!historial || historial.length === 0) {
+        return (
+            <Box textAlign="center" py={3}>
+                <PersonIcon sx={{ fontSize: 40, color: '#ccc', mb: 1 }} />
+                <Typography color="text.secondary">No hay historial de uso o asignaciones registradas</Typography>
+            </Box>
+        );
+    }
+
+    return (
+        <List disablePadding>
+            {historial.map((item, idx) => {
+                const nombrePersona = item.colaborador_nombre || item.nombre || item.colaborador || item.nombre_persona || 'Colaborador';
+                const fechaAsig = item.fecha_asignacion || item.fecha_inicio || item.fecha_registro;
+                const fechaDev = item.fecha_devolucion || item.fecha_fin;
+                const esActivo = !fechaDev;
+                const esPrestamo = item.es_prestamo === 1;
+
+                const fechaAsigFormateada = fechaAsig && !isNaN(new Date(fechaAsig).getTime())
+                    ? new Date(fechaAsig).toLocaleDateString('es-CL')
+                    : 'Sin fecha de asignación';
+
+                const fechaDevFormateada = fechaDev && !isNaN(new Date(fechaDev).getTime())
+                    ? new Date(fechaDev).toLocaleDateString('es-CL')
+                    : (esActivo ? 'En uso actual' : 'Devuelto');
+
+                return (
+                    <ListItem key={item.id || idx} divider alignItems="flex-start" sx={{ py: 1.5 }}>
+                        <ListItemAvatar>
+                            <Avatar sx={{ 
+                                bgcolor: esActivo ? alpha(colors.primary, 0.1) : alpha(colors.text.disabled, 0.1),
+                                color: esActivo ? colors.primary : colors.text.secondary
+                            }}>
+                                <PersonIcon />
+                            </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                            primary={
+                                <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                                    <Typography variant="subtitle2" fontWeight={700}>
+                                        {nombrePersona}
+                                    </Typography>
+                                    <Chip
+                                        size="small"
+                                        label={esActivo ? (esPrestamo ? 'PRÉSTAMO ACTIVO' : 'ASIGNADO') : 'DEVUELTO / FINALIZADO'}
+                                        sx={{ 
+                                            backgroundColor: esActivo ? (esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1)) : alpha(colors.text.disabled, 0.1),
+                                            color: esActivo ? (esPrestamo ? colors.warning : colors.primary) : colors.text.secondary,
+                                            height: 20,
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700
+                                        }}
+                                    />
+                                </Box>
+                            }
+                            secondary={
+                                <Stack spacing={0.3} sx={{ mt: 0.5 }}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        📅 Asignado: <strong>{fechaAsigFormateada}</strong> — 
+                                        {esActivo ? ' 🟢 En uso activo' : ` Devuelto: ${fechaDevFormateada}`}
+                                    </Typography>
+                                    {item.motivo && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Motivo: {item.motivo}
+                                        </Typography>
+                                    )}
+                                    {item.observaciones && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Observaciones: {item.observaciones}
+                                        </Typography>
+                                    )}
+                                </Stack>
+                            }
+                        />
+                    </ListItem>
+                );
+            })}
+        </List>
     );
 }
 
@@ -1993,7 +2205,7 @@ function ProductoDetailDialog({ open, onClose, producto, getImageUrl, historialU
                             >
                                 Ver historial completo de uso
                             </Button>
-                            <HistorialMantenciones mantenciones={historialUso} />
+                            <HistorialUsoRender historial={historialUso} />
                         </Box>
                     )}
 
@@ -2034,7 +2246,9 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         numero_serie: '',
         condicion: 'NUEVO',
         bodega_id: '',
-        estado: 'DISPONIBLE'
+        estado: 'DISPONIBLE',
+        es_granel: false,
+        cantidad: 1
     });
 
     const [errores, setErrores] = useState({});
@@ -2138,19 +2352,22 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                     numero_serie: producto.numero_serie || '',
                     condicion: producto.condicion || 'NUEVO',
                     bodega_id: producto.bodega_id || '',
-                    estado: producto.estado || 'DISPONIBLE'
+                    estado: producto.estado || 'DISPONIBLE',
+                    es_granel: producto.es_granel === 1 || producto.es_granel === true ? true : false,
+                    cantidad: producto.cantidad !== undefined && producto.cantidad !== null ? producto.cantidad : 1
                 });
                 
-                if (producto.historial_uso && Array.isArray(producto.historial_uso)) {
-                    setHistorialUso(producto.historial_uso);
+                if (producto.id) {
+                    productosService.getHistorialMantenciones(producto.id)
+                        .then(mants => setHistorialMantenciones(mants || []))
+                        .catch(() => setHistorialMantenciones(producto.historial_mantenciones || []));
+                    
+                    productosService.getHistorialUso(producto.id)
+                        .then(hUso => setHistorialUso(hUso || []))
+                        .catch(() => setHistorialUso(producto.historial_uso || []));
                 } else {
-                    setHistorialUso([]);
-                }
-
-                if (producto.historial_mantenciones && Array.isArray(producto.historial_mantenciones)) {
-                    setHistorialMantenciones(producto.historial_mantenciones);
-                } else {
-                    setHistorialMantenciones([]);
+                    setHistorialUso(producto.historial_uso || []);
+                    setHistorialMantenciones(producto.historial_mantenciones || []);
                 }
                 
                 if (producto.colaborador_asignado && producto.colaborador_asignado.id) {
@@ -2177,7 +2394,9 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                     numero_serie: '',
                     condicion: 'NUEVO',
                     bodega_id: '',
-                    estado: 'DISPONIBLE'
+                    estado: 'DISPONIBLE',
+                    es_granel: false,
+                    cantidad: 1
                 });
                 setHistorialUso([]);
                 setHistorialMantenciones([]);
@@ -2214,7 +2433,12 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const validarFormulario = () => {
         const nuevosErrores = {};
         if (!formData.nombre?.trim()) nuevosErrores.nombre = 'El nombre es requerido';
-        if (!formData.numero_serie?.trim()) nuevosErrores.numero_serie = 'El número de serie es requerido (producto único)';
+        if (!formData.es_granel && !formData.numero_serie?.trim()) {
+            nuevosErrores.numero_serie = 'El número de serie es requerido para productos individuales';
+        }
+        if (formData.es_granel && (isNaN(parseInt(formData.cantidad)) || parseInt(formData.cantidad) <= 0)) {
+            nuevosErrores.cantidad = 'La cantidad inicial debe ser mayor a 0';
+        }
         if (!formData.condicion) nuevosErrores.condicion = 'Debe seleccionar una condición';
         if (formData.estado === 'ASIGNADO' && !colaboradorSeleccionado) {
             nuevosErrores.asignacion = 'Debe seleccionar un colaborador para asignar el producto';
@@ -2243,7 +2467,9 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                 numero_serie: formData.numero_serie?.trim() || '',
                 condicion: formData.condicion || 'NUEVO',
                 bodega_id: formData.bodega_id ? parseInt(formData.bodega_id) : null,
-                estado: formData.estado || 'DISPONIBLE'
+                estado: formData.estado || 'DISPONIBLE',
+                es_granel: formData.es_granel ? true : false,
+                cantidad: formData.es_granel ? (parseInt(formData.cantidad) || 1) : 1
             };
 
             console.log('📤 Enviando productoData:', productoData);
@@ -2286,50 +2512,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                     console.error('❌ Error al asignar:', error);
                     showSnackbar('Producto guardado pero hubo error al asignar: ' + (error.message || ''), 'warning');
                 }
-            }
-            
-            if (accionMantencion !== 'ninguna' && productoId) {
-                if (accionMantencion === 'iniciar') {
-                    if (!responsableMantencion?.trim()) {
-                        throw new Error('El responsable es requerido para iniciar mantención');
-                    }
-                    if (!descripcionMantencion?.trim()) {
-                        throw new Error('La descripción es requerida para iniciar mantención');
-                    }
-                    
-                    const mantencionData = {
-                        producto_id: productoId,
-                        tipo: tipoMantencion,
-                        fecha_inicio: fechaInicioMantencion,
-                        responsable: responsableMantencion,
-                        descripcion: descripcionMantencion,
-                        costo: parseFloat(costoMantencion) || 0
-                    };
-                    
-                    const mantencionResponse = await productosService.iniciarMantencion(mantencionData);
-                    if (mantencionResponse && mantencionResponse.success) {
-                        showSnackbar('Producto guardado y mantención iniciada correctamente', 'success');
-                    } else {
-                        throw new Error(mantencionResponse?.message || 'Error al iniciar mantención');
-                    }
-                } else if (accionMantencion === 'finalizar') {
-                    if (!fechaTerminoMantencion) {
-                        throw new Error('La fecha de término es requerida');
-                    }
-                    
-                    const mantencionData = {
-                        producto_id: productoId,
-                        fecha_fin: fechaTerminoMantencion,
-                        observaciones: observacionesMantencion
-                    };
-                    
-                    const mantencionResponse = await productosService.finalizarMantencion(mantencionData);
-                    if (mantencionResponse && mantencionResponse.success) {
-                        showSnackbar('Producto guardado y mantención finalizada correctamente', 'success');
-                    } else {
-                        throw new Error(mantencionResponse?.message || 'Error al finalizar mantención');
-                    }
-                }
             } else if (formData.estado !== 'ASIGNADO') {
                 showSnackbar(
                     producto ? 'Producto actualizado correctamente' : 'Producto creado correctamente', 
@@ -2360,7 +2542,9 @@ function ProductoForm({ open, onClose, producto, onSave }) {
             numero_serie: '',
             condicion: 'NUEVO',
             bodega_id: '',
-            estado: 'DISPONIBLE'
+            estado: 'DISPONIBLE',
+            es_granel: false,
+            cantidad: 1
         });
         setErrores({});
         setHistorialUso([]);
@@ -2700,19 +2884,65 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             </FormControl>
                         </Grid>
 
+                        <Grid item xs={12}>
+                            <Paper variant="outlined" sx={{ p: 2, bgcolor: formData.es_granel ? alpha('#7C3AED', 0.05) : 'transparent', borderColor: formData.es_granel ? '#7C3AED' : 'divider' }}>
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            checked={formData.es_granel}
+                                            onChange={(e) => setFormData({ ...formData, es_granel: e.target.checked })}
+                                            color="secondary"
+                                        />
+                                    }
+                                    label={
+                                        <Box>
+                                            <Typography variant="subtitle2" fontWeight={600} color={formData.es_granel ? '#7C3AED' : 'text.primary'}>
+                                                Producto a Granel / Insumo (Sin N° de Serie / Sin QR)
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Activa esta opción para cables, conectores u otros insumos que se manejan por cantidad total en stock y se entregan mediante descuento directo.
+                                            </Typography>
+                                        </Box>
+                                    }
+                                />
+                            </Paper>
+                        </Grid>
+
+                        {formData.es_granel && (
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Cantidad inicial en Stock *"
+                                    name="cantidad"
+                                    type="number"
+                                    value={formData.cantidad}
+                                    onChange={handleChange}
+                                    error={!!errores.cantidad}
+                                    helperText={errores.cantidad || "Stock total disponible (ej: 10 unidades)"}
+                                    size="small"
+                                    disabled={loading}
+                                    required
+                                    inputProps={{ min: 1 }}
+                                    InputProps={{
+                                        startAdornment: <InputAdornment position="start"><InventoryIcon fontSize="small" sx={{ color: '#7C3AED' }} /></InputAdornment>
+                                    }}
+                                />
+                            </Grid>
+                        )}
+
                         <Grid item xs={12} sm={6}>
                             <TextField
                                 fullWidth
-                                label="Número de serie * (único)"
+                                label={formData.es_granel ? "Número de serie (Opcional / A Granel)" : "Número de serie * (único)"}
                                 name="numero_serie"
                                 value={formData.numero_serie}
                                 onChange={handleChange}
                                 error={!!errores.numero_serie}
-                                helperText={errores.numero_serie}
+                                helperText={errores.numero_serie || (formData.es_granel ? "Opcional para insumos a granel" : "")}
                                 size="small"
-                                placeholder="Ej: SN-2024-001"
+                                placeholder={formData.es_granel ? "A granel (Sin serie)" : "Ej: SN-2024-001"}
                                 disabled={loading}
-                                required
+                                required={!formData.es_granel}
                                 InputProps={{
                                     startAdornment: <InputAdornment position="start"><QrCodeIcon fontSize="small" /></InputAdornment>
                                 }}
@@ -2954,124 +3184,7 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             />
                         </Grid>
 
-                        <Grid item xs={12}>
-                            <Typography variant="subtitle2" fontWeight={600} color={colors.primary}>
-                                Mantención / Reparación
-                            </Typography>
-                            <Divider sx={{ mb: 2 }} />
-                            
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Acción de Mantención</InputLabel>
-                                <Select
-                                    value={accionMantencion}
-                                    onChange={(e) => {
-                                        setAccionMantencion(e.target.value);
-                                        setMostrarMantencion(e.target.value !== 'ninguna');
-                                    }}
-                                    label="Acción de Mantención"
-                                    disabled={loading}
-                                >
-                                    <MenuItem value="ninguna">Sin acción de mantención</MenuItem>
-                                    <MenuItem value="iniciar">Iniciar Mantención / Reparación</MenuItem>
-                                    <MenuItem value="finalizar">Finalizar Mantención / Reparación</MenuItem>
-                                </Select>
-                            </FormControl>
 
-                            {mostrarMantencion && accionMantencion === 'iniciar' && (
-                                <Stack spacing={2} sx={{ mt: 2 }}>
-                                    <Alert severity="info">
-                                        Al iniciar una mantención, el estado del producto cambiará a <strong>{tipoMantencion === 'REPARACION' ? 'EN REPARACIÓN' : 'EN MANTENCIÓN'}</strong>
-                                    </Alert>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel>Tipo</InputLabel>
-                                        <Select
-                                            value={tipoMantencion}
-                                            onChange={(e) => setTipoMantencion(e.target.value)}
-                                            label="Tipo"
-                                            disabled={loading}
-                                        >
-                                            <MenuItem value="RUTINA">Mantención de Rutina</MenuItem>
-                                            <MenuItem value="REPARACION">Reparación</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    <TextField
-                                        fullWidth
-                                        type="date"
-                                        label="Fecha de inicio"
-                                        value={fechaInicioMantencion}
-                                        onChange={(e) => setFechaInicioMantencion(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                        size="small"
-                                        disabled={loading}
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        label="Responsable *"
-                                        value={responsableMantencion}
-                                        onChange={(e) => setResponsableMantencion(e.target.value)}
-                                        size="small"
-                                        placeholder="Nombre del responsable"
-                                        disabled={loading}
-                                        required
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        label="Descripción del trabajo *"
-                                        value={descripcionMantencion}
-                                        onChange={(e) => setDescripcionMantencion(e.target.value)}
-                                        multiline
-                                        rows={3}
-                                        size="small"
-                                        placeholder="Describa el trabajo a realizar..."
-                                        disabled={loading}
-                                        required
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        label="Costo estimado (opcional)"
-                                        value={costoMantencion}
-                                        onChange={(e) => setCostoMantencion(e.target.value)}
-                                        type="number"
-                                        InputProps={{
-                                            startAdornment: <InputAdornment position="start">$</InputAdornment>
-                                        }}
-                                        size="small"
-                                        inputProps={{ min: 0, step: 100 }}
-                                        disabled={loading}
-                                    />
-                                </Stack>
-                            )}
-
-                            {mostrarMantencion && accionMantencion === 'finalizar' && (
-                                <Stack spacing={2} sx={{ mt: 2 }}>
-                                    <Alert severity="info">
-                                        Al finalizar la mantención, el estado del producto volverá a <strong>DISPONIBLE</strong>
-                                    </Alert>
-                                    <TextField
-                                        fullWidth
-                                        type="date"
-                                        label="Fecha de término *"
-                                        value={fechaTerminoMantencion}
-                                        onChange={(e) => setFechaTerminoMantencion(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                        size="small"
-                                        disabled={loading}
-                                        required
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        label="Observaciones"
-                                        value={observacionesMantencion}
-                                        onChange={(e) => setObservacionesMantencion(e.target.value)}
-                                        multiline
-                                        rows={3}
-                                        size="small"
-                                        placeholder="Ingrese observaciones sobre la mantención finalizada..."
-                                        disabled={loading}
-                                    />
-                                </Stack>
-                            )}
-                        </Grid>
 
                         {historialMantenciones.length > 0 && (
                             <Grid item xs={12}>
@@ -3238,6 +3351,112 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     );
 }
 
+// Componente Modal para Descontar Stock / Entrega a Granel
+function DescontarStockDialog({ open, onClose, producto, onSuccess }) {
+    const [cantidad, setCantidad] = useState(1);
+    const [observacion, setObservacion] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (open) {
+            setCantidad(1);
+            setObservacion('');
+            setError('');
+        }
+    }, [open]);
+
+    const handleSubmit = async () => {
+        const cantNum = parseInt(cantidad);
+        if (!cantNum || cantNum <= 0) {
+            setError('Ingrese una cantidad válida mayor a 0');
+            return;
+        }
+        const stockActual = producto?.cantidad !== undefined && producto?.cantidad !== null ? producto.cantidad : 1;
+        if (cantNum > stockActual) {
+            setError(`La cantidad (${cantNum}) no puede superar el stock disponible (${stockActual})`);
+            return;
+        }
+        setLoading(true);
+        setError('');
+        try {
+            await productosService.descontarStock(producto.id, cantNum, observacion);
+            if (onSuccess) {
+                onSuccess(`Se entregaron ${cantNum} unidad(es) de ${producto.nombre}. Stock restante: ${stockActual - cantNum}`);
+            }
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.message || err.message || 'Error al descontar stock');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ bgcolor: alpha('#7C3AED', 0.08), color: '#7C3AED', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <InventoryIcon />
+                <Typography variant="h6">Descontar Stock / Entrega a Granel</Typography>
+            </DialogTitle>
+            <DialogContent dividers sx={{ pt: 2 }}>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                
+                <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: alpha('#7C3AED', 0.04), borderColor: alpha('#7C3AED', 0.2) }}>
+                    <Typography variant="subtitle2" fontWeight={600} color="#7C3AED">
+                        {producto?.nombre}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Stock Actual Disponible: <strong>{producto?.cantidad !== undefined ? producto.cantidad : 1} unidades</strong>
+                    </Typography>
+                </Paper>
+
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Esta entrega descontará la cantidad ingresada del inventario y guardará la observación. No genera Acta en PDF ni requiere firma.
+                </Alert>
+
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            label="Cantidad a Entregar *"
+                            type="number"
+                            value={cantidad}
+                            onChange={(e) => setCantidad(e.target.value)}
+                            inputProps={{ min: 1, max: producto?.cantidad || 1 }}
+                            size="small"
+                            required
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            label="Observación / Destinatario"
+                            placeholder="Ej: Entregado 2 cables HDMI a Juan Pérez para oficina 301"
+                            value={observacion}
+                            onChange={(e) => setObservacion(e.target.value)}
+                            size="small"
+                        />
+                    </Grid>
+                </Grid>
+            </DialogContent>
+            <DialogActions sx={{ p: 2, gap: 1 }}>
+                <Button onClick={onClose} disabled={loading}>Cancelar</Button>
+                <Button 
+                    variant="contained" 
+                    onClick={handleSubmit} 
+                    disabled={loading}
+                    sx={{ bgcolor: '#7C3AED', '&:hover': { bgcolor: '#6D28D9' } }}
+                    startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                >
+                    Confirmar Entrega
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
@@ -3281,12 +3500,26 @@ const Productos = () => {
     const [openConfirmDelete, setOpenConfirmDelete] = useState(false);
     const [openHistorial, setOpenHistorial] = useState(false);
     const [openAsignacion, setOpenAsignacion] = useState(false);
+    const [openQRModal, setOpenQRModal] = useState(false);
+    const [openDescontarStock, setOpenDescontarStock] = useState(false);
     
     const [selectedProducto, setSelectedProducto] = useState(null);
     const [selectedProductoDetail, setSelectedProductoDetail] = useState(null);
     const [productoParaDisposicion, setProductoParaDisposicion] = useState(null);
     const [productoParaHistorial, setProductoParaHistorial] = useState(null);
     const [productoParaAsignar, setProductoParaAsignar] = useState(null);
+    const [productoParaQR, setProductoParaQR] = useState(null);
+    const [productoParaDescontar, setProductoParaDescontar] = useState(null);
+
+    const handleOpenQRModal = (producto) => {
+        setProductoParaQR(producto);
+        setOpenQRModal(true);
+    };
+
+    const handleCloseQRModal = () => {
+        setOpenQRModal(false);
+        setProductoParaQR(null);
+    };
     const [historialUso, setHistorialUso] = useState([]);
     const [historialMantenciones, setHistorialMantenciones] = useState([]);
     
@@ -3343,6 +3576,7 @@ const Productos = () => {
         disponibles: getProductosActivos(productos).filter(p => p.estado === 'DISPONIBLE').length,
         asignados: getProductosActivos(productos).filter(p => p.estado === 'ASIGNADO' && !getEsPrestamo(p)).length,
         prestamos: getProductosActivos(productos).filter(p => getEsPrestamo(p)).length,
+        qr: getProductosActivos(productos).filter(p => esAptoParaQR(p)).length
     };
 
     const loadExportData = async () => {
@@ -3490,7 +3724,10 @@ const Productos = () => {
         try {
             console.log('🔍 Abriendo detalle para producto:', producto.id);
             
-            const historialData = await productosService.getHistorialUso(producto.id);
+            const [historialData, mantencionesData] = await Promise.all([
+                productosService.getHistorialUso(producto.id).catch(() => []),
+                productosService.getHistorialMantenciones(producto.id).catch(() => [])
+            ]);
             
             if (historialData && historialData.length > 0) {
                 setHistorialUso(historialData);
@@ -3500,7 +3737,9 @@ const Productos = () => {
                 setHistorialUso([]);
             }
 
-            if (producto.historial_mantenciones && producto.historial_mantenciones.length > 0) {
+            if (mantencionesData && mantencionesData.length > 0) {
+                setHistorialMantenciones(mantencionesData);
+            } else if (producto.historial_mantenciones && producto.historial_mantenciones.length > 0) {
                 setHistorialMantenciones(producto.historial_mantenciones);
             } else {
                 setHistorialMantenciones([]);
@@ -3696,6 +3935,8 @@ const Productos = () => {
                 return productosList.filter(p => p.estado === 'ASIGNADO' && !getEsPrestamo(p));
             case 'prestamos':
                 return productosList.filter(p => getEsPrestamo(p));
+            case 'qr':
+                return productosList.filter(p => esAptoParaQR(p));
             default:
                 return productosList;
         }
@@ -4046,7 +4287,7 @@ const Productos = () => {
                                 <StyledTableCell>Condición</StyledTableCell>
                                 <StyledTableCell>Estado / Tipo</StyledTableCell>
                                 <StyledTableCell>Asignado a</StyledTableCell>
-                                <StyledTableCell align="center">Acciones</StyledTableCell>
+                                <StyledTableCell align="center" sx={{ minWidth: 220, width: 220, whiteSpace: 'nowrap' }}>Acciones</StyledTableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -4105,16 +4346,29 @@ const Productos = () => {
                                             <TableCell>{producto.marca || '-'}</TableCell>
                                             <TableCell>{producto.modelo || '-'}</TableCell>
                                             <TableCell>
-                                                <Chip
-                                                    icon={<QrCodeIcon fontSize="small" />}
-                                                    label={producto.numero_serie || 'N/A'}
-                                                    size="small"
-                                                    sx={{ 
-                                                        backgroundColor: alpha(colors.primary, 0.1),
-                                                        color: colors.primary,
-                                                        fontFamily: 'monospace'
-                                                    }}
-                                                />
+                                                {producto.es_granel ? (
+                                                    <Chip
+                                                        icon={<InventoryIcon fontSize="small" />}
+                                                        label={`A GRANEL (${producto.cantidad !== undefined ? producto.cantidad : 1} ud.)`}
+                                                        size="small"
+                                                        sx={{ 
+                                                            backgroundColor: alpha('#7C3AED', 0.1),
+                                                            color: '#7C3AED',
+                                                            fontWeight: 600
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <Chip
+                                                        icon={<QrCodeIcon fontSize="small" />}
+                                                        label={producto.numero_serie || 'N/A'}
+                                                        size="small"
+                                                        sx={{ 
+                                                            backgroundColor: alpha(colors.primary, 0.1),
+                                                            color: colors.primary,
+                                                            fontFamily: 'monospace'
+                                                        }}
+                                                    />
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
@@ -4164,13 +4418,13 @@ const Productos = () => {
                                                     <Typography variant="body2" color="text.secondary">-</Typography>
                                                 )}
                                             </TableCell>
-                                            <TableCell align="center">
-                                                <Stack direction="row" spacing={0.5} justifyContent="center">
+                                            <TableCell align="center" sx={{ minWidth: 220, width: 220, px: 0.5, whiteSpace: 'nowrap' }}>
+                                                <Stack direction="row" spacing={0.25} justifyContent="center" alignItems="center" flexWrap="nowrap">
                                                     <Tooltip title="Ver detalles">
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleOpenDetail(producto)}
-                                                            sx={{ color: colors.info }}
+                                                            sx={{ color: colors.info, p: '3px' }}
                                                         >
                                                             <VisibilityIcon fontSize="small" />
                                                         </IconButton>
@@ -4179,7 +4433,7 @@ const Productos = () => {
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleOpenForm(producto)}
-                                                            sx={{ color: colors.primary }}
+                                                            sx={{ color: colors.primary, p: '3px' }}
                                                         >
                                                             <EditIcon fontSize="small" />
                                                         </IconButton>
@@ -4190,7 +4444,7 @@ const Productos = () => {
                                                             size="small" 
                                                             onClick={() => handleOpenAsignacion(producto)}
                                                             disabled={!disponible}
-                                                            sx={{ color: colors.success }}
+                                                            sx={{ color: colors.success, p: '3px' }}
                                                         >
                                                             <AssignmentIndIcon fontSize="small" />
                                                         </IconButton>
@@ -4200,17 +4454,44 @@ const Productos = () => {
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleOpenHistorial(producto)}
-                                                            sx={{ color: colors.secondary }}
+                                                            sx={{ color: colors.secondary, p: '3px' }}
                                                         >
                                                             <HistoryIcon fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>
                                                     
+                                                    {producto.es_granel && (
+                                                         <Tooltip title="Entregar / Descontar Stock">
+                                                             <IconButton 
+                                                                 size="small" 
+                                                                 onClick={() => {
+                                                                     setProductoParaDescontar(producto);
+                                                                     setOpenDescontarStock(true);
+                                                                 }}
+                                                                 sx={{ color: '#7C3AED', p: '3px' }}
+                                                             >
+                                                                 <RemoveCircleOutlineIcon fontSize="small" />
+                                                             </IconButton>
+                                                         </Tooltip>
+                                                     )}
+                                                    
+                                                    {esAptoParaQR(producto) && (
+                                                        <Tooltip title="Generar / Ver Código QR">
+                                                            <IconButton 
+                                                                size="small" 
+                                                                onClick={() => handleOpenQRModal(producto)}
+                                                                sx={{ color: '#7C3AED', p: '3px', '&:hover': { bgcolor: alpha('#7C3AED', 0.1) } }}
+                                                            >
+                                                                <QrCodeIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+
                                                     <Tooltip title="Dar de baja / Donar">
                                                         <IconButton 
                                                             size="small" 
                                                             onClick={() => handleEliminarDonar(producto)}
-                                                            sx={{ color: colors.error }}
+                                                            sx={{ color: colors.error, p: '3px' }}
                                                         >
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
@@ -4279,6 +4560,22 @@ const Productos = () => {
                     onClose={handleCloseAsignacion}
                     producto={productoParaAsignar}
                     onSuccess={handleAsignacionSuccess}
+                />
+                
+                <DescontarStockDialog
+                    open={openDescontarStock}
+                    onClose={() => setOpenDescontarStock(false)}
+                    producto={productoParaDescontar}
+                    onSuccess={(msg) => {
+                        showSnackbar(msg, 'success');
+                        fetchData(false);
+                    }}
+                />
+
+                <ProductoQRModal
+                    open={openQRModal}
+                    onClose={handleCloseQRModal}
+                    producto={productoParaQR}
                 />
 
                 <Snackbar 

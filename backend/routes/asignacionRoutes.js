@@ -442,6 +442,48 @@ function generarActaRecepcion(datos) {
 // ENDPOINTS - GET
 // ============================================
 
+router.get('/producto/:productoId/historial', async (req, res) => {
+    try {
+        const { productoId } = req.params;
+        const idNum = validarId(productoId, 'ID de producto');
+        console.log(`📥 GET /api/asignaciones/producto/${idNum}/historial`);
+        const pool = await getConnection();
+        const result = await pool.request()
+            .input('productoId', sql.Int, idNum)
+            .query(`
+                SELECT 
+                    a.id, 
+                    a.producto_id, 
+                    a.colaborador_id, 
+                    a.motivo, 
+                    a.observaciones,
+                    a.fecha_asignacion, 
+                    a.fecha_devolucion, 
+                    a.es_prestamo,
+                    a.condicion_entrega,
+                    p.nombre as producto_nombre, 
+                    p.numero_serie, 
+                    p.marca, 
+                    p.modelo,
+                    c.nombre as colaborador_nombre, 
+                    c.rut as colaborador_rut,
+                    c.email as colaborador_email, 
+                    c.cargo as colaborador_cargo,
+                    c.departamento as colaborador_departamento
+                FROM INV.asignaciones a
+                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                WHERE a.producto_id = @productoId
+                ORDER BY a.fecha_asignacion DESC
+            `);
+        
+        res.json({ success: true, data: result.recordset });
+    } catch (error) {
+        console.error('❌ Error en GET /asignaciones/producto/:productoId/historial:', error);
+        res.status(500).json({ success: false, message: error.message, data: [] });
+    }
+});
+
 router.get('/activas', async (req, res) => {
     try {
         console.log('📥 GET /api/asignaciones/activas');
@@ -469,7 +511,7 @@ router.get('/activas', async (req, res) => {
             FROM INV.asignaciones a
             LEFT JOIN INV.productos p ON a.producto_id = p.id
             LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-            WHERE a.fecha_devolucion IS NULL
+            WHERE a.fecha_devolucion IS NULL AND (p.id_estado_equipo = 2 OR a.es_prestamo = 1 OR a.es_prestamo = 'true')
             ORDER BY a.fecha_asignacion DESC
         `);
         
@@ -618,18 +660,138 @@ router.get('/buscar-documento/:asignacionId/:tipo', async (req, res) => {
         console.log(`📥 GET /api/asignaciones/buscar-documento/${asignacionId}/${tipo}`);
         
         if (!fs.existsSync(DOCS_DIR)) {
-            return res.json({ success: false, message: 'Directorio no encontrado', filename: null });
+            fs.mkdirSync(DOCS_DIR, { recursive: true });
         }
         
         const files = fs.readdirSync(DOCS_DIR);
-        const pattern = tipo === 'asignacion' 
-            ? `acta_asignacion_${asignacionId}` 
-            : `acta_recepcion_${asignacionId}`;
+        const patterns = tipo === 'asignacion' 
+            ? [`acta_asignacion_${asignacionId}`, `asignacion_${asignacionId}`] 
+            : [`acta_recepcion_${asignacionId}`, `recepcion_${asignacionId}`];
         
-        const foundFile = files.find(file => file.includes(pattern) && file.endsWith('.pdf'));
+        let foundFile = files.find(file => patterns.some(p => file.includes(p)) && file.endsWith('.pdf'));
         
+        // Si no existe el archivo físico en disco para asignación, generarlo dinámicamente
+        if (!foundFile && tipo === 'asignacion') {
+            console.log(`⚡ Intentando generar Acta de Asignación dinámicamente para ID: ${asignacionId}...`);
+            try {
+                const pool = await getConnection();
+                const asigRes = await pool.request()
+                    .input('id', sql.Int, asignacionId)
+                    .query(`
+                        SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.motivo, a.observaciones, a.es_prestamo,
+                               p.nombre as producto_nombre, p.marca as producto_marca, p.modelo as producto_modelo, p.numero_serie, p.condicion as producto_condicion,
+                               c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
+                               c.cargo as colaborador_cargo, c.departamento as colaborador_departamento, c.direccion as colaborador_direccion
+                        FROM INV.asignaciones a
+                        LEFT JOIN INV.productos p ON a.producto_id = p.id
+                        LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                        WHERE a.id = @id
+                    `);
+
+                if (asigRes.recordset.length > 0) {
+                    const row = asigRes.recordset[0];
+                    const documentoData = {
+                        id_asignacion: row.id,
+                        colaborador: {
+                            nombre: row.colaborador_nombre || 'Colaborador',
+                            rut: row.colaborador_rut || '-',
+                            email: row.colaborador_email || '',
+                            cargo: row.colaborador_cargo || '-',
+                            departamento: row.colaborador_departamento || '-',
+                            direccion: row.colaborador_direccion || '-'
+                        },
+                        productos: [{
+                            tipo: 'Equipo',
+                            nombre: row.producto_nombre || 'Producto',
+                            marca: row.producto_marca || 'N/A',
+                            modelo: row.producto_modelo || 'N/A',
+                            numero_serie: row.numero_serie || 'N/A',
+                            condicion: row.producto_condicion || 'NUEVO',
+                            cantidad: 1
+                        }],
+                        fecha_asignacion: row.fecha_asignacion || new Date(),
+                        motivo: row.motivo || 'Asignación de equipo',
+                        observaciones: row.observaciones || 'Generado por el sistema',
+                        firma_trabajador: row.colaborador_nombre || 'Firma registrada',
+                        es_prestamo: row.es_prestamo === true || row.es_prestamo === 1
+                    };
+
+                    const pdfBuffer = await generarActaAsignacion(documentoData);
+                    if (pdfBuffer && pdfBuffer.length > 0) {
+                        const newFilename = `acta_asignacion_${row.id}_${Date.now()}.pdf`;
+                        const newFilepath = path.join(DOCS_DIR, newFilename);
+                        fs.writeFileSync(newFilepath, pdfBuffer);
+                        foundFile = newFilename;
+                        console.log(`✅ Acta de asignación generada dinámicamente: ${newFilename}`);
+                    }
+                }
+            } catch (genError) {
+                console.error('⚠️ Error generando PDF a demanda:', genError);
+            }
+        }
+
+        // Si no existe el archivo físico para recepción y está finalizado, generarlo dinámicamente
+        if (!foundFile && tipo === 'recepcion') {
+            console.log(`⚡ Intentando generar Acta de Recepción dinámicamente para ID: ${asignacionId}...`);
+            try {
+                const pool = await getConnection();
+                const asigRes = await pool.request()
+                    .input('id', sql.Int, asignacionId)
+                    .query(`
+                        SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.fecha_devolucion, a.motivo, a.observaciones, a.condicion_entrega, a.es_prestamo,
+                               p.nombre as producto_nombre, p.marca as producto_marca, p.modelo as producto_modelo, p.numero_serie, p.condicion as producto_condicion,
+                               c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
+                               c.cargo as colaborador_cargo, c.departamento as colaborador_departamento
+                        FROM INV.asignaciones a
+                        LEFT JOIN INV.productos p ON a.producto_id = p.id
+                        LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                        WHERE a.id = @id AND a.fecha_devolucion IS NOT NULL
+                    `);
+
+                if (asigRes.recordset.length > 0) {
+                    const row = asigRes.recordset[0];
+                    const recepcionData = {
+                        id_asignacion: row.id,
+                        colaborador: {
+                            nombre: row.colaborador_nombre || 'Colaborador',
+                            rut: row.colaborador_rut || '-',
+                            email: row.colaborador_email || '',
+                            cargo: row.colaborador_cargo || '-',
+                            departamento: row.colaborador_departamento || '-'
+                        },
+                        productos: [{
+                            tipo: 'Equipo',
+                            nombre: row.producto_nombre || 'Producto',
+                            marca: row.producto_marca || 'N/A',
+                            modelo: row.producto_modelo || 'N/A',
+                            numero_serie: row.numero_serie || 'N/A',
+                            condicion: row.producto_condicion || 'NUEVO',
+                            cantidad: 1
+                        }],
+                        fecha_recepcion: row.fecha_devolucion || new Date(),
+                        motivo: row.motivo || 'Devolución de equipo',
+                        observaciones: row.observaciones || 'Generado por el sistema',
+                        condicion_entrega: row.condicion_entrega || 'BUENO',
+                        firma_trabajador: row.colaborador_nombre || 'Firma registrada',
+                        es_prestamo: row.es_prestamo === true || row.es_prestamo === 1
+                    };
+
+                    const pdfBuffer = await generarActaRecepcion(recepcionData);
+                    if (pdfBuffer && pdfBuffer.length > 0) {
+                        const newFilename = `acta_recepcion_${row.id}_${Date.now()}.pdf`;
+                        const newFilepath = path.join(DOCS_DIR, newFilename);
+                        fs.writeFileSync(newFilepath, pdfBuffer);
+                        foundFile = newFilename;
+                        console.log(`✅ Acta de recepción generada dinámicamente: ${newFilename}`);
+                    }
+                }
+            } catch (genError) {
+                console.error('⚠️ Error generando PDF de recepción a demanda:', genError);
+            }
+        }
+
         if (foundFile) {
-            res.json({ success: true, data: { filename: foundFile } });
+            res.json({ success: true, data: { filename: foundFile }, filename: foundFile });
         } else {
             res.json({ success: false, message: 'Documento no encontrado', filename: null });
         }
@@ -655,7 +817,7 @@ router.get('/descargar/:filename', (req, res) => {
             const files = fs.readdirSync(DOCS_DIR);
             const idMatch = safeFilename.match(/\d+/);
             if (idMatch) {
-                const foundFile = files.find(f => f.includes(`acta_asignacion_${idMatch[0]}`) && f.endsWith('.pdf'));
+                const foundFile = files.find(f => (f.includes(`acta_asignacion_${idMatch[0]}`) || f.includes(`asignacion_${idMatch[0]}`) || f.includes(`acta_recepcion_${idMatch[0]}`) || f.includes(`recepcion_${idMatch[0]}`)) && f.endsWith('.pdf'));
                 if (foundFile) {
                     const foundPath = path.join(DOCS_DIR, foundFile);
                     res.setHeader('Content-Type', 'application/pdf');
@@ -930,7 +1092,14 @@ router.post('/', async (req, res) => {
         const producto = productoCheck.recordset[0];
         
         if (producto.id_estado_equipo !== ESTADOS.DISPONIBLE) {
-            return res.status(400).json({ success: false, message: `Producto no disponible. Estado: ${getEstadoTexto(producto.id_estado_equipo)}` });
+            // Verificar si el producto tiene asignaciones activas reales en INV.asignaciones
+            const asignacionesActivasCount = await pool.request()
+                .input('producto_id', sql.Int, productoIdNum)
+                .query(`SELECT COUNT(*) as count FROM INV.asignaciones WHERE producto_id = @producto_id AND fecha_devolucion IS NULL`);
+            
+            if (asignacionesActivasCount.recordset[0].count > 0) {
+                return res.status(400).json({ success: false, message: `Producto no disponible. Estado: ${getEstadoTexto(producto.id_estado_equipo)}` });
+            }
         }
         
         // Obtener datos del colaborador
@@ -955,6 +1124,17 @@ router.post('/', async (req, res) => {
         // INICIAR TRANSACCIÓN
         transaction = new sql.Transaction(pool);
         await transaction.begin();
+        
+        // Cerrar cualquier asignación abierta anterior para este producto
+        await transaction.request()
+            .input('producto_id', sql.Int, productoIdNum)
+            .input('fecha_cierre', sql.DateTime, fechaAsignacionValue)
+            .query(`
+                UPDATE INV.asignaciones 
+                SET fecha_devolucion = @fecha_cierre,
+                    observaciones_devolucion = 'Cierre automático por nueva asignación'
+                WHERE producto_id = @producto_id AND fecha_devolucion IS NULL
+            `);
         
         const insertAsignacion = await transaction.request()
             .input('producto_id', sql.Int, productoIdNum)
@@ -1145,6 +1325,17 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
                     observaciones = @observaciones,
                     firma_trabajador_devolucion = @firma_trabajador_devolucion
                 WHERE id = @id
+            `);
+
+        // Asegurar que cualquier otra asignación abierta para este producto también sea cerrada
+        await transaction.request()
+            .input('producto_id', sql.Int, asignacion.producto_id)
+            .input('fecha_devolucion', sql.DateTime, fechaRecepcionValue)
+            .query(`
+                UPDATE INV.asignaciones 
+                SET fecha_devolucion = @fecha_devolucion,
+                    observaciones_devolucion = 'Cierre automático por devolución de equipo'
+                WHERE producto_id = @producto_id AND fecha_devolucion IS NULL
             `);
         
         await transaction.request()

@@ -105,7 +105,8 @@ import {
     Construction as ConstructionIcon,
     People as PeopleIcon,
     Science as ScienceIcon,
-    Receipt as ReceiptIcon
+    Receipt as ReceiptIcon,
+    Build as BuildIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 import historialService from '../services/historialService';
@@ -365,9 +366,10 @@ const HistorialPage = () => {
         { text: 'Bodegas', icon: <WarehouseIcon />, path: '/bodegas' },
         { text: 'Colaboradores', icon: <PersonIcon />, path: '/colaboradores' },
         { text: 'Asignaciones', icon: <AssignmentIcon />, path: '/asignacion' },
-        { text: 'Stock por Marca/Modelo', icon: <Inventory2Icon />, path: '/stock' },
-        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
+        { text: 'Mantención', icon: <BuildIcon />, path: '/mantenciones' },
         { text: 'Anexos', icon: <DescriptionIcon />, path: '/anexos' },
+        { text: 'Stock', icon: <Inventory2Icon />, path: '/stock' },
+        { text: 'Historial', icon: <HistoryIcon />, path: '/historial' },
     ];
 
     // Opciones para filtro de tipo de documento

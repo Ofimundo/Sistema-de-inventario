@@ -394,30 +394,51 @@ const AnexosPage = () => {
         setDeleteDialogOpen(true);
     };
 
+    const formatearFechaSegura = (fechaStr) => {
+        if (!fechaStr) return 'N/A';
+        try {
+            const d = new Date(fechaStr);
+            if (isNaN(d.getTime())) return 'N/A';
+            return d.toLocaleDateString('es-CL');
+        } catch (e) {
+            return 'N/A';
+        }
+    };
+
     const confirmarEliminar = async () => {
         if (!anexoToDelete) return;
+        const idToDelete = anexoToDelete.id;
         setEliminando(true);
         try {
-            const response = await api.delete(`/anexos/${anexoToDelete.id}`);
-            if (response.data.success) {
-                setSuccess('Anexo eliminado correctamente');
-                await cargarAnexos();
+            const response = await api.delete(`/anexos/${idToDelete}`);
+            if (response.data?.success) {
+                if (isMounted.current) {
+                    setSuccess('Anexo eliminado correctamente');
+                    setAnexos(prev => {
+                        const actualizados = prev.filter(a => a.id !== idToDelete);
+                        if (page > 0 && page * rowsPerPage >= actualizados.length) {
+                            setPage(Math.max(0, page - 1));
+                        }
+                        return actualizados;
+                    });
+                }
                 handleCloseDeleteDialog();
+                await cargarAnexos();
             } else {
-                setError(response.data.message || 'Error al eliminar el anexo');
+                if (isMounted.current) setError(response.data?.message || 'Error al eliminar el anexo');
             }
         } catch (error) {
             console.error('Error:', error);
-            setError(error.response?.data?.message || 'Error al eliminar el anexo');
+            if (isMounted.current) setError(error.response?.data?.message || error.message || 'Error al eliminar el anexo');
         } finally {
-            setEliminando(false);
+            if (isMounted.current) setEliminando(false);
         }
     };
 
     const handleCloseDeleteDialog = () => {
         setDeleteDialogOpen(false);
         setTimeout(() => {
-            setAnexoToDelete(null);
+            if (isMounted.current) setAnexoToDelete(null);
         }, 300);
     };
 
@@ -822,7 +843,7 @@ const AnexosPage = () => {
                                                         sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary }}
                                                     />
                                                 </TableCell>
-                                                <TableCell>{anexo.fecha_creacion ? new Date(anexo.fecha_creacion).toLocaleDateString() : 'N/A'}</TableCell>
+                                                 <TableCell>{formatearFechaSegura(anexo.fecha_creacion)}</TableCell>
                                                 <TableCell align="center">
                                                     <Stack direction="row" spacing={1} justifyContent="center">
                                                         <Tooltip title="Descargar">
@@ -894,7 +915,7 @@ const AnexosPage = () => {
                                 <Box component="span" display="block" mt={1} color="text.secondary">
                                     <strong>Colaborador:</strong> {anexoToDelete.colaborador_nombre || 'N/A'}<br />
                                     <strong>Producto:</strong> {anexoToDelete.producto_nombre || 'N/A'}<br />
-                                    <strong>Fecha:</strong> {anexoToDelete.fecha_creacion ? new Date(anexoToDelete.fecha_creacion).toLocaleDateString() : 'N/A'}
+                                    <strong>Fecha:</strong> {formatearFechaSegura(anexoToDelete.fecha_creacion)}
                                 </Box>
                             )}
                         </Typography>

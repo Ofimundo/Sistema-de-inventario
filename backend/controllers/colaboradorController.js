@@ -24,9 +24,10 @@ const colaboradorController = {
                     c.direccion,
                     c.fecha_nacimiento,
                     COUNT(a.id) as total_asignaciones,
-                    SUM(CASE WHEN a.fecha_devolucion IS NULL THEN 1 ELSE 0 END) as asignaciones_activas
+                    SUM(CASE WHEN a.fecha_devolucion IS NULL AND p.id_estado_equipo = 2 THEN 1 ELSE 0 END) as asignaciones_activas
                 FROM [INV].[colaboradores] c
                 LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
+                LEFT JOIN [INV].[productos] p ON a.producto_id = p.id
             `;
             
             const conditions = [];
@@ -115,9 +116,10 @@ const colaboradorController = {
                         c.direccion,
                         c.fecha_nacimiento,
                         COUNT(a.id) as total_asignaciones,
-                        SUM(CASE WHEN a.fecha_devolucion IS NULL THEN 1 ELSE 0 END) as asignaciones_activas
+                        SUM(CASE WHEN a.fecha_devolucion IS NULL AND p.id_estado_equipo = 2 THEN 1 ELSE 0 END) as asignaciones_activas
                     FROM [INV].[colaboradores] c
                     LEFT JOIN [INV].[asignaciones] a ON c.id = a.colaborador_id
+                    LEFT JOIN [INV].[productos] p ON a.producto_id = p.id
                     WHERE c.id = @id
                     GROUP BY c.id, c.nombre, c.rut, c.email, c.telefono, c.cargo, c.departamento, c.empresa, c.estado, c.fecha_ingreso, c.direccion, c.fecha_nacimiento
                 `);
@@ -147,7 +149,7 @@ const colaboradorController = {
                         p.modelo,
                         p.precio,
                         CASE 
-                            WHEN a.fecha_devolucion IS NULL THEN 'ACTIVA'
+                            WHEN a.fecha_devolucion IS NULL AND p.id_estado_equipo = 2 THEN 'ACTIVA'
                             ELSE 'FINALIZADA'
                         END as estado_asignacion
                     FROM [INV].[asignaciones] a
@@ -237,25 +239,35 @@ const colaboradorController = {
 
             const pool = await getConnection();
 
-            const rutExistente = await pool.request()
-                .input('rut', sql.NVarChar, rut)
-                .query('SELECT id FROM [INV].[colaboradores] WHERE rut = @rut');
+            const cleanRut = (r) => r ? String(r).replace(/[^0-9kK]/g, '').toUpperCase() : '';
+            const rutLimpio = cleanRut(rut);
 
-            if (rutExistente.recordset.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El RUT ya está registrado'
-                });
+            if (rutLimpio) {
+                const rutExistente = await pool.request()
+                    .input('rut', sql.NVarChar, rut)
+                    .input('rutLimpio', sql.NVarChar, rutLimpio)
+                    .query(`
+                        SELECT id, nombre FROM [INV].[colaboradores] 
+                        WHERE rut = @rut 
+                           OR REPLACE(REPLACE(REPLACE(rut, '.', ''), '-', ''), ' ', '') = @rutLimpio
+                    `);
+
+                if (rutExistente.recordset.length > 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `El colaborador con RUT ${rut} ya se encuentra registrado (${rutExistente.recordset[0].nombre}).`
+                    });
+                }
             }
 
             const emailExistente = await pool.request()
                 .input('email', sql.NVarChar, email)
-                .query('SELECT id FROM [INV].[colaboradores] WHERE email = @email');
+                .query('SELECT id, nombre FROM [INV].[colaboradores] WHERE LOWER(email) = LOWER(@email)');
 
             if (emailExistente.recordset.length > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'El email ya está registrado'
+                    message: `El correo electrónico ${email} ya se encuentra registrado por el colaborador ${emailExistente.recordset[0].nombre}.`
                 });
             }
 
@@ -293,9 +305,17 @@ const colaboradorController = {
             });
         } catch (error) {
             console.error('❌ Error en createColaborador:', error);
-            res.status(500).json({
+            let userMsg = error.message || 'Error al guardar el colaborador';
+            if (error.number === 2627 || error.number === 2601 || (error.message && (
+                error.message.includes('UNIQUE KEY constraint') || 
+                error.message.includes('duplicate key') || 
+                error.message.includes('UQ__colabora')
+            ))) {
+                userMsg = 'El colaborador ya se encuentra registrado en el sistema (RUT o correo duplicado).';
+            }
+            res.status(400).json({
                 success: false,
-                message: error.message
+                message: userMsg
             });
         }
     },
@@ -574,7 +594,7 @@ const colaboradorController = {
             if (empresas.length === 0) {
                 return res.json({
                     success: true,
-                    data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO']
+                    data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY']
                 });
             }
 
@@ -586,7 +606,7 @@ const colaboradorController = {
             console.error('❌ Error en getEmpresas:', error);
             res.json({
                 success: true,
-                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO']
+                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY']
             });
         }
     }

@@ -89,19 +89,22 @@ const colors = {
 const OPCIONES_EMPRESA = [
     { valor: 'GLOBAL', label: 'Global', color: '#8B5CF6', icon: '🌍' },
     { valor: 'DREAMTEC', label: 'Dreamtec', color: '#EC4899', icon: '✨' },
-    { valor: 'OFIMUNDO', label: 'Ofimundo', color: '#0A66C2', icon: '🏢' }
+    { valor: 'OFIMUNDO', label: 'Ofimundo', color: '#0A66C2', icon: '🏢' },
+    { valor: 'HIWAY', label: 'HIway', color: '#10B981', icon: '🛣️' }
 ];
 
 // Obtener color de empresa
 const getEmpresaColor = (empresa) => {
-    const found = OPCIONES_EMPRESA.find(e => e.valor === empresa);
+    if (!empresa) return '#6B7280';
+    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === String(empresa).trim().toUpperCase());
     return found ? found.color : '#6B7280';
 };
 
 // Obtener label de empresa
 const getEmpresaLabel = (empresa) => {
-    const found = OPCIONES_EMPRESA.find(e => e.valor === empresa);
-    return found ? found.label : empresa || 'No asignada';
+    if (!empresa) return 'No asignada';
+    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === String(empresa).trim().toUpperCase());
+    return found ? found.label : String(empresa);
 };
 
 // Styled components
@@ -269,18 +272,22 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
     const formatDate = (dateString) => {
         if (!dateString) return 'No registrada';
         try {
-            return format(new Date(dateString), 'dd/MM/yyyy', { locale: es });
+            const parsed = new Date(dateString);
+            if (isNaN(parsed.getTime())) return String(dateString);
+            return format(parsed, 'dd/MM/yyyy', { locale: es });
         } catch {
-            return dateString;
+            return String(dateString);
         }
     };
 
     const formatDateTime = (dateString) => {
         if (!dateString) return 'No registrada';
         try {
-            return format(new Date(dateString), "dd/MM/yyyy HH:mm", { locale: es });
+            const parsed = new Date(dateString);
+            if (isNaN(parsed.getTime())) return String(dateString);
+            return format(parsed, "dd/MM/yyyy HH:mm", { locale: es });
         } catch {
-            return dateString;
+            return String(dateString);
         }
     };
 
@@ -576,6 +583,12 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             setErrores({ ...errores, [name]: null });
         }
         
+        if (name === 'empresa' && value?.toUpperCase() === 'HIWAY') {
+            if (errores.email && !formData.email?.trim()) {
+                setErrores(prev => ({ ...prev, email: null }));
+            }
+        }
+        
         if (errorMessage) setErrorMessage('');
     };
 
@@ -592,9 +605,15 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             nuevosErrores.nombre = 'El nombre es requerido';
         }
 
-        if (!formData.email?.trim()) {
-            nuevosErrores.email = 'El email es requerido';
-        } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        const isHiway = formData.empresa?.toUpperCase() === 'HIWAY';
+
+        if (!isHiway) {
+            if (!formData.email?.trim()) {
+                nuevosErrores.email = 'El email es requerido';
+            } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+                nuevosErrores.email = 'Email inválido';
+            }
+        } else if (formData.email?.trim() && !/\S+@\S+\.\S+/.test(formData.email)) {
             nuevosErrores.email = 'Email inválido';
         }
 
@@ -639,7 +658,16 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             }
         } catch (error) {
             console.error('❌ Error:', error);
-            setErrorMessage(error.message || 'Error al procesar la solicitud');
+            const serverMsg = error.response?.data?.message || error.message || 'Error al procesar la solicitud';
+            let finalMsg = serverMsg;
+            if (
+                serverMsg.includes('UNIQUE KEY constraint') || 
+                serverMsg.includes('duplicate key') || 
+                serverMsg.includes('UQ__colabora')
+            ) {
+                finalMsg = `El colaborador con RUT ${formData.rut} ya se encuentra registrado en el sistema.`;
+            }
+            setErrorMessage(finalMsg);
             setIsSubmitting(false);
             setLoading(false);
         }
@@ -737,7 +765,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     <Grid item xs={12} md={6}>
                         <TextField
                             fullWidth
-                            label="Email *"
+                            label={formData.empresa?.toUpperCase() === 'HIWAY' ? "Email (opcional)" : "Email *"}
                             name="email"
                             type="email"
                             value={formData.email}
@@ -968,6 +996,7 @@ const ColaboradoresPage = () => {
     const [productosAsignados, setProductosAsignados] = useState([]);
     const [loadingProductos, setLoadingProductos] = useState(false);
     const refreshTimeoutRef = useRef(null);
+    const isFetchingRef = useRef(false);
 
     // UI
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -984,27 +1013,37 @@ const ColaboradoresPage = () => {
         navigate('/dashboard');
     };
 
+    // Cleanup al desmontar el componente
+    useEffect(() => {
+        return () => {
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+        };
+    }, []);
+
     // Función para ordenar colaboradores
     const sortColaboradores = useCallback((colaboradoresList, ordenarPor) => {
-        const sorted = [...colaboradoresList];
+        if (!Array.isArray(colaboradoresList)) return [];
+        const sorted = [...colaboradoresList].filter(Boolean);
         
         switch (ordenarPor) {
             case 'nombre_asc':
-                return sorted.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+                return sorted.sort((a, b) => (a?.nombre || '').localeCompare(b?.nombre || ''));
             case 'nombre_desc':
-                return sorted.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || ''));
+                return sorted.sort((a, b) => (b?.nombre || '').localeCompare(a?.nombre || ''));
             case 'empresa_asc':
-                return sorted.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
+                return sorted.sort((a, b) => (a?.empresa || '').localeCompare(b?.empresa || ''));
             case 'empresa_desc':
-                return sorted.sort((a, b) => (b.empresa || '').localeCompare(a.empresa || ''));
+                return sorted.sort((a, b) => (b?.empresa || '').localeCompare(a?.empresa || ''));
             case 'asignaciones_desc':
-                return sorted.sort((a, b) => (b.asignaciones_activas || 0) - (a.asignaciones_activas || 0));
+                return sorted.sort((a, b) => (b?.asignaciones_activas || 0) - (a?.asignaciones_activas || 0));
             case 'asignaciones_asc':
-                return sorted.sort((a, b) => (a.asignaciones_activas || 0) - (b.asignaciones_activas || 0));
+                return sorted.sort((a, b) => (a?.asignaciones_activas || 0) - (b?.asignaciones_activas || 0));
             case 'fecha_ingreso_desc':
-                return sorted.sort((a, b) => new Date(b.fecha_ingreso) - new Date(a.fecha_ingreso));
+                return sorted.sort((a, b) => new Date(b?.fecha_ingreso || 0) - new Date(a?.fecha_ingreso || 0));
             case 'fecha_ingreso_asc':
-                return sorted.sort((a, b) => new Date(a.fecha_ingreso) - new Date(b.fecha_ingreso));
+                return sorted.sort((a, b) => new Date(a?.fecha_ingreso || 0) - new Date(b?.fecha_ingreso || 0));
             default:
                 return sorted;
         }
@@ -1012,39 +1051,45 @@ const ColaboradoresPage = () => {
 
     // Función para filtrar colaboradores localmente
     const applyFilters = useCallback(() => {
-        let result = [...colaboradores];
+        if (!Array.isArray(colaboradores)) {
+            setFilteredColaboradores([]);
+            return;
+        }
+        let result = colaboradores.filter(Boolean);
 
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             result = result.filter(col => 
-                col.nombre?.toLowerCase().includes(term) ||
-                col.rut?.toLowerCase().includes(term) ||
-                col.email?.toLowerCase().includes(term)
+                col && (
+                    (col.nombre && col.nombre.toLowerCase().includes(term)) ||
+                    (col.rut && col.rut.toLowerCase().includes(term)) ||
+                    (col.email && col.email.toLowerCase().includes(term))
+                )
             );
         }
 
         if (filters.empresa) {
-            result = result.filter(col => col.empresa === filters.empresa);
+            result = result.filter(col => col && col.empresa && String(col.empresa).trim().toUpperCase() === String(filters.empresa).trim().toUpperCase());
         }
 
         if (filters.estado) {
-            result = result.filter(col => col.estado === filters.estado);
+            result = result.filter(col => col && col.estado === filters.estado);
         }
 
         if (filters.departamento) {
-            result = result.filter(col => col.departamento === filters.departamento);
+            result = result.filter(col => col && col.departamento === filters.departamento);
         }
 
         if (filters.asignaciones) {
             switch (filters.asignaciones) {
                 case 'con_asignaciones':
-                    result = result.filter(col => (col.asignaciones_activas || 0) > 0);
+                    result = result.filter(col => col && (col.asignaciones_activas || 0) > 0);
                     break;
                 case 'sin_asignaciones':
-                    result = result.filter(col => (col.asignaciones_activas || 0) === 0);
+                    result = result.filter(col => col && (col.asignaciones_activas || 0) === 0);
                     break;
                 case 'con_historial':
-                    result = result.filter(col => (col.total_asignaciones || 0) > 0);
+                    result = result.filter(col => col && (col.total_asignaciones || 0) > 0);
                     break;
                 default:
                     break;
@@ -1053,7 +1098,6 @@ const ColaboradoresPage = () => {
 
         result = sortColaboradores(result, filters.ordenarPor);
         setFilteredColaboradores(result);
-        setPage(0);
     }, [colaboradores, searchTerm, filters, sortColaboradores]);
 
     useEffect(() => {
@@ -1062,7 +1106,7 @@ const ColaboradoresPage = () => {
 
     // Función para cargar datos - CON PREVENCIÓN DE LLAMADAS MÚLTIPLES
     const fetchData = useCallback(async (showRefresh = false) => {
-        if (isFetching) return;
+        if (isFetchingRef.current) return;
         
         if (showRefresh) {
             setRefreshing(true);
@@ -1070,23 +1114,25 @@ const ColaboradoresPage = () => {
             setLoading(true);
         }
         
+        isFetchingRef.current = true;
         setIsFetching(true);
 
         try {
             const data = await colaboradorService.getColaboradores();
             console.log('📊 Datos de colaboradores recibidos:', data?.length || 0);
-            setColaboradores(data || []);
+            const list = Array.isArray(data) ? data.filter(Boolean) : [];
+            setColaboradores(list);
             
-            const activos = data?.filter(c => c.estado === 'ACTIVO').length || 0;
-            const inactivos = data?.filter(c => c.estado === 'INACTIVO').length || 0;
-            const departamentosUnicos = [...new Set(data?.map(c => c.departamento).filter(Boolean))];
+            const activos = list.filter(c => c && c.estado === 'ACTIVO').length;
+            const inactivos = list.filter(c => c && c.estado === 'INACTIVO').length;
+            const departamentosUnicos = [...new Set(list.map(c => c?.departamento).filter(Boolean))];
             
             setStats({
-                total_colaboradores: data?.length || 0,
+                total_colaboradores: list.length,
                 activos: activos,
                 inactivos: inactivos,
                 total_departamentos: departamentosUnicos.length,
-                total_equipos_asignados: data?.reduce((sum, col) => sum + (col.asignaciones_activas || 0), 0) || 0
+                total_equipos_asignados: list.reduce((sum, col) => sum + (col?.asignaciones_activas || 0), 0)
             });
 
             if (showRefresh) {
@@ -1098,16 +1144,19 @@ const ColaboradoresPage = () => {
         } finally {
             setLoading(false);
             setRefreshing(false);
+            isFetchingRef.current = false;
             setIsFetching(false);
         }
-    }, [showSnackbar, isFetching]);
+    }, [showSnackbar]);
 
     // Función para cargar datos iniciales
     const fetchInitialData = useCallback(async () => {
         try {
             const colaboradoresData = await colaboradorService.getColaboradores();
-            const departamentosUnicos = [...new Set(colaboradoresData?.map(c => c.departamento).filter(Boolean))];
-            setDepartamentos(departamentosUnicos);
+            if (Array.isArray(colaboradoresData)) {
+                const departamentosUnicos = [...new Set(colaboradoresData.map(c => c?.departamento).filter(Boolean))];
+                setDepartamentos(departamentosUnicos);
+            }
         } catch (error) {
             console.error('Error cargando datos iniciales:', error);
         }
@@ -1271,7 +1320,9 @@ const ColaboradoresPage = () => {
 
     const statsPorEmpresa = OPCIONES_EMPRESA.map(emp => ({
         ...emp,
-        cantidad: colaboradores.filter(c => c.empresa === emp.valor).length
+        cantidad: Array.isArray(colaboradores)
+            ? colaboradores.filter(c => c && c.empresa && String(c.empresa).trim().toUpperCase() === emp.valor.toUpperCase()).length
+            : 0
     }));
 
     return (
@@ -1404,7 +1455,7 @@ const ColaboradoresPage = () => {
                                 📊
                             </Typography>
                             <Typography variant="h5" sx={{ fontWeight: 700, color: colors.info }}>
-                                {colaboradores.length}
+                                {loading ? <CircularProgress size={20} color="inherit" /> : colaboradores.length}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                                 Todos
@@ -1438,7 +1489,7 @@ const ColaboradoresPage = () => {
                                     {emp.icon}
                                 </Typography>
                                 <Typography variant="h5" sx={{ fontWeight: 700, color: emp.color }}>
-                                    {emp.cantidad}
+                                    {loading ? <CircularProgress size={20} color="inherit" /> : emp.cantidad}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     {emp.label}
@@ -1626,12 +1677,12 @@ const ColaboradoresPage = () => {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                paginatedColaboradores.map((col, index) => (
-                                    <TableRow key={`${col.id}-${col.rut}-${index}`} hover>
+                                paginatedColaboradores.filter(Boolean).map((col, index) => (
+                                    <TableRow key={`${col?.id || index}-${col?.rut || ''}-${index}`} hover>
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={1.5}>
-                                                <Avatar sx={{ bgcolor: getEmpresaColor(col.empresa), width: 40, height: 40 }}>
-                                                    {col.nombre?.charAt(0) || 'U'}
+                                                <Avatar sx={{ bgcolor: getEmpresaColor(col?.empresa), width: 40, height: 40 }}>
+                                                    {col?.nombre?.charAt(0) || 'U'}
                                                 </Avatar>
                                                 <Box>
                                                     <Typography variant="body2" fontWeight={500}>

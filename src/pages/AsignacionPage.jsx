@@ -496,7 +496,7 @@ const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onS
             console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
             
             const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/asignaciones/descargar-acta-asignacion/${asignacionId}`;
+            const url = `${API_BASE_URL}/asignaciones/descargar-acta/${asignacionId}`;
             console.log('📡 URL:', url);
             
             const response = await fetch(url, {
@@ -623,82 +623,63 @@ const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onS
                 firma_trabajador: getFirmaTrabajadorFinal(),
                 firma_gerente: getFirmaGerenteFinal(),
                 es_prestamo: false
+            }, {
+                responseType: 'arraybuffer'
             });
 
-            console.log('📝 Respuesta asignación:', asignacionResponse.data);
+            console.log('📝 Respuesta asignación recibida');
 
-            if (asignacionResponse.data?.success || asignacionResponse.data?.id) {
-                const newAsignacionId = asignacionResponse.data?.data?.id || asignacionResponse.data?.id;
-                
-                console.log('🆔 ID de asignación creada:', newAsignacionId);
-                
-                if (newAsignacionId) {
-                    try {
-                        // 3. Generar acta en el servidor
-                        const actaData = {
-                            id_asignacion: newAsignacionId,
-                            colaborador: {
-                                nombre: colaboradorSeleccionado.nombre,
-                                rut: colaboradorSeleccionado.rut,
-                                email: colaboradorSeleccionado.email || '',
-                                cargo: colaboradorSeleccionado.cargo || '',
-                                departamento: colaboradorSeleccionado.departamento || ''
-                            },
-                            producto: {
-                                id: producto.id,
-                                nombre: producto.nombre,
-                                marca: producto.marca || 'N/A',
-                                modelo: producto.modelo || 'N/A',
-                                numero_serie: producto.numero_serie || 'N/A',
-                                especificaciones: especificacionesTecnicas
-                            },
-                            fecha_asignacion: new Date().toISOString(),
-                            motivo: motivo || 'Asignación de equipo',
-                            observaciones: observaciones || 'Sin observaciones',
-                            ticketInfo: ticketInfo,
-                            firma_trabajador: getFirmaTrabajadorFinal(),
-                            firma_gerente: getFirmaGerenteFinal()
-                        };
-                        
-                        console.log('📄 Generando acta en el servidor...');
-                        const actaResponse = await api.post('/asignaciones/generar-acta-asignacion', actaData, {
-                            responseType: 'blob'
-                        });
-                        console.log('📄 Respuesta acta:', actaResponse.data);
-                        
-                        // 4. Descargar acta automáticamente (igual que recepción)
-                        setTimeout(async () => {
-                            console.log('📥 Iniciando descarga automática del acta...');
-                            await descargarActaAsignacion(newAsignacionId);
-                        }, 2000);
-                        
-                    } catch (docError) {
-                        console.error('❌ Error generando acta:', docError);
-                        // Intentar descargar igualmente
-                        setTimeout(async () => {
-                            await descargarActaAsignacion(newAsignacionId);
-                        }, 3000);
+            // MOSTRAR VENTANA DE ÉXITO INMEDIATAMENTE
+            setShowSuccess(true);
+            setLoading(false);
+
+            // Obtener ID de asignación si existe en headers
+            let newAsignacionId = null;
+            if (asignacionResponse.headers && asignacionResponse.headers['x-asignacion-id']) {
+                newAsignacionId = asignacionResponse.headers['x-asignacion-id'];
+            }
+
+            // Descargar acta de asignación de forma fluida
+            try {
+                const contentType = asignacionResponse.headers ? (asignacionResponse.headers['content-type'] || '') : '';
+                if (contentType.includes('application/pdf')) {
+                    const blob = new Blob([asignacionResponse.data], { type: 'application/pdf' });
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = `acta_asignacion_${newAsignacionId || producto.id}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } else {
+                    let dataObj = asignacionResponse.data;
+                    if (dataObj instanceof ArrayBuffer) {
+                        try {
+                            const decoder = new TextDecoder('utf-8');
+                            dataObj = JSON.parse(decoder.decode(dataObj));
+                        } catch (e) {}
+                    }
+                    newAsignacionId = newAsignacionId || dataObj?.data?.id || dataObj?.id;
+                    if (newAsignacionId) {
+                        descargarActaAsignacion(newAsignacionId);
                     }
                 }
-                
-                setShowSuccess(true);
-                setLoading(false);
-                
-                setTimeout(() => {
-                    if (onSuccess) {
-                        onSuccess({
-                            success: true,
-                            message: '✅ Asignación completada exitosamente',
-                            asignacion_id: newAsignacionId,
-                            es_prestamo: false
-                        });
-                    }
-                    onClose();
-                }, 2500);
-                
-            } else {
-                throw new Error(asignacionResponse.data?.message || 'Error al procesar');
+            } catch (dlErr) {
+                console.warn('⚠️ Error secundario al procesar descarga de acta:', dlErr);
             }
+
+            setTimeout(() => {
+                if (onSuccess) {
+                    onSuccess({
+                        success: true,
+                        message: '✅ Asignación completada exitosamente',
+                        asignacion_id: newAsignacionId,
+                        es_prestamo: false
+                    });
+                }
+                onClose();
+            }, 2500);
         } catch (error) {
             console.error('❌ Error:', error);
             setError(error.response?.data?.message || error.message || 'Error al procesar la transacción');
@@ -1432,8 +1413,8 @@ const AsignacionPage = () => {
                             ) : (
                                 paginatedProductos.map((producto) => {
                                     const asignacionActiva = getAsignacionActiva(producto.id);
-                                    const estaDisponible = producto.id_estado_equipo === 1;
-                                    const estaAsignado = producto.id_estado_equipo === 2;
+                                    const estaAsignado = producto.id_estado_equipo === 2 || !!asignacionActiva;
+                                    const estaDisponible = (producto.id_estado_equipo === 1 || !producto.id_estado_equipo) && !asignacionActiva;
                                     const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
                                     return (<TableRow key={`${producto.id}-${producto.numero_serie || producto.id}`} hover>
                                         <TableCell><Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 32, height: 32, bgcolor: alpha(colors.primary, 0.1) }}><InventoryIcon sx={{ fontSize: 16 }} /></Avatar><Typography variant="body2" fontWeight={500}>{producto.nombre}</Typography></Box></TableCell>
@@ -1441,9 +1422,9 @@ const AsignacionPage = () => {
                                         <TableCell><Chip label={producto.numero_serie || 'N/A'} size="small" variant="outlined" /></TableCell>
                                         <TableCell><Chip icon={<StoreIcon />} label={producto.bodega_nombre || 'Sin bodega'} size="small" sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} /></TableCell>
                                         <TableCell><Chip label={producto.condicion || 'NUEVO'} size="small" sx={{ backgroundColor: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? alpha(colors.warning, 0.1) : alpha(colors.success, 0.1), color: (producto.condicion === 'USADO' || producto.condicion === 'REACONDICIONADO') ? colors.warning : colors.success }} /></TableCell>
-                                        <TableCell><Stack direction="column" spacing={0.5}><Chip label={getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(getEstadoColor(producto.id_estado_equipo), 0.1), color: getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />{asignacionActiva && (<Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />)}</Stack></TableCell>
+                                        <TableCell><Stack direction="column" spacing={0.5}><Chip label={estaAsignado ? (esPrestamo ? 'PRÉSTAMO' : 'ASIGNADO') : getEstadoTexto(producto.id_estado_equipo)} size="small" sx={{ backgroundColor: alpha(estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), 0.1), color: estaAsignado ? (esPrestamo ? colors.warning : colors.primary) : getEstadoColor(producto.id_estado_equipo), fontWeight: 500, fontSize: '0.7rem' }} />{asignacionActiva && (<Chip icon={esPrestamo ? <PersonIcon sx={{ fontSize: 12 }} /> : <AssignmentIcon sx={{ fontSize: 12 }} />} label={esPrestamo ? "PRÉSTAMO" : "ASIGNACIÓN"} size="small" sx={{ backgroundColor: esPrestamo ? alpha(colors.warning, 0.1) : alpha(colors.primary, 0.1), color: esPrestamo ? colors.warning : colors.primary, fontWeight: 600, fontSize: '0.65rem', height: 20 }} />)}</Stack></TableCell>
                                         <TableCell>{asignacionActiva ? (<Box display="flex" alignItems="center" gap={1}><Avatar sx={{ width: 24, height: 24, bgcolor: alpha(esPrestamo ? colors.warning : colors.success, 0.1) }}><PersonIcon sx={{ fontSize: 14 }} /></Avatar><Typography variant="body2">{asignacionActiva.colaborador_nombre}</Typography></Box>) : (<Typography variant="body2" color="text.secondary">-</Typography>)}</TableCell>
-                                        <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{estaDisponible ? (<><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button><Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button></>) : estaAsignado ? (<><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button><IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}><VisibilityIcon fontSize="small" /></IconButton></>) : (<Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>)}</Stack></TableCell>
+                                        <TableCell align="center"><Stack direction="row" spacing={1} justifyContent="center" alignItems="center" flexWrap="nowrap">{estaAsignado ? (<><Button variant="contained" size="small" startIcon={<ReceiptIcon />} onClick={() => handleRecibir(producto)} sx={{ bgcolor: esPrestamo ? colors.warning : colors.primary, borderRadius: 0, minWidth: 80 }}>Recibir</Button><IconButton size="small" onClick={() => handleVerDetalles(producto)} sx={{ color: esPrestamo ? colors.warning : colors.info }}><VisibilityIcon fontSize="small" /></IconButton></>) : estaDisponible ? (<><Button variant="contained" size="small" startIcon={<AssignmentIcon />} onClick={() => handleAsignar(producto)} sx={{ bgcolor: colors.primary, borderRadius: 0, minWidth: 80 }}>Asignar</Button><Button variant="outlined" size="small" startIcon={<PersonIcon />} onClick={() => handlePrestamo(producto)} sx={{ borderRadius: 0, borderColor: colors.warning, color: colors.warning, minWidth: 80 }}>Préstamo</Button></>) : (<Button variant="outlined" size="small" disabled sx={{ opacity: 0.5, borderRadius: 0 }}>No disponible</Button>)}</Stack></TableCell>
                                     </TableRow>);
                                 })
                             )}

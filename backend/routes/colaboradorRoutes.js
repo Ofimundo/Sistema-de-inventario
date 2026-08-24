@@ -6,6 +6,80 @@ const { authenticateToken } = require('../middleware/auth');
 
 console.log('🔧 Inicializando colaboradorRoutes.js...');
 
+// Función para migrar/corregir restricciones de UNIQUE en email para permitir múltiples nulos/vacíos
+async function fixColaboradoresEmailConstraint() {
+    try {
+        const pool = await getConnection();
+        
+        // 1. Buscar y eliminar restricciones de UNIQUE o DEFAULT en la columna email
+        const constraints = await pool.request().query(`
+            SELECT tc.CONSTRAINT_NAME
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu 
+                ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+            WHERE tc.TABLE_SCHEMA = 'INV' 
+              AND tc.TABLE_NAME = 'colaboradores' 
+              AND kcu.COLUMN_NAME = 'email'
+        `);
+
+        for (const row of constraints.recordset) {
+            console.log(`🔧 Eliminando restricción de email: ${row.CONSTRAINT_NAME}`);
+            try {
+                await pool.request().query(`ALTER TABLE INV.colaboradores DROP CONSTRAINT [${row.CONSTRAINT_NAME}]`);
+            } catch (e) {
+                console.log(`⚠️ No se pudo eliminar restricción ${row.CONSTRAINT_NAME}:`, e.message);
+            }
+        }
+
+        // 2. Buscar y eliminar todos los índices que dependan de la columna email
+        const indexes = await pool.request().query(`
+            SELECT i.name AS IndexName
+            FROM sys.indexes i
+            JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+            JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+            JOIN sys.tables t ON i.object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = 'INV' AND t.name = 'colaboradores' 
+              AND c.name = 'email' AND i.is_primary_key = 0
+        `);
+
+        for (const row of indexes.recordset) {
+            console.log(`🔧 Eliminando índice dependiente de email: ${row.IndexName}`);
+            try {
+                await pool.request().query(`DROP INDEX [${row.IndexName}] ON INV.colaboradores`);
+            } catch (e) {
+                console.log(`⚠️ No se pudo eliminar índice ${row.IndexName}:`, e.message);
+            }
+        }
+
+        // 3. AHORA SÍ: Modificar la columna email para permitir valores NULL
+        await pool.request().query(`
+            ALTER TABLE INV.colaboradores ALTER COLUMN email NVARCHAR(255) NULL
+        `);
+        console.log('✅ Columna email en INV.colaboradores modificada a NULLABLE');
+
+        // 4. Crear índice único filtrado (solo para emails no vacíos y no nulos)
+        await pool.request().query(`
+            IF NOT EXISTS (
+                SELECT * FROM sys.indexes 
+                WHERE name = 'UQ_colaboradores_email_filtered' 
+                  AND object_id = OBJECT_ID('INV.colaboradores')
+            )
+            BEGIN
+                CREATE UNIQUE NONCLUSTERED INDEX UQ_colaboradores_email_filtered
+                ON INV.colaboradores(email)
+                WHERE email IS NOT NULL AND email != '';
+            END
+        `);
+        console.log('✅ Estructura e índice filtrado de email configurados exitosamente.');
+    } catch (err) {
+        console.error('❌ Error al migrar columna email en BD:', err.message);
+    }
+}
+
+// Ejecutar migración al iniciar el módulo
+fixColaboradoresEmailConstraint();
+
 // ============================================
 // NUEVA RUTA - Obtener empresas únicas (DEBE IR ANTES DE /:id)
 // ============================================
@@ -27,7 +101,7 @@ router.get('/empresas', authenticateToken, async (req, res) => {
         if (empresas.length === 0) {
             return res.json({ 
                 success: true, 
-                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'] 
+                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'] 
             });
         }
         
@@ -37,7 +111,7 @@ router.get('/empresas', authenticateToken, async (req, res) => {
         console.error('❌ Error en GET /colaboradores/empresas:', error);
         res.json({ 
             success: true, 
-            data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO'] 
+            data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'] 
         });
     }
 });
@@ -303,15 +377,54 @@ router.post('/', authenticateToken, async (req, res) => {
         
         const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, empresa } = req.body;
         
-        if (!nombre || !email) {
-            return res.status(400).json({ success: false, message: 'Nombre y email son requeridos' });
+        const isHiway = empresa && String(empresa).trim().toUpperCase() === 'HIWAY';
+
+        if (!nombre) {
+            return res.status(400).json({ success: false, message: 'El nombre es requerido' });
+        }
+        if (!email && !isHiway) {
+            return res.status(400).json({ success: false, message: 'El email es requerido' });
         }
         
         const pool = await getConnection();
+
+        const cleanRut = (r) => r ? String(r).replace(/[^0-9kK]/g, '').toUpperCase() : '';
+        const rutLimpio = cleanRut(rut);
+
+        // 1. Verificar si RUT ya existe
+        if (rutLimpio) {
+            const rutCheck = await pool.request()
+                .input('rut', sql.NVarChar, rut)
+                .input('rutLimpio', sql.NVarChar, rutLimpio)
+                .query(`
+                    SELECT id, nombre FROM INV.colaboradores 
+                    WHERE rut = @rut 
+                       OR REPLACE(REPLACE(REPLACE(rut, '.', ''), '-', ''), ' ', '') = @rutLimpio
+                `);
+            if (rutCheck.recordset.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El colaborador con RUT ${rut} ya se encuentra registrado (${rutCheck.recordset[0].nombre}).`
+                });
+            }
+        }
+
+        // 2. Verificar si Email ya existe
+        if (email && email.trim()) {
+            const emailCheck = await pool.request()
+                .input('email', sql.NVarChar, email.trim())
+                .query("SELECT id, nombre FROM INV.colaboradores WHERE LOWER(email) = LOWER(@email) AND email != ''");
+            if (emailCheck.recordset.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El correo electrónico ${email} ya se encuentra registrado por el colaborador ${emailCheck.recordset[0].nombre}.`
+                });
+            }
+        }
         
         const result = await pool.request()
             .input('nombre', sql.NVarChar, nombre)
-            .input('email', sql.NVarChar, email)
+            .input('email', sql.NVarChar, (email && email.trim()) ? email.trim() : null)
             .input('rut', sql.NVarChar, rut || '')
             .input('cargo', sql.NVarChar, cargo || '')
             .input('departamento', sql.NVarChar, departamento || '')
@@ -336,7 +449,15 @@ router.post('/', authenticateToken, async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en POST /colaboradores:', error);
-        res.status(500).json({ success: false, message: error.message });
+        let userMsg = error.message || 'Error al guardar el colaborador';
+        if (error.number === 2627 || error.number === 2601 || (error.message && (
+            error.message.includes('UNIQUE KEY constraint') || 
+            error.message.includes('duplicate key') || 
+            error.message.includes('UQ__colabora')
+        ))) {
+            userMsg = 'El colaborador ya se encuentra registrado en el sistema (RUT o correo duplicado).';
+        }
+        res.status(400).json({ success: false, message: userMsg });
     }
 });
 
@@ -353,12 +474,57 @@ router.put('/:id', authenticateToken, async (req, res) => {
         
         const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, estado, empresa } = req.body;
         
+        const isHiway = empresa && String(empresa).trim().toUpperCase() === 'HIWAY';
+
+        if (!nombre) {
+            return res.status(400).json({ success: false, message: 'El nombre es requerido' });
+        }
+        if (!email && !isHiway) {
+            return res.status(400).json({ success: false, message: 'El email es requerido' });
+        }
+
         const pool = await getConnection();
+
+        const cleanRut = (r) => r ? String(r).replace(/[^0-9kK]/g, '').toUpperCase() : '';
+        const rutLimpio = cleanRut(rut);
+
+        // 1. Verificar si RUT ya pertenece a otro colaborador
+        if (rutLimpio) {
+            const rutCheck = await pool.request()
+                .input('id', sql.Int, idNum)
+                .input('rut', sql.NVarChar, rut)
+                .input('rutLimpio', sql.NVarChar, rutLimpio)
+                .query(`
+                    SELECT id, nombre FROM INV.colaboradores 
+                    WHERE (rut = @rut OR REPLACE(REPLACE(REPLACE(rut, '.', ''), '-', ''), ' ', '') = @rutLimpio)
+                      AND id != @id
+                `);
+            if (rutCheck.recordset.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El RUT ${rut} ya pertenece a otro colaborador registrado (${rutCheck.recordset[0].nombre}).`
+                });
+            }
+        }
+
+        // 2. Verificar si Email pertenece a otro colaborador
+        if (email && email.trim()) {
+            const emailCheck = await pool.request()
+                .input('id', sql.Int, idNum)
+                .input('email', sql.NVarChar, email.trim())
+                .query("SELECT id, nombre FROM INV.colaboradores WHERE LOWER(email) = LOWER(@email) AND id != @id AND email != ''");
+            if (emailCheck.recordset.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El correo electrónico ${email} ya pertenece a otro colaborador.`
+                });
+            }
+        }
         
         await pool.request()
             .input('id', sql.Int, idNum)
             .input('nombre', sql.NVarChar, nombre)
-            .input('email', sql.NVarChar, email)
+            .input('email', sql.NVarChar, (email && email.trim()) ? email.trim() : null)
             .input('rut', sql.NVarChar, rut || '')
             .input('cargo', sql.NVarChar, cargo || '')
             .input('departamento', sql.NVarChar, departamento || '')
@@ -386,7 +552,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en PUT /colaboradores/:id:', error);
-        res.status(500).json({ success: false, message: error.message });
+        let userMsg = error.message || 'Error al actualizar el colaborador';
+        if (error.number === 2627 || error.number === 2601 || (error.message && (
+            error.message.includes('UNIQUE KEY constraint') || 
+            error.message.includes('duplicate key') || 
+            error.message.includes('UQ__colabora')
+        ))) {
+            userMsg = 'El RUT o correo ya pertenece a otro colaborador registrado.';
+        }
+        res.status(400).json({ success: false, message: userMsg });
     }
 });
 

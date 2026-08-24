@@ -556,18 +556,75 @@ const productoController = {
     // MÉTODOS PARA MANTENCIONES
     // ============================================
     
+    getAllMantenciones: async (req, res) => {
+        try {
+            console.log('📋 GET /api/productos/mantenciones/todas');
+            const pool = await getConnection();
+            const result = await pool.request().query(`
+                SELECT 
+                    m.id,
+                    m.producto_id,
+                    m.tipo,
+                    m.fecha_inicio,
+                    m.fecha_fin,
+                    m.responsable,
+                    m.descripcion,
+                    m.costo,
+                    m.created_at,
+                    m.updated_at,
+                    p.nombre as producto_nombre,
+                    p.marca as producto_marca,
+                    p.modelo as producto_modelo,
+                    p.numero_serie as producto_numero_serie,
+                    c.id as colaborador_id,
+                    c.nombre as colaborador_nombre,
+                    c.rut as colaborador_rut,
+                    c.cargo as colaborador_cargo,
+                    c.departamento as colaborador_departamento,
+                    c.empresa as colaborador_empresa
+                FROM [INV].[mantenciones] m
+                INNER JOIN [INV].[productos] p ON m.producto_id = p.id
+                LEFT JOIN [INV].[asignaciones] a ON p.id = a.producto_id AND a.fecha_devolucion IS NULL
+                LEFT JOIN [INV].[colaboradores] c ON a.colaborador_id = c.id
+                ORDER BY m.id DESC
+            `);
+
+            res.json({ success: true, data: result.recordset });
+        } catch (error) {
+            console.error('❌ Error en getAllMantenciones:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
     iniciarMantencion: async (req, res) => {
         try {
-            const { producto_id, tipo, fecha_inicio, responsable, descripcion, costo } = req.body;
+            const { producto_id, tipo, fecha_inicio, fecha_fin, hora, responsable, descripcion, costo } = req.body;
 
-            if (!producto_id || !tipo || !responsable || !descripcion) {
-                return res.status(400).json({ success: false, message: 'Faltan campos requeridos' });
+            if (!producto_id || !tipo || !responsable) {
+                return res.status(400).json({ success: false, message: 'Faltan campos requeridos (producto_id, tipo, responsable)' });
             }
 
             const pool = await getConnection();
             
-            const nuevoEstado = tipo === 'REPARACION' ? 4 : 3;
+            // Format description to include time if provided
+            let descFinal = descripcion || 'Sin descripción';
+            if (hora && !descFinal.includes('[Hora:')) {
+                descFinal = `[Hora: ${hora}] ${descFinal}`;
+            }
+
+            const fechaInicioDate = fecha_inicio ? String(fecha_inicio).split('T')[0] : new Date().toISOString().split('T')[0];
+            const fechaFinDate = fecha_fin ? String(fecha_fin).split('T')[0] : null;
             
+            // Sanitizar tipo para cumplir la restricción CHECK CK_mantenciones_tipo de SQL Server: ([tipo]='REPARACION' OR [tipo]='RUTINA')
+            let tipoSanitizado = (tipo || 'RUTINA').toUpperCase().trim();
+            if (tipoSanitizado !== 'REPARACION') {
+                tipoSanitizado = 'RUTINA';
+            }
+
+            // Set state: 4 for REPARACION, 3 for EN MANTENCION (or 1 DISPONIBLE if already finished)
+            const hoyStr = new Date().toISOString().split('T')[0];
+            const nuevoEstado = (fechaFinDate && fechaFinDate <= hoyStr) ? 1 : (tipoSanitizado === 'REPARACION' ? 4 : 3);
+
             await pool.request()
                 .input('producto_id', sql.Int, producto_id)
                 .input('id_estado_equipo', sql.Int, nuevoEstado)
@@ -579,32 +636,33 @@ const productoController = {
 
             const result = await pool.request()
                 .input('producto_id', sql.Int, producto_id)
-                .input('tipo', sql.NVarChar, tipo)
-                .input('fecha_inicio', sql.DateTime, fecha_inicio ? new Date(fecha_inicio) : new Date())
+                .input('tipo', sql.NVarChar, tipoSanitizado)
+                .input('fecha_inicio', sql.Date, fechaInicioDate)
+                .input('fecha_fin', sql.Date, fechaFinDate)
                 .input('responsable', sql.NVarChar, responsable)
-                .input('descripcion', sql.NVarChar, descripcion)
-                .input('costo', sql.Decimal(18,2), costo || 0)
+                .input('descripcion', sql.NVarChar, descFinal)
+                .input('costo', sql.Decimal(10,2), costo ? parseFloat(costo) : 0)
                 .query(`
-                    INSERT INTO [INV].[mantenciones] (producto_id, tipo, fecha_inicio, responsable, descripcion, costo)
+                    INSERT INTO [INV].[mantenciones] (producto_id, tipo, fecha_inicio, fecha_fin, responsable, descripcion, costo)
                     OUTPUT INSERTED.*
-                    VALUES (@producto_id, @tipo, @fecha_inicio, @responsable, @descripcion, @costo)
+                    VALUES (@producto_id, @tipo, @fecha_inicio, @fecha_fin, @responsable, @descripcion, @costo)
                 `);
 
-            res.json({ success: true, message: 'Mantención iniciada', data: result.recordset[0] });
+            res.json({ success: true, message: 'Mantención registrada correctamente', data: result.recordset[0] });
 
         } catch (error) {
-            console.error('❌ Error iniciando mantención:', error);
+            console.error('❌ Error registrando mantención:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     },
 
     finalizarMantencion: async (req, res) => {
         try {
-            const { id } = req.params;
+            const id = req.params.id || req.body.id;
             const { fecha_fin } = req.body;
 
-            if (!id || !fecha_fin) {
-                return res.status(400).json({ success: false, message: 'Faltan campos requeridos' });
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'ID de mantención requerido' });
             }
 
             const pool = await getConnection();
@@ -618,10 +676,11 @@ const productoController = {
             }
             
             const producto_id = mantencionResult.recordset[0].producto_id;
-            
+            const fechaFinFinal = fecha_fin ? String(fecha_fin).split('T')[0] : new Date().toISOString().split('T')[0];
+
             const result = await pool.request()
                 .input('id', sql.Int, id)
-                .input('fecha_fin', sql.DateTime, new Date(fecha_fin))
+                .input('fecha_fin', sql.Date, fechaFinFinal)
                 .query(`
                     UPDATE [INV].[mantenciones]
                     SET fecha_fin = @fecha_fin, updated_at = GETDATE()
@@ -638,10 +697,73 @@ const productoController = {
                     WHERE id = @producto_id
                 `);
 
-            res.json({ success: true, message: 'Mantención finalizada', data: result.recordset[0] });
+            res.json({ success: true, message: 'Mantención finalizada correctamente', data: result.recordset[0] });
 
         } catch (error) {
             console.error('❌ Error finalizando mantención:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    updateMantencion: async (req, res) => {
+        try {
+            const id = req.params.id || req.body.id;
+            const { fecha_inicio, fecha_fin, responsable, descripcion, costo, tipo } = req.body;
+
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'ID de mantención requerido' });
+            }
+
+            const pool = await getConnection();
+
+            const mantencionCheck = await pool.request()
+                .input('id', sql.Int, id)
+                .query('SELECT producto_id FROM [INV].[mantenciones] WHERE id = @id');
+
+            if (mantencionCheck.recordset.length === 0) {
+                return res.status(404).json({ success: false, message: 'Mantención no encontrada' });
+            }
+
+            const producto_id = mantencionCheck.recordset[0].producto_id;
+
+            let tipoSanitizado = (tipo || 'RUTINA').toUpperCase().trim();
+            if (tipoSanitizado !== 'REPARACION') {
+                tipoSanitizado = 'RUTINA';
+            }
+
+            const fechaInicioDate = fecha_inicio ? String(fecha_inicio).split('T')[0] : new Date().toISOString().split('T')[0];
+            const fechaFinDate = fecha_fin ? String(fecha_fin).split('T')[0] : null;
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .input('tipo', sql.NVarChar, tipoSanitizado)
+                .input('fecha_inicio', sql.Date, fechaInicioDate)
+                .input('fecha_fin', sql.Date, fechaFinDate)
+                .input('responsable', sql.NVarChar, responsable || 'Sistema')
+                .input('descripcion', sql.NVarChar, descripcion || '')
+                .input('costo', sql.Decimal(10,2), costo !== undefined && costo !== null && costo !== '' ? parseFloat(costo) : 0)
+                .query(`
+                    UPDATE [INV].[mantenciones]
+                    SET tipo = @tipo,
+                        fecha_inicio = @fecha_inicio,
+                        fecha_fin = @fecha_fin,
+                        responsable = @responsable,
+                        descripcion = @descripcion,
+                        costo = @costo,
+                        updated_at = GETDATE()
+                    WHERE id = @id
+                `);
+
+            const hoyStr = new Date().toISOString().split('T')[0];
+            const nuevoEstado = (fechaFinDate && fechaFinDate <= hoyStr) ? 1 : (tipoSanitizado === 'REPARACION' ? 4 : 3);
+            await pool.request()
+                .input('producto_id', sql.Int, producto_id)
+                .input('id_estado_equipo', sql.Int, nuevoEstado)
+                .query('UPDATE [INV].[productos] SET id_estado_equipo = @id_estado_equipo WHERE id = @producto_id');
+
+            res.json({ success: true, message: 'Mantención actualizada correctamente' });
+        } catch (error) {
+            console.error('❌ Error actualizando mantención:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     },
@@ -667,6 +789,39 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en getHistorialMantenciones:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    deleteMantencion: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const pool = await getConnection();
+
+            const mRes = await pool.request()
+                .input('id', sql.Int, id)
+                .query('SELECT producto_id, fecha_fin FROM [INV].[mantenciones] WHERE id = @id');
+
+            if (mRes.recordset.length === 0) {
+                return res.status(404).json({ success: false, message: 'Mantención no encontrada' });
+            }
+
+            const { producto_id, fecha_fin } = mRes.recordset[0];
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query('DELETE FROM [INV].[mantenciones] WHERE id = @id');
+
+            if (!fecha_fin) {
+                await pool.request()
+                    .input('producto_id', sql.Int, producto_id)
+                    .input('id_estado_equipo', sql.Int, 1)
+                    .query('UPDATE [INV].[productos] SET id_estado_equipo = @id_estado_equipo WHERE id = @producto_id');
+            }
+
+            res.json({ success: true, message: 'Mantención eliminada correctamente' });
+        } catch (error) {
+            console.error('❌ Error eliminando mantención:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     },
@@ -1361,6 +1516,30 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en asignarProducto:', error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    },
+
+    // POST - Descontar stock de producto a granel
+    descontarStock: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { cantidad, observacion } = req.body;
+            const productoModel = require('../models/productoModel');
+
+            if (!cantidad || parseInt(cantidad) <= 0) {
+                return res.status(400).json({ success: false, message: 'La cantidad a entregar debe ser mayor a 0' });
+            }
+
+            const productoActualizado = await productoModel.descontarStock(id, cantidad, observacion, req.user?.id || null);
+
+            res.json({
+                success: true,
+                message: `Se descontaron ${cantidad} unidad(es) correctamente.`,
+                data: productoActualizado
+            });
+        } catch (error) {
+            console.error('❌ Error en descontarStock controller:', error);
             res.status(500).json({ success: false, message: error.message });
         }
     }

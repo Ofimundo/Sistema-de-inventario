@@ -65,6 +65,9 @@ export const productosService = {
                     fecha_adquisicion: producto.fecha_adquisicion || null,
                     fecha_creacion: producto.fecha_creacion || null,
                     imagen_path: producto.imagen_path || null,
+                    cantidad: producto.cantidad || 1,
+                    stock: producto.cantidad || 1,
+                    es_granel: producto.es_granel === 1 || producto.es_granel === true ? true : false,
                     colaborador_asignado: producto.colaborador_asignado || null,
                     historial_uso: producto.historial_uso || [],
                     historial_mantenciones: producto.historial_mantenciones || [],
@@ -164,6 +167,9 @@ export const productosService = {
                     bodega_id: producto.bodega_id,
                     bodega_nombre: producto.bodega_nombre || 'Sin bodega',
                     imagen_path: producto.imagen_path || null,
+                    cantidad: producto.cantidad || 1,
+                    stock: producto.cantidad || 1,
+                    es_granel: producto.es_granel === 1 || producto.es_granel === true ? true : false,
                     colaborador_asignado: producto.colaborador_asignado || null,
                     historial_uso: producto.historial_uso || [],
                     historial_mantenciones: producto.historial_mantenciones || []
@@ -194,7 +200,9 @@ export const productosService = {
                 modelo: productoData.modelo || '',
                 numero_serie: productoData.numero_serie || '',
                 condicion: productoData.condicion || 'NUEVO',
-                bodega_id: productoData.bodega_id ? parseInt(productoData.bodega_id) : null
+                bodega_id: productoData.bodega_id ? parseInt(productoData.bodega_id) : null,
+                cantidad: parseInt(productoData.cantidad) || 1,
+                es_granel: productoData.es_granel ? true : false
             };
 
             console.log('📤 Datos a enviar al backend:', JSON.stringify(dataToSend, null, 2));
@@ -227,7 +235,9 @@ export const productosService = {
                 modelo: productoData.modelo || '',
                 numero_serie: productoData.numero_serie || '',
                 condicion: productoData.condicion || 'NUEVO',
-                bodega_id: productoData.bodega_id ? parseInt(productoData.bodega_id) : null
+                bodega_id: productoData.bodega_id ? parseInt(productoData.bodega_id) : null,
+                cantidad: parseInt(productoData.cantidad) || 1,
+                es_granel: productoData.es_granel ? true : false
             };
 
             console.log('📤 Datos a enviar al backend:', JSON.stringify(dataToSend, null, 2));
@@ -255,6 +265,24 @@ export const productosService = {
             return response.data;
         } catch (error) {
             console.error('❌ Error en deleteProducto:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Descontar stock de producto a granel (entrega sin acta)
+     */
+    descontarStock: async (id, cantidad, observacion) => {
+        try {
+            console.log(`📤 Descontando ${cantidad} unidades del producto ${id}...`);
+            const response = await api.post(`/productos/${id}/descontar-stock`, {
+                cantidad: parseInt(cantidad),
+                observacion: observacion || ''
+            });
+            console.log('✅ Respuesta descontarStock:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en descontarStock:', error);
             throw error;
         }
     },
@@ -330,17 +358,19 @@ export const productosService = {
             
             console.log('📤 Enviando a /asignaciones:', asignacionData);
             
-            const response = await api.post('/asignaciones', asignacionData);
+            const response = await api.post('/asignaciones', asignacionData, {
+                responseType: 'arraybuffer'
+            });
             
-            console.log('✅ Respuesta asignación:', response.data);
+            console.log('✅ Respuesta asignación recibida con status:', response.status);
             
-            if (response.data && response.data.success) {
-                const productoActualizado = await productosService.getProductoById(productoId);
+            if (response.status === 200 || response.status === 201 || (response.data && response.data.success)) {
+                const productoActualizado = await productosService.getProductoById(productoId).catch(() => null);
                 return {
                     success: true,
-                    message: response.data.message,
+                    message: 'Producto asignado correctamente',
                     producto: productoActualizado,
-                    colaborador: response.data.colaborador
+                    colaborador: { id: colaboradorId }
                 };
             }
             
@@ -362,7 +392,27 @@ export const productosService = {
     // ============================================
     
     /**
-     * Iniciar mantención de producto
+     * Obtener todas las mantenciones registradas en el sistema
+     */
+    getAllMantenciones: async () => {
+        try {
+            console.log('📤 Obteniendo todas las mantenciones...');
+            const response = await api.get('/productos/mantenciones/todas');
+            if (response.data && response.data.success && Array.isArray(response.data.data)) {
+                return response.data.data;
+            }
+            if (Array.isArray(response.data)) {
+                return response.data;
+            }
+            return (response.data && Array.isArray(response.data.data)) ? response.data.data : [];
+        } catch (error) {
+            console.error('❌ Error en getAllMantenciones:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Iniciar / Registrar mantención de producto
      */
     iniciarMantencion: async (mantencionData) => {
         try {
@@ -373,12 +423,7 @@ export const productosService = {
             console.log('✅ Respuesta iniciarMantencion:', response.data);
             
             if (response.data && response.data.success) {
-                const productoActualizado = await productosService.getProductoById(mantencionData.producto_id);
-                return {
-                    success: true,
-                    message: response.data.message,
-                    producto: productoActualizado
-                };
+                return response.data;
             }
             return response.data;
         } catch (error) {
@@ -398,17 +443,39 @@ export const productosService = {
             
             console.log('✅ Respuesta finalizarMantencion:', response.data);
             
-            if (response.data && response.data.success) {
-                const productoActualizado = await productosService.getProductoById(mantencionData.producto_id);
-                return {
-                    success: true,
-                    message: response.data.message,
-                    producto: productoActualizado
-                };
-            }
             return response.data;
         } catch (error) {
             console.error('❌ Error en finalizarMantencion:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Actualizar registro de mantención
+     */
+    updateMantencion: async (mantencionData) => {
+        try {
+            console.log('📤 Actualizando mantención:', mantencionData);
+            const id = mantencionData.id;
+            const response = await api.put(`/productos/mantencion/${id}`, mantencionData);
+            console.log('✅ Respuesta updateMantencion:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en updateMantencion:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Eliminar registro de mantención
+     */
+    deleteMantencion: async (id) => {
+        try {
+            console.log(`📤 Eliminando mantención ${id}...`);
+            const response = await api.delete(`/productos/mantencion/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en deleteMantencion:', error);
             throw error;
         }
     },

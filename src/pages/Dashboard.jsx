@@ -72,7 +72,8 @@ import {
   Business as BusinessIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  Description as DescriptionIcon
+  Description as DescriptionIcon,
+  Build as BuildIcon
 } from "@mui/icons-material";
 import api from "../services/api";
 
@@ -783,6 +784,7 @@ const Dashboard = () => {
     { text: "Bodegas", icon: <WarehouseIcon />, path: "/bodegas" },
     { text: 'Colaboradores', icon: <PersonIcon />, path: '/colaboradores' },
     { text: "Asignaciones", icon: <AssignmentIcon />, path: "/asignacion" },
+    { text: "Mantención", icon: <BuildIcon />, path: "/mantenciones" },
     { text: "Anexos", icon: <DescriptionIcon />, path: "/anexos" },  // <-- NUEVO
     { text: "Stock", icon: <Inventory2Icon />, path: "/stock" },
     { text: "Historial", icon: <HistoryIcon />, path: "/historial" },
@@ -1024,12 +1026,19 @@ const Dashboard = () => {
       open={drawerOpen} 
       onClose={() => setDrawerOpen(false)}
       sx={{ 
-        width: drawerWidth, 
+        width: drawerOpen ? drawerWidth : 0, 
         flexShrink: 0, 
+        whiteSpace: "nowrap",
+        boxSizing: "border-box",
+        transition: (theme) => theme.transitions.create("width", {
+          easing: theme.transitions.easing.sharp,
+          duration: theme.transitions.duration.enteringScreen,
+        }),
         '& .MuiDrawer-paper': { 
           width: drawerWidth, 
           boxSizing: "border-box", 
-          bgcolor: "background.paper" 
+          bgcolor: "background.paper",
+          borderRight: "1px solid #E2E8F0"
         } 
       }}
     >
@@ -1215,6 +1224,9 @@ const Dashboard = () => {
                 <Button variant="outlined" startIcon={<DescriptionIcon />} onClick={() => navigate("/anexos")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
                   Anexos de Contrato
                 </Button>
+                <Button variant="outlined" startIcon={<HistoryIcon />} onClick={() => navigate("/historial")} sx={{ textTransform: "none", borderColor: "white", color: "white", fontWeight: 600 }}>
+                  Historial Completo
+                </Button>
               </Box>
             </Paper>
 
@@ -1234,17 +1246,23 @@ const Dashboard = () => {
             </Grid>
 
             <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: 2 }}>
-              <Grid item xs={6} sm={6} md={3}>
+              <Grid item xs={6} sm={4} md={2}>
                 <NavigationCard icon={InventoryIcon} title="Productos" description="Gestiona inventario" onClick={() => navigate("/productos")} color="#2563EB" />
               </Grid>
-              <Grid item xs={6} sm={6} md={3}>
+              <Grid item xs={6} sm={4} md={2}>
                 <NavigationCard icon={WarehouseIcon} title="Bodegas" description="Administra ubicaciones" onClick={() => navigate("/bodegas")} color="#9333EA" />
               </Grid>
-              <Grid item xs={6} sm={6} md={3}>
+              <Grid item xs={6} sm={4} md={2}>
                 <NavigationCard icon={AssignmentIcon} title="Asignaciones" description="Controla equipos" onClick={() => navigate("/asignacion")} color="#16A34A" />
               </Grid>
-              <Grid item xs={6} sm={6} md={3}>
-                <NavigationCard icon={DescriptionIcon} title="Anexos" description="Genera documentos legales" onClick={() => navigate("/anexos")} color="#F59E0B" />
+              <Grid item xs={6} sm={4} md={2}>
+                <NavigationCard icon={DescriptionIcon} title="Anexos" description="Genera anexos" onClick={() => navigate("/anexos")} color="#F59E0B" />
+              </Grid>
+              <Grid item xs={6} sm={4} md={2}>
+                <NavigationCard icon={HistoryIcon} title="Historial" description="Ver registro de movimientos" onClick={() => navigate("/historial")} color="#EC4899" />
+              </Grid>
+              <Grid item xs={6} sm={4} md={2}>
+                <NavigationCard icon={BuildIcon} title="Mantención" description="Servicio técnico" onClick={() => navigate("/mantenciones")} color="#6366F1" />
               </Grid>
             </Grid>
           </Container>

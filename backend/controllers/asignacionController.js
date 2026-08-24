@@ -756,7 +756,7 @@ const asignacionController = {
                 FROM INV.asignaciones a
                 LEFT JOIN INV.productos p ON a.producto_id = p.id
                 LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                WHERE a.fecha_devolucion IS NULL
+                WHERE a.fecha_devolucion IS NULL AND p.id_estado_equipo = 2
                 ORDER BY a.fecha_asignacion DESC
             `);
             

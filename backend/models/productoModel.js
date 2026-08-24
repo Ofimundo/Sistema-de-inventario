@@ -9,22 +9,48 @@ const fs = require('fs').promises;
 function mapFrontendToDB(data) {
     const mapped = { ...data };
     
-    // Eliminar campo cantidad/stock (ya no se usa)
-    delete mapped.cantidad;
-    delete mapped.stock;
-    
-    // Mapear estado_id a estado string
-    if (data.estado_id !== undefined) {
-        const estadoMap = {
-            1: 'DISPONIBLE',
-            2: 'ASIGNADO',
-            3: 'EN MANTENCIÓN',
-            4: 'EN REPARACIÓN',
-            5: 'NO DISPONIBLE'
-        };
-        mapped.estado = estadoMap[data.estado_id] || 'DISPONIBLE';
-        delete mapped.estado_id;
+    if (data.es_granel !== undefined) {
+        mapped.es_granel = data.es_granel ? 1 : 0;
+    } else {
+        mapped.es_granel = 0;
     }
+
+    if (data.cantidad !== undefined && data.cantidad !== null) {
+        mapped.cantidad = parseInt(data.cantidad) || 1;
+    } else {
+        mapped.cantidad = 1;
+    }
+    
+    // Mapear estado_id / id_estado_equipo a id_estado_equipo (columna real en BD: int)
+    const estadoIdMap = {
+        'DISPONIBLE': 1,
+        'ASIGNADO': 2,
+        'EN MANTENCIÓN': 3,
+        'EN_MANTENCION': 3,
+        'EN REPARACIÓN': 4,
+        'EN_REPARACION': 4,
+        'NO DISPONIBLE': 5,
+        'NO_DISPONIBLE': 5,
+        'BAJA': 6,
+        'DONADO': 5,
+        'PRÉSTAMO': 7
+    };
+
+    if (data.id_estado_equipo !== undefined) {
+        mapped.id_estado_equipo = parseInt(data.id_estado_equipo) || 1;
+    } else if (data.estado_id !== undefined) {
+        mapped.id_estado_equipo = parseInt(data.estado_id) || 1;
+    } else if (data.estado !== undefined) {
+        if (typeof data.estado === 'number') {
+            mapped.id_estado_equipo = data.estado;
+        } else {
+            mapped.id_estado_equipo = estadoIdMap[data.estado.toString().toUpperCase()] || 1;
+        }
+    } else {
+        mapped.id_estado_equipo = 1;
+    }
+    delete mapped.estado;
+    delete mapped.estado_id;
     
     // Mapear bodega_id (ahora directamente en productos)
     if (data.bodega_id !== undefined) {
@@ -62,26 +88,22 @@ function mapDBToFrontend(data) {
     
     const mapped = { ...data };
     
-    // Eliminar cantidad (ya no se usa)
-    delete mapped.cantidad;
+    mapped.cantidad = data.cantidad !== undefined && data.cantidad !== null ? data.cantidad : 1;
+    mapped.es_granel = data.es_granel === 1 || data.es_granel === true ? true : false;
+    mapped.stock = mapped.cantidad;
     
-    // Asegurar que stock no exista
-    delete mapped.stock;
-    
-    // Mapear estado string a estado_id
-    const estadoIdMap = {
-        'DISPONIBLE': 1,
-        'ASIGNADO': 2,
-        'EN MANTENCIÓN': 3,
-        'EN REPARACIÓN': 4,
-        'NO DISPONIBLE': 5,
-        'BAJA': 5,
-        'DONADO': 5
+    const idToEstadoMap = {
+        1: 'DISPONIBLE',
+        2: 'ASIGNADO',
+        3: 'EN MANTENCIÓN',
+        4: 'EN REPARACIÓN',
+        5: 'NO DISPONIBLE',
+        6: 'BAJA',
+        7: 'PRÉSTAMO'
     };
-    
-    if (data.estado) {
-        mapped.estado_id = estadoIdMap[data.estado.toUpperCase()] || 5;
-    }
+
+    mapped.estado_id = data.id_estado_equipo || 1;
+    mapped.estado = data.estado_nombre || idToEstadoMap[mapped.estado_id] || 'DISPONIBLE';
     
     return mapped;
 }
@@ -100,8 +122,6 @@ class ProductoModel {
             let query = `
                 SELECT 
                     p.*,
-                    p.bodega_id,
-                    b.id as bodega_id,
                     b.nombre as bodega_nombre,
                     b.ubicacion as bodega_ubicacion,
                     e.nombre as estado_nombre,
@@ -110,7 +130,7 @@ class ProductoModel {
                     (SELECT COUNT(*) FROM INV.producto_uso pu WHERE pu.producto_id = p.id) as total_asignaciones
                 FROM INV.productos p
                 LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
+                LEFT JOIN INV.estados_equipos e ON p.id_estado_equipo = e.id_estado_equipo
                 WHERE 1=1
             `;
             const request = pool.request();
@@ -124,8 +144,9 @@ class ProductoModel {
                 request.input('marca', sql.NVarChar, filters.marca);
             }
             if (filters.estado) {
-                query += ' AND p.estado = @estado';
+                query += ' AND (e.nombre = @estado OR p.id_estado_equipo = @estado_id)';
                 request.input('estado', sql.NVarChar, filters.estado);
+                request.input('estado_id', sql.Int, parseInt(filters.estado) || 0);
             }
             if (filters.numero_serie) {
                 query += ' AND p.numero_serie LIKE @numero_serie';
@@ -248,8 +269,6 @@ class ProductoModel {
                 .query(`
                     SELECT 
                         p.*,
-                        p.bodega_id,
-                        b.id as bodega_id,
                         b.nombre as bodega_nombre,
                         b.ubicacion as bodega_ubicacion,
                         e.nombre as estado_nombre,
@@ -257,7 +276,7 @@ class ProductoModel {
                         (SELECT COUNT(*) FROM INV.producto_uso pu WHERE pu.producto_id = p.id AND pu.fecha_devolucion IS NULL) as asignaciones_activas
                     FROM INV.productos p
                     LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                    LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
+                    LEFT JOIN INV.estados_equipos e ON p.id_estado_equipo = e.id_estado_equipo
                     WHERE p.id = @id
                 `);
             
@@ -373,7 +392,7 @@ class ProductoModel {
                 }
             }
 
-            // INSERT con bodega_id directamente
+            // INSERT con bodega_id, cantidad y es_granel directamente
             const result = await pool.request()
                 .input('codigo_qr', sql.NVarChar, codigo_qr)
                 .input('nombre', sql.NVarChar, dbData.nombre)
@@ -385,22 +404,24 @@ class ProductoModel {
                 .input('oc_numero', sql.NVarChar, dbData.oc_numero || '')
                 .input('factura_numero', sql.NVarChar, dbData.factura_numero || '')
                 .input('descripcion', sql.NVarChar, dbData.descripcion || '')
-                .input('estado', sql.NVarChar, dbData.estado || 'DISPONIBLE')
+                .input('id_estado_equipo', sql.Int, dbData.id_estado_equipo || 1)
                 .input('condicion', sql.NVarChar, dbData.condicion || 'NUEVO')
                 .input('imagen_path', sql.NVarChar, dbData.imagen_path || '')
                 .input('bodega_id', sql.Int, dbData.bodega_id || null)
+                .input('cantidad', sql.Int, dbData.cantidad || 1)
+                .input('es_granel', sql.Bit, dbData.es_granel ? 1 : 0)
                 .input('fecha_creacion', sql.DateTime, new Date())
                 .query(`
                     INSERT INTO INV.productos (
                         codigo_qr, nombre, numero_serie, marca, modelo,
                         precio, moneda, oc_numero, factura_numero, descripcion,
-                        estado, condicion, imagen_path, bodega_id, fecha_creacion
+                        id_estado_equipo, condicion, imagen_path, bodega_id, cantidad, es_granel, fecha_creacion
                     )
                     OUTPUT INSERTED.id, INSERTED.codigo_qr
                     VALUES (
                         @codigo_qr, @nombre, @numero_serie, @marca, @modelo,
                         @precio, @moneda, @oc_numero, @factura_numero, @descripcion,
-                        @estado, @condicion, @imagen_path, @bodega_id, @fecha_creacion
+                        @id_estado_equipo, @condicion, @imagen_path, @bodega_id, @cantidad, @es_granel, @fecha_creacion
                     )
                 `);
             
@@ -509,7 +530,7 @@ class ProductoModel {
                 const updatableFields = [
                     'codigo_qr', 'nombre', 'numero_serie', 'marca', 'modelo',
                     'precio', 'moneda', 'oc_numero', 'factura_numero', 'descripcion', 
-                    'estado', 'condicion', 'imagen_path', 'bodega_id'
+                    'id_estado_equipo', 'condicion', 'imagen_path', 'bodega_id', 'cantidad', 'es_granel'
                 ];
 
                 updatableFields.forEach(field => {
@@ -517,7 +538,8 @@ class ProductoModel {
                         updates.push(`${field} = @${field}`);
                         let type = sql.NVarChar;
                         if (field === 'precio') type = sql.Decimal(18,2);
-                        if (field === 'bodega_id') type = sql.Int;
+                        if (field === 'bodega_id' || field === 'id_estado_equipo' || field === 'cantidad') type = sql.Int;
+                        if (field === 'es_granel') type = sql.Bit;
                         request.input(field, type, dbData[field]);
                     }
                 });
@@ -620,13 +642,14 @@ class ProductoModel {
                                 )
                             `);
 
+                        const nuevoEstadoId = tipo === 'REPARACION' ? 4 : 3;
                         const nuevoEstado = tipo === 'REPARACION' ? 'EN REPARACIÓN' : 'EN MANTENCIÓN';
                         await transaction.request()
                             .input('producto_id', sql.Int, idNum)
-                            .input('estado', sql.NVarChar, nuevoEstado)
+                            .input('id_estado_equipo', sql.Int, nuevoEstadoId)
                             .query(`
                                 UPDATE [INV].[productos] 
-                                SET estado = @estado
+                                SET id_estado_equipo = @id_estado_equipo
                                 WHERE id = @producto_id
                             `);
                         
@@ -803,7 +826,7 @@ class ProductoModel {
                     FROM INV.producto_uso pu
                     INNER JOIN INV.productos p ON pu.producto_id = p.id
                     LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                    LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
+                    LEFT JOIN INV.estados_equipos e ON p.id_estado_equipo = e.id_estado_equipo
                     WHERE pu.fecha_devolucion IS NULL
                     ORDER BY pu.fecha_asignacion DESC
                 `);
@@ -887,10 +910,10 @@ class ProductoModel {
             // Cambiar estado a ASIGNADO
             await pool.request()
                 .input('producto_id', sql.Int, asignacionData.producto_id)
-                .input('estado', sql.NVarChar, 'ASIGNADO')
+                .input('id_estado_equipo', sql.Int, 2)
                 .query(`
                     UPDATE INV.productos 
-                    SET estado = @estado
+                    SET id_estado_equipo = @id_estado_equipo
                     WHERE id = @producto_id
                 `);
 
@@ -948,10 +971,10 @@ class ProductoModel {
 
                 await transaction.request()
                     .input('producto_id', sql.Int, asignacionData.producto_id)
-                    .input('estado', sql.NVarChar, 'DISPONIBLE')
+                    .input('id_estado_equipo', sql.Int, 1)
                     .query(`
                         UPDATE INV.productos 
-                        SET estado = @estado
+                        SET id_estado_equipo = @id_estado_equipo
                         WHERE id = @producto_id
                     `);
 
@@ -989,11 +1012,11 @@ class ProductoModel {
                 .query(`
                     SELECT 
                         COUNT(*) as totalProductos,
-                        ISNULL(SUM(CASE WHEN estado = 'DISPONIBLE' THEN 1 ELSE 0 END), 0) as disponibles,
-                        ISNULL(SUM(CASE WHEN estado = 'ASIGNADO' THEN 1 ELSE 0 END), 0) as asignados,
-                        ISNULL(SUM(CASE WHEN estado IN ('EN MANTENCIÓN', 'EN REPARACIÓN') THEN 1 ELSE 0 END), 0) as enMantencion,
-                        ISNULL(SUM(CASE WHEN estado = 'EN REPARACIÓN' THEN 1 ELSE 0 END), 0) as enReparacion,
-                        ISNULL(SUM(CASE WHEN estado IN ('NO DISPONIBLE', 'BAJA', 'DONADO') THEN 1 ELSE 0 END), 0) as noDisponibles,
+                        ISNULL(SUM(CASE WHEN id_estado_equipo = 1 THEN 1 ELSE 0 END), 0) as disponibles,
+                        ISNULL(SUM(CASE WHEN id_estado_equipo = 2 THEN 1 ELSE 0 END), 0) as asignados,
+                        ISNULL(SUM(CASE WHEN id_estado_equipo IN (3, 4) THEN 1 ELSE 0 END), 0) as enMantencion,
+                        ISNULL(SUM(CASE WHEN id_estado_equipo = 4 THEN 1 ELSE 0 END), 0) as enReparacion,
+                        ISNULL(SUM(CASE WHEN id_estado_equipo IN (5, 6) THEN 1 ELSE 0 END), 0) as noDisponibles,
                         ISNULL(SUM(precio), 0) as valorTotal,
                         ISNULL(AVG(precio), 0) as precioPromedio
                     FROM INV.productos
@@ -1053,7 +1076,7 @@ class ProductoModel {
                         b.ubicacion as bodega_ubicacion
                     FROM INV.productos p
                     LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                    WHERE p.estado = 'DISPONIBLE'
+                    WHERE p.id_estado_equipo = 1
                     ORDER BY p.nombre ASC
                 `);
             
@@ -1083,7 +1106,7 @@ class ProductoModel {
                         e.color as estado_color
                     FROM INV.productos p
                     LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                    LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
+                    LEFT JOIN INV.estados_equipos e ON p.id_estado_equipo = e.id_estado_equipo
                     WHERE p.bodega_id = @bodega_id
                     ORDER BY p.nombre ASC
                 `);
@@ -1174,7 +1197,7 @@ class ProductoModel {
                            e.color as estado_color
                     FROM INV.productos p
                     LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
-                    LEFT JOIN INV.estados_equipos e ON p.estado = e.nombre
+                    LEFT JOIN INV.estados_equipos e ON p.id_estado_equipo = e.id_estado_equipo
                     WHERE p.codigo_qr = @codigo_qr
                 `);
             
@@ -1305,11 +1328,11 @@ class ProductoModel {
 
             await pool.request()
                 .input('producto_id', sql.Int, donacionData.producto_id)
-                .input('estado', sql.NVarChar, 'DONADO')
+                .input('id_estado_equipo', sql.Int, 5)
                 .input('bodega_id', sql.Int, null) // Limpiar bodega
                 .query(`
                     UPDATE INV.productos 
-                    SET estado = @estado, bodega_id = @bodega_id
+                    SET id_estado_equipo = @id_estado_equipo, bodega_id = @bodega_id
                     WHERE id = @producto_id
                 `);
 
@@ -1362,11 +1385,11 @@ class ProductoModel {
 
             await pool.request()
                 .input('producto_id', sql.Int, bajaData.producto_id)
-                .input('estado', sql.NVarChar, 'NO DISPONIBLE')
+                .input('id_estado_equipo', sql.Int, 6)
                 .input('bodega_id', sql.Int, null) // Limpiar bodega
                 .query(`
                     UPDATE INV.productos 
-                    SET estado = @estado, bodega_id = @bodega_id
+                    SET id_estado_equipo = @id_estado_equipo, bodega_id = @bodega_id
                     WHERE id = @producto_id
                 `);
 
@@ -1530,6 +1553,59 @@ class ProductoModel {
             return await this.findById(id);
         } catch (error) {
             console.error('Error en deleteImagen:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Descuenta stock de un producto a granel (entrega sin acta)
+     */
+    async descontarStock(id, cantidadADescontar, observacion = '', usuarioId = null) {
+        try {
+            const idNum = parseInt(id);
+            const cantNum = parseInt(cantidadADescontar);
+            if (isNaN(idNum) || idNum <= 0 || isNaN(cantNum) || cantNum <= 0) {
+                throw new Error('Parámetros inválidos para descontar stock');
+            }
+
+            const pool = await getConnection();
+            const producto = await this.findById(idNum);
+
+            if (!producto) {
+                throw new Error('Producto no encontrado');
+            }
+
+            const stockActual = producto.cantidad !== undefined && producto.cantidad !== null ? producto.cantidad : 1;
+            if (cantNum > stockActual) {
+                throw new Error(`La cantidad a entregar (${cantNum}) no puede superar el stock actual (${stockActual})`);
+            }
+
+            const nuevoStock = stockActual - cantNum;
+            const nuevoEstadoId = nuevoStock <= 0 ? 5 : producto.id_estado_equipo; // 5 = NO DISPONIBLE si queda en 0
+
+            await pool.request()
+                .input('id', sql.Int, idNum)
+                .input('cantidad', sql.Int, nuevoStock)
+                .input('id_estado_equipo', sql.Int, nuevoEstadoId)
+                .query(`
+                    UPDATE INV.productos 
+                    SET cantidad = @cantidad,
+                        id_estado_equipo = @id_estado_equipo
+                    WHERE id = @id
+                `);
+
+            await this.registrarMovimiento({
+                producto_id: idNum,
+                accion: 'ENTREGA_GRANEL',
+                usuario_id: usuarioId,
+                oc_numero: '',
+                factura_numero: '',
+                detalles: `Entrega a granel: ${cantNum} unidad(es). Stock restante: ${nuevoStock}. Obs: ${observacion || 'Sin observación'}`
+            });
+
+            return await this.findById(idNum);
+        } catch (error) {
+            console.error('❌ Error en descontarStock:', error);
             throw error;
         }
     }
