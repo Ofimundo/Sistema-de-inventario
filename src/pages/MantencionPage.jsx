@@ -259,17 +259,8 @@ const MantencionPage = () => {
           ? cRes
           : (cRes && Array.isArray(cRes.data) ? cRes.data : []);
 
-        // Función para identificar únicamente equipos Notebooks / Laptops / Portátiles
-        const isNotebook = (p) => {
-          if (!p) return false;
-          const str = `${p.nombre || ''} ${p.descripcion || ''} ${p.categoria_nombre || ''} ${p.tipo || ''} ${p.modelo || ''}`.toLowerCase();
-          return str.includes('notebook') || str.includes('laptop') || str.includes('portatil') || str.includes('portátil');
-        };
-
-        const notebooksOnly = productosList.filter(isNotebook);
-
         setMantenciones(mantencionesList);
-        setProductos(notebooksOnly);
+        setProductos(productosList);
 
         // Filtrar estrictamente los 2 técnicos autorizados para mantenciones (Cesar Caruz Carrasco y Margarita Arraño Aranda)
         const tecnicosFiltrados = [];
@@ -579,34 +570,32 @@ const MantencionPage = () => {
         })
       : "No programada";
 
-  // Filter mantenciones list (únicamente equipos Notebooks / Laptops / Portátiles)
+  // Filter mantenciones list
   const filteredMantenciones = mantenciones.filter((m) => {
     const finStr = formatInputDate(m.fecha_fin);
     const isEnProgreso = !finStr || finStr > todayStr;
     if (tabEstado === 1 && !isEnProgreso) return false;
     if (tabEstado === 2 && isEnProgreso) return false;
 
-    // Verificar si la mantención corresponde a un Notebook
-    const prodNombre = (m.producto_nombre || "").toLowerCase();
-    const prodDesc = (m.producto_descripcion || "").toLowerCase();
-    const prodTipo = (m.producto_tipo || "").toLowerCase();
-    const prodModelo = (m.producto_modelo || "").toLowerCase();
-
-    const esNotebook = prodNombre.includes("notebook") || prodNombre.includes("laptop") || prodNombre.includes("portatil") || prodNombre.includes("portátil") ||
-                       prodDesc.includes("notebook") || prodDesc.includes("laptop") || prodDesc.includes("portatil") || prodDesc.includes("portátil") ||
-                       prodTipo.includes("notebook") || prodTipo.includes("laptop") ||
-                       prodModelo.includes("notebook") || prodModelo.includes("thinkpad") || prodModelo.includes("v14") || prodModelo.includes("latitude");
-
-    if (!esNotebook && m.producto_nombre) return false;
-
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
+    const prodNombre = (m.producto_nombre || "").toLowerCase();
     const prodSerie = (m.producto_numero_serie || "").toLowerCase();
     const prodMarca = (m.producto_marca || "").toLowerCase();
+    const prodModelo = (m.producto_modelo || "").toLowerCase();
+    const desc = (m.descripcion || "").toLowerCase();
     const resp = (m.responsable || "").toLowerCase();
-    const colab = (m.colaborador_nombre ? `${m.colaborador_nombre} ${m.colaborador_apellido}` : "").toLowerCase();
+    const colab = (m.colaborador_nombre ? `${m.colaborador_nombre} ${m.colaborador_apellido || ""}` : "").toLowerCase();
 
-    return prodNombre.includes(term) || prodSerie.includes(term) || prodMarca.includes(term) || resp.includes(term) || colab.includes(term);
+    return (
+      prodNombre.includes(term) ||
+      prodSerie.includes(term) ||
+      prodMarca.includes(term) ||
+      prodModelo.includes(term) ||
+      desc.includes(term) ||
+      resp.includes(term) ||
+      colab.includes(term)
+    );
   });
 
   // Sidebar Drawer component matching Dashboard

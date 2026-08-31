@@ -1478,20 +1478,49 @@ const AsignacionPage = () => {
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); };
     const handleTipoEstadoChange = (event, newValue) => { if (newValue !== null) { setFilters({ ...filters, tipo_estado: newValue }); setPage(0); } };
-    const getAsignacionActiva = (productoId) => asignacionesActivas.find(a => a.producto_id === productoId);
+    const getAsignacionActiva = (productoId) => {
+        const found = asignacionesActivas.find(a => a.producto_id === productoId);
+        if (found) return found;
+        const prod = productos.find(p => p.id === productoId);
+        if (prod && (prod.id_estado_equipo === 2 || prod.colaborador_nombre || prod.colaborador_id || prod.colaborador_asignado || prod.asignacion_id)) {
+            return {
+                id: prod.asignacion_id || prod.id,
+                producto_id: prod.id,
+                colaborador_id: prod.colaborador_id || prod.colaborador_asignado?.id,
+                colaborador_nombre: prod.colaborador_nombre || prod.colaborador_asignado?.nombre || 'Colaborador Asignado',
+                colaborador_rut: prod.colaborador_rut || prod.colaborador_asignado?.rut,
+                colaborador_email: prod.colaborador_email || prod.colaborador_asignado?.email,
+                colaborador_cargo: prod.colaborador_cargo || prod.colaborador_asignado?.cargo,
+                colaborador_departamento: prod.colaborador_departamento || prod.colaborador_asignado?.departamento,
+                fecha_asignacion: prod.fecha_asignacion || new Date().toISOString(),
+                es_prestamo: prod.es_prestamo === 1 || prod.es_prestamo === true
+            };
+        }
+        return null;
+    };
 
     const filteredProductos = productos.filter(producto => {
+        const asignacionActiva = getAsignacionActiva(producto.id);
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            const matchesSearch = (producto.nombre?.toLowerCase().includes(term) || producto.marca?.toLowerCase().includes(term) || producto.numero_serie?.toLowerCase().includes(term) || (producto.modelo && producto.modelo.toLowerCase().includes(term)));
+            const matchesSearch = (
+                producto.nombre?.toLowerCase().includes(term) || 
+                producto.marca?.toLowerCase().includes(term) || 
+                producto.numero_serie?.toLowerCase().includes(term) || 
+                (producto.modelo && producto.modelo.toLowerCase().includes(term)) ||
+                (producto.colaborador_nombre && producto.colaborador_nombre.toLowerCase().includes(term)) ||
+                (asignacionActiva?.colaborador_nombre && asignacionActiva.colaborador_nombre.toLowerCase().includes(term)) ||
+                (producto.colaborador_rut && producto.colaborador_rut.toLowerCase().includes(term)) ||
+                (asignacionActiva?.colaborador_rut && asignacionActiva.colaborador_rut.toLowerCase().includes(term))
+            );
             if (!matchesSearch) return false;
         }
-        const asignacionActiva = getAsignacionActiva(producto.id);
         const esPrestamo = asignacionActiva?.es_prestamo === true || asignacionActiva?.es_prestamo === 1;
+        const estaAsignado = producto.id_estado_equipo === 2 || !!asignacionActiva;
         switch (filters.tipo_estado) {
-            case 'disponibles': return producto.id_estado_equipo === 1;
-            case 'asignados': return producto.id_estado_equipo === 2 && !esPrestamo;
-            case 'prestamos': return producto.id_estado_equipo === 2 && esPrestamo;
+            case 'disponibles': return !estaAsignado && producto.id_estado_equipo === 1;
+            case 'asignados': return estaAsignado && !esPrestamo;
+            case 'prestamos': return estaAsignado && esPrestamo;
             default: return true;
         }
     });

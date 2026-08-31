@@ -143,9 +143,12 @@ const productoController = {
                     };
                 }
                 
+                const idEstadoEfectivo = (producto.asignacion_id && (producto.id_estado_equipo === 1 || !producto.id_estado_equipo)) ? 2 : producto.id_estado_equipo;
+                
                 return {
                     ...producto,
-                    estado: getEstadoTexto(producto.id_estado_equipo),
+                    id_estado_equipo: idEstadoEfectivo,
+                    estado: getEstadoTexto(idEstadoEfectivo),
                     asignacion_activa: asignacionActiva,
                     colaborador_asignado: colaboradorAsignado,
                     fecha_baja: producto.fecha_baja,
@@ -313,8 +316,12 @@ const productoController = {
                 condicion, bodega_id, id_estado_equipo
             } = req.body;
 
-            if (!nombre) {
-                return res.status(400).json({ success: false, message: 'El nombre del producto es requerido' });
+            if (!nombre || !nombre.toString().trim()) {
+                return res.status(400).json({ success: false, message: 'El nombre del producto es obligatorio.' });
+            }
+
+            if (!bodega_id) {
+                return res.status(400).json({ success: false, message: 'Debe seleccionar una bodega. La bodega es un campo obligatorio.' });
             }
 
             const pool = await getConnection();
@@ -331,7 +338,7 @@ const productoController = {
                 .input('numero_serie', sql.NVarChar, numero_serie || null)
                 .input('condicion', sql.NVarChar, condicion || 'NUEVO')
                 .input('id_estado_equipo', sql.Int, id_estado_equipo || 1)
-                .input('bodega_id', sql.Int, bodega_id || null)
+                .input('bodega_id', sql.Int, bodega_id)
                 .query(`
                     INSERT INTO [INV].[productos] (
                         nombre, precio, oc_numero, factura_numero, descripcion, 
@@ -353,6 +360,12 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en createProducto:', error);
+            if (error.number === 515 || error.message?.includes('Cannot insert the value NULL')) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Debe completar todos los campos obligatorios (incluyendo la bodega) antes de guardar.' 
+                });
+            }
             res.status(500).json({ success: false, message: error.message });
         }
     },
@@ -369,6 +382,14 @@ const productoController = {
 
             if (!id || isNaN(parseInt(id))) {
                 return res.status(400).json({ success: false, message: 'ID de producto inválido' });
+            }
+
+            if (!nombre || !nombre.toString().trim()) {
+                return res.status(400).json({ success: false, message: 'El nombre del producto es obligatorio.' });
+            }
+
+            if (!bodega_id) {
+                return res.status(400).json({ success: false, message: 'Debe seleccionar una bodega. La bodega es un campo obligatorio.' });
             }
 
             const pool = await getConnection();
@@ -394,7 +415,7 @@ const productoController = {
                 .input('numero_serie', sql.NVarChar, numero_serie || null)
                 .input('condicion', sql.NVarChar, condicion || 'NUEVO')
                 .input('id_estado_equipo', sql.Int, id_estado_equipo || 1)
-                .input('bodega_id', sql.Int, bodega_id || null)
+                .input('bodega_id', sql.Int, bodega_id)
                 .query(`
                     UPDATE [INV].[productos] SET
                         nombre = @nombre,
@@ -420,6 +441,12 @@ const productoController = {
 
         } catch (error) {
             console.error('❌ Error en updateProducto:', error);
+            if (error.number === 515 || error.message?.includes('Cannot insert the value NULL')) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Debe completar todos los campos obligatorios (incluyendo la bodega) antes de guardar.' 
+                });
+            }
             res.status(500).json({ success: false, message: error.message });
         }
     },

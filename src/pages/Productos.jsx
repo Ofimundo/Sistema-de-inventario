@@ -2445,6 +2445,7 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     const validarFormulario = () => {
         const nuevosErrores = {};
         if (!formData.nombre?.trim()) nuevosErrores.nombre = 'El nombre es requerido';
+        if (!formData.bodega_id) nuevosErrores.bodega_id = 'Debe seleccionar una bodega';
         if (!formData.es_granel && !formData.numero_serie?.trim()) {
             nuevosErrores.numero_serie = 'El número de serie es requerido para productos individuales';
         }
@@ -2457,7 +2458,11 @@ function ProductoForm({ open, onClose, producto, onSave }) {
         }
         
         setErrores(nuevosErrores);
-        return Object.keys(nuevosErrores).length === 0;
+        const esValido = Object.keys(nuevosErrores).length === 0;
+        if (!esValido) {
+            showSnackbar('Por favor complete todos los campos obligatorios antes de guardar', 'warning');
+        }
+        return esValido;
     };
 
     const handleSubmit = async () => {
@@ -2536,7 +2541,12 @@ function ProductoForm({ open, onClose, producto, onSave }) {
             
         } catch (error) {
             console.error('❌ Error al guardar producto:', error);
-            showSnackbar('Error: ' + (error.message || 'Error al procesar la solicitud'), 'error');
+            const apiMessage = error.response?.data?.message;
+            let msg = apiMessage || error.message || 'Error al procesar la solicitud';
+            if (msg.includes('Cannot insert the value NULL') || msg.includes('column does not allow nulls') || msg.includes('bodega_id')) {
+                msg = 'La bodega y los campos obligatorios deben rellenarse antes de guardar';
+            }
+            showSnackbar(msg, 'warning');
         } finally {
             setLoading(false);
         }
@@ -2820,6 +2830,14 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                 
                 <DialogContent dividers>
                     <Grid container spacing={3}>
+                        {Object.keys(errores).some(k => errores[k]) && (
+                            <Grid item xs={12}>
+                                <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                                    Debe rellenar todos los campos obligatorios (*) antes de guardar.
+                                </Alert>
+                            </Grid>
+                        )}
+
                         <Grid item xs={12}>
                             <Typography variant="subtitle2" gutterBottom fontWeight={600} color={colors.primary}>
                                 Información Básica
@@ -2873,17 +2891,18 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth>
-                                <InputLabel>Bodega (opcional)</InputLabel>
+                            <FormControl fullWidth error={!!errores.bodega_id} required>
+                                <InputLabel>Bodega *</InputLabel>
                                 <Select
                                     name="bodega_id"
                                     value={formData.bodega_id}
                                     onChange={handleChange}
-                                    label="Bodega (opcional)"
+                                    label="Bodega *"
                                     size="small"
                                     disabled={loading}
+                                    required
                                 >
-                                    <MenuItem value=""><em>Sin bodega asignada</em></MenuItem>
+                                    <MenuItem value=""><em>Seleccionar bodega</em></MenuItem>
                                     {bodegas.map((bodega) => (
                                         <MenuItem key={bodega.id} value={bodega.id}>
                                             <Box display="flex" alignItems="center" gap={1}>
@@ -2893,6 +2912,9 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                                         </MenuItem>
                                     ))}
                                 </Select>
+                                {errores.bodega_id && (
+                                    <FormHelperText>{errores.bodega_id}</FormHelperText>
+                                )}
                             </FormControl>
                         </Grid>
 

@@ -511,7 +511,7 @@ router.get('/activas', async (req, res) => {
             FROM INV.asignaciones a
             LEFT JOIN INV.productos p ON a.producto_id = p.id
             LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-            WHERE a.fecha_devolucion IS NULL AND (p.id_estado_equipo = 2 OR a.es_prestamo = 1 OR a.es_prestamo = 'true')
+            WHERE (a.fecha_devolucion IS NULL OR a.fecha_devolucion = '' OR a.fecha_devolucion = '1900-01-01')
             ORDER BY a.fecha_asignacion DESC
         `);
         
@@ -1281,10 +1281,10 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
         pool = await getConnection();
         
         // Obtener datos de la asignación
-        const asignacionResult = await pool.request()
+        let asignacionResult = await pool.request()
             .input('id', sql.Int, asignacionIdNum)
             .query(`
-                SELECT a.id, a.producto_id, a.colaborador_id, a.es_prestamo,
+                SELECT TOP 1 a.id, a.producto_id, a.colaborador_id, a.es_prestamo,
                        p.nombre as producto_nombre, p.numero_serie, p.marca, p.modelo,
                        c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
                        c.cargo as colaborador_cargo, c.departamento as colaborador_departamento,
@@ -1292,7 +1292,8 @@ router.put('/:asignacionId/finalizar', async (req, res) => {
                 FROM INV.asignaciones a
                 LEFT JOIN INV.productos p ON a.producto_id = p.id
                 LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
-                WHERE a.id = @id AND a.fecha_devolucion IS NULL
+                WHERE (a.id = @id OR a.producto_id = @id) AND (a.fecha_devolucion IS NULL OR a.fecha_devolucion = '' OR a.fecha_devolucion = '1900-01-01')
+                ORDER BY a.id DESC
             `);
         
         if (asignacionResult.recordset.length === 0) {

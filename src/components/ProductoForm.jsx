@@ -307,7 +307,10 @@ function ProductoForm({ open, onClose, producto, onSave }) {
     };
 
     const handleSubmit = async () => {
-        if (!validarFormulario()) return;
+        if (!validarFormulario()) {
+            showSnackbar('Por favor complete todos los campos obligatorios antes de guardar', 'warning');
+            return;
+        }
         setLoading(true);
 
         try {
@@ -434,7 +437,12 @@ function ProductoForm({ open, onClose, producto, onSave }) {
             
         } catch (error) {
             console.error('❌ Error al guardar producto:', error);
-            showSnackbar('Error: ' + (error.message || 'Error al procesar la solicitud'), 'error');
+            const apiMessage = error.response?.data?.message;
+            let msg = apiMessage || error.message || 'Error al procesar la solicitud';
+            if (msg.includes('Cannot insert the value NULL') || msg.includes('column does not allow nulls') || msg.includes('bodega_id')) {
+                msg = 'La bodega y los campos obligatorios deben rellenarse antes de guardar';
+            }
+            showSnackbar(msg, 'warning');
         } finally {
             setLoading(false);
         }
