@@ -5,30 +5,15 @@ import axios from 'axios';
  * Obtiene la URL base según las variables de entorno
  */
 const getBaseURL = () => {
-    // ============================================
-    // CAMBIA ESTA URL SEGÚN TU BACKEND LOCAL
-    // ============================================
-    // Si tu backend corre en puerto 3000:
-    const LOCAL_URL = 'http://localhost:3001/api';
-    
-    // Si tu backend corre en puerto 98:
-    // const LOCAL_URL = 'http://localhost:98/api';
-    
-    // Si tu backend corre en puerto 5000:
-    // const LOCAL_URL = 'http://localhost:5000/api';
-    
-    // Si tu backend corre en puerto 8080:
-    // const LOCAL_URL = 'http://localhost:8080/api';
-    
     if (import.meta.env && import.meta.env.VITE_API_URL) {
         console.log('✅ Usando VITE_API_URL:', import.meta.env.VITE_API_URL);
         return import.meta.env.VITE_API_URL;
     }
     
-    
-    // Usar URL local por defecto
-    console.log('✅ Usando URL local:', LOCAL_URL);
-    return LOCAL_URL;
+    const hostname = window.location.hostname || 'localhost';
+    const dynamicUrl = `${window.location.protocol}//${hostname}:3001/api`;
+    console.log('✅ Usando URL de red local:', dynamicUrl);
+    return dynamicUrl;
 };
 
 const API_URL = getBaseURL();

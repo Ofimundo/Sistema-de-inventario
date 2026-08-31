@@ -12,19 +12,10 @@ const app = express();
 // CONFIGURACIÓN CORS (DEFINIR PRIMERO)
 // ============================================
 const corsOptions = {
-    origin: [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://54.20.87.148:5173',
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://127.0.0.1:5500',
-        'https://main.d23vw4mszg17gc.amplifyapp.com',
-        'https://*.amplifyapp.com',
-        'https://sistema-inventario-backend-p3xg.onrender.com'
-    ],
+    origin: (origin, callback) => {
+        // Permitir solicitudes locales, de red o externas
+        callback(null, true);
+    },
     credentials: true,
     optionsSuccessStatus: 200,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
