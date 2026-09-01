@@ -1,0 +1,167 @@
+{
+  "producto": {
+    "id": 373,
+    "nombre": "prueba",
+    "marca": "test",
+    "modelo": "test",
+    "numero_serie": "123derf",
+    "condicion": "NUEVO"
+  },
+  "colaborador": {
+    "id": 73,
+    "nombre": "margarita arraño aranda ",
+    "rut": "19291969K",
+    "cargo": "desarrolladora",
+    "departamento": "TI",
+    "usuario": "margarita",
+    "clave": "********"
+  },
+  "items": [
+    {
+      "id": "equipo_fisico",
+      "label": "Equipo revisado físicamente",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "cargador",
+      "label": "Cargador entregado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mouse",
+      "label": "Mouse entregado",
+      "ok": false,
+      "observacion": "No entregado "
+    },
+    {
+      "id": "audifonos",
+      "label": "Audífonos entregados",
+      "ok": false,
+      "observacion": "No entregado "
+    },
+    {
+      "id": "telefono",
+      "label": "Teléfono entregado / Celular",
+      "ok": false,
+      "observacion": "No entregado "
+    },
+    {
+      "id": "esim",
+      "label": "E-Sim / Chip de datos",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "windows_actualizado",
+      "label": "Windows actualizado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "drivers",
+      "label": "Drivers instalados",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "dominio",
+      "label": "Equipo agregado dominio",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "usuario_configurado",
+      "label": "Usuario configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "outlook",
+      "label": "Outlook configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mfa",
+      "label": "MFA habilitado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "teams",
+      "label": "Teams instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "onedrive",
+      "label": "OneDrive funcionando",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "softland",
+      "label": "Softland instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "unidad_red",
+      "label": "Unidad red Softland",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn",
+      "label": "VPN instalada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn_validada",
+      "label": "VPN validada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "internet",
+      "label": "Internet validado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "recursos_internos",
+      "label": "Acceso recursos internos",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "antivirus",
+      "label": "Antivirus operativo",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "firewall",
+      "label": "Firewall activo",
+      "ok": true,
+      "observacion": ""
+    }
+  ],
+  "usuarioConforme": true,
+  "fecha": "2026-09-01T18:50:52.130Z",
+  "ticketInfo": {
+    "ticket": "",
+    "fecha": "2026-09-01",
+    "tecnico": "margarita arraño"
+  },
+  "especificacionesTecnicas": {
+    "cpu": "test",
+    "ram": "test",
+    "disco": "test",
+    "gpu": "test",
+    "tipo": "test"
+  }
+}

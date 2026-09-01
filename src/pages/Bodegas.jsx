@@ -113,13 +113,13 @@ const colors = {
 // Styled components
 const StyledCard = styled(Card)(({ theme }) => ({
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: theme.palette.background.paper,
     border: `1px solid ${colors.border}`,
-    transition: 'all .3s ease-in-out',
+    transition: 'all .2s ease-in-out',
     '&:hover': {
-        transform: 'translateY(-4px)',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+        transform: 'translateY(-2px)',
+        boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.1)',
     },
 }));
 
@@ -248,9 +248,9 @@ function StatCard({ icon: Icon, title, value, color, loading }) {
     if (loading) {
         return (
             <StyledCard>
-                <CardContent>
-                    <Skeleton variant="circular" width={48} height={48} />
-                    <Skeleton variant="text" height={32} sx={{ mt: 1 }} />
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                    <Skeleton variant="circular" width={40} height={40} />
+                    <Skeleton variant="text" height={28} sx={{ mt: 1 }} />
                     <Skeleton variant="text" width="60%" />
                 </CardContent>
             </StyledCard>
@@ -259,16 +259,16 @@ function StatCard({ icon: Icon, title, value, color, loading }) {
 
     return (
         <StyledCard>
-            <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                    <Avatar sx={{ bgcolor: alpha(color, 0.1), color, width: 48, height: 48 }}>
-                        <Icon />
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
+                    <Avatar sx={{ bgcolor: alpha(color, 0.1), color, width: 40, height: 40 }}>
+                        <Icon fontSize="small" />
                     </Avatar>
                 </Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.2 }}>
                     {value}
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {title}
                 </Typography>
             </CardContent>
@@ -459,7 +459,7 @@ const BodegasPage = () => {
     // Estados
     const [user, setUser] = useState(null);
     const [anchorEl, setAnchorEl] = useState(null);
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
     
     const [bodegas, setBodegas] = useState([]);
@@ -575,11 +575,17 @@ const BodegasPage = () => {
                 productosData = response.data;
             }
             
-            console.log(`📦 Productos encontrados en ${bodega.nombre}:`, productosData.length);
-            setProductosEnBodega(productosData);
+            // Filtrar para asegurar que SOLO se muestren productos en estado DISPONIBLE en la bodega
+            const disponiblesOnly = productosData.filter(p => {
+                const estText = String(p.estado_texto || p.estado || '').trim().toUpperCase();
+                return estText === 'DISPONIBLE' || p.id_estado_equipo === 1 || !p.id_estado_equipo;
+            });
             
-            if (productosData.length === 0) {
-                showSnackbar(`No hay productos en ${bodega.nombre}`, 'info');
+            console.log(`📦 Productos DISPONIBLES en ${bodega.nombre}:`, disponiblesOnly.length);
+            setProductosEnBodega(disponiblesOnly);
+            
+            if (disponiblesOnly.length === 0) {
+                showSnackbar(`No hay productos disponibles en ${bodega.nombre}`, 'info');
             }
         } catch (error) {
             console.error('Error cargando productos:', error);
@@ -769,7 +775,10 @@ const BodegasPage = () => {
                         {menuItems.map(item => (
                             <ListItemButton 
                                 key={item.text} 
-                                onClick={() => navigate(item.path)}
+                                onClick={() => {
+                                    navigate(item.path);
+                                    setDrawerOpen(false);
+                                }}
                                 selected={window.location.pathname === item.path}
                             >
                                 <ListItemIcon>{item.icon}</ListItemIcon>
@@ -815,28 +824,65 @@ const BodegasPage = () => {
                     <Toolbar id="back-to-top" />
 
                     <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
-                        {/* Header */}
-                        <Paper sx={{ p: 4, mb: 4, borderRadius: 4, background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`, color: 'white' }}>
-                            <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Gestión de Bodegas</Typography>
-                            <Typography sx={{ mb: 3, opacity: 0.9 }}>Administra las bodegas y visualiza los productos almacenados</Typography>
-                            
-                            <GradientButton startIcon={<AddIcon />} onClick={() => handleOpenForm()}>
+                        {/* Header Banner Cápusla con Botón Azul Ovalado */}
+                        <Paper sx={{ 
+                            px: { xs: 2.5, sm: 3.5 }, 
+                            py: { xs: 1.5, sm: 2 }, 
+                            mb: 2.5, 
+                            borderRadius: '50px', 
+                            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, 
+                            color: 'white',
+                            display: 'flex',
+                            flexDirection: { xs: 'column', sm: 'row' },
+                            alignItems: { xs: 'flex-start', sm: 'center' },
+                            justifyContent: 'space-between',
+                            gap: 2,
+                            boxShadow: '0 8px 25px rgba(124, 58, 237, 0.25)'
+                        }}>
+                            <Box sx={{ pl: { sm: 1 } }}>
+                                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.2, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+                                    Gestión de Bodegas
+                                </Typography>
+                                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                    Administra las bodegas y visualiza los productos almacenados
+                                </Typography>
+                            </Box>
+
+                            <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<AddIcon sx={{ color: '#FFFFFF', fontWeight: 800, fontSize: '1.1rem' }} />}
+                                onClick={() => handleOpenForm()}
+                                disabled={loading}
+                                sx={{
+                                    background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+                                    color: '#FFFFFF',
+                                    fontWeight: 700,
+                                    fontSize: '0.825rem',
+                                    textTransform: 'none',
+                                    borderRadius: '50px',
+                                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                                    px: 2.2,
+                                    py: 0.65,
+                                    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                                    whiteSpace: 'nowrap',
+                                    '&:hover': {
+                                        background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                                        boxShadow: '0 6px 18px rgba(37, 99, 235, 0.5)',
+                                        transform: 'translateY(-1px)'
+                                    }
+                                }}
+                            >
                                 Nueva Bodega
-                            </GradientButton>
+                            </Button>
                         </Paper>
 
-                        {/* Stats */}
-                        <Grid container spacing={3} sx={{ mb: 4 }}>
-                            <Grid item xs={12} sm={6} md={3}>
+                        {/* Stats - Solo Total Bodegas y Total Productos (Tamaño Reducido) */}
+                        <Grid container spacing={2} sx={{ mb: 2 }}>
+                            <Grid item xs={6} sm={3} md={2.5}>
                                 <StatCard icon={WarehouseIcon} title="TOTAL BODEGAS" value={stats.totalBodegas} color={colors.primary} loading={loading} />
                             </Grid>
-                            <Grid item xs={12} sm={6} md={3}>
-                                <StatCard icon={CheckCircleOutlineIcon} title="CON PRODUCTOS" value={stats.conProductos} color={colors.success} loading={loading} />
-                            </Grid>
-                            <Grid item xs={12} sm={6} md={3}>
-                                <StatCard icon={DeleteForeverIcon} title="VACÍAS" value={stats.vacias} color={colors.warning} loading={loading} />
-                            </Grid>
-                            <Grid item xs={12} sm={6} md={3}>
+                            <Grid item xs={6} sm={3} md={2.5}>
                                 <StatCard icon={InventoryIcon} title="TOTAL PRODUCTOS" value={stats.totalProductos} color={colors.info} loading={loading} />
                             </Grid>
                         </Grid>
@@ -1062,10 +1108,10 @@ const BodegasPage = () => {
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <StoreIcon sx={{ color: colors.primary }} />
                                         <Typography variant="h6">
-                                            Productos en {selectedBodega?.nombre}
+                                            Productos Disponibles en {selectedBodega?.nombre}
                                         </Typography>
                                         <Chip 
-                                            label={`${productosEnBodega.length} producto${productosEnBodega.length !== 1 ? 's' : ''}`} 
+                                            label={`${productosEnBodega.length} disponible${productosEnBodega.length !== 1 ? 's' : ''}`} 
                                             size="small" 
                                             color={productosEnBodega.length > 0 ? 'primary' : 'default'}
                                             sx={{ ml: 1 }}
@@ -1083,13 +1129,13 @@ const BodegasPage = () => {
                                 {loadingProductos ? (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 5 }}>
                                         <CircularProgress />
-                                        <Typography sx={{ mt: 2 }}>Cargando productos...</Typography>
+                                        <Typography sx={{ mt: 2 }}>Cargando productos disponibles...</Typography>
                                     </Box>
                                 ) : productosEnBodega.length === 0 ? (
                                     <Box sx={{ textAlign: 'center', py: 5 }}>
                                         <InventoryIcon sx={{ fontSize: 64, color: '#ccc', mb: 2 }} />
                                         <Typography variant="h6" color="text.secondary">
-                                            No hay productos en esta bodega
+                                            No hay productos disponibles en esta bodega
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                                             Los productos se asignan a bodegas desde la sección de Productos

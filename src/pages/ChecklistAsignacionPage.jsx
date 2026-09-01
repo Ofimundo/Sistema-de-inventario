@@ -323,7 +323,18 @@ const ChecklistAsignacionPage = () => {
             localStorage.setItem(`checklist_producto_${productoSeleccionado.id}`, JSON.stringify(checklistData));
             localStorage.setItem(`checklist_fecha_${productoSeleccionado.id}`, new Date().toISOString());
             
-            console.log('✅ Checklist guardado en localStorage');
+            // Guardar en backend
+            try {
+                api.post('/documentos/checklist', {
+                    producto_id: productoSeleccionado.id,
+                    checklistData
+                });
+            } catch (errCheck) {
+                console.error('Error guardando checklist en backend:', errCheck);
+            }
+
+            console.log('✅ Checklist guardado en localStorage y backend');
+
             
             showSnackbar('✅ Checklist completado exitosamente. Redirigiendo...', 'success');
             

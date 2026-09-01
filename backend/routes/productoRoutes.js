@@ -971,6 +971,21 @@ router.get('/', async (req, res) => {
 
         const pool = await getConnection();
 
+        // Sincronizar automáticamente productos con asignación activa a estado ASIGNADO (2)
+        try {
+            await pool.request().query(`
+                UPDATE INV.productos
+                SET id_estado_equipo = 2
+                WHERE id IN (
+                    SELECT producto_id 
+                    FROM INV.asignaciones 
+                    WHERE (fecha_devolucion IS NULL OR fecha_devolucion = '')
+                ) AND (id_estado_equipo = 1 OR id_estado_equipo IS NULL);
+            `);
+        } catch (syncErr) {
+            console.warn('⚠️ Advertencia al sincronizar estados asignados:', syncErr.message);
+        }
+
         let query = `
             SELECT 
                 p.id, p.nombre, p.numero_serie, p.marca, p.modelo,
@@ -1002,7 +1017,8 @@ router.get('/', async (req, res) => {
                 c.email as colaborador_email,
                 c.rut as colaborador_rut,
                 c.cargo as colaborador_cargo,
-                c.departamento as colaborador_departamento
+                c.departamento as colaborador_departamento,
+                c.empresa as colaborador_empresa
             FROM INV.productos p
             LEFT JOIN INV.bodegas b ON p.bodega_id = b.id
             LEFT JOIN INV.asignaciones a ON p.id = a.producto_id AND (a.fecha_devolucion IS NULL OR a.fecha_devolucion = '')
@@ -1014,7 +1030,7 @@ router.get('/', async (req, res) => {
         const request = pool.request();
 
         if (search && search.trim() !== '') {
-            query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search OR c.nombre LIKE @search)`;
+            query += ` AND (p.nombre LIKE @search OR p.marca LIKE @search OR p.modelo LIKE @search OR p.numero_serie LIKE @search OR c.nombre LIKE @search OR c.empresa LIKE @search)`;
             request.input('search', sql.NVarChar, `%${search.trim()}%`);
         }
 
@@ -1026,8 +1042,14 @@ router.get('/', async (req, res) => {
         if (estado && estado !== 'todos' && estado !== '') {
             const estadoId = ESTADO_TEXTO_A_ID[estado];
             if (estadoId) {
-                query += ` AND p.id_estado_equipo = @estadoId`;
-                request.input('estadoId', sql.Int, estadoId);
+                if (estadoId === 2) {
+                    query += ` AND (p.id_estado_equipo = 2 OR c.id IS NOT NULL)`;
+                } else if (estadoId === 1) {
+                    query += ` AND (p.id_estado_equipo = 1 OR p.id_estado_equipo IS NULL) AND c.id IS NULL`;
+                } else {
+                    query += ` AND p.id_estado_equipo = @estadoId`;
+                    request.input('estadoId', sql.Int, estadoId);
+                }
             }
         }
 
@@ -1057,6 +1079,7 @@ router.get('/', async (req, res) => {
                     rut: producto.colaborador_rut,
                     cargo: producto.colaborador_cargo,
                     departamento: producto.colaborador_departamento,
+                    empresa: producto.colaborador_empresa,
                     es_prestamo: producto.es_prestamo === 1 || producto.es_prestamo === true ? 1 : 0
                 };
             }
@@ -1078,6 +1101,11 @@ router.get('/', async (req, res) => {
                 (asignacionActiva?.es_prestamo === 1) ||
                 (colaboradorAsignado?.es_prestamo === 1);
 
+            let estadoIdFinal = producto.id_estado_equipo || 1;
+            if (colaboradorAsignado && (estadoIdFinal === 1 || !estadoIdFinal)) {
+                estadoIdFinal = 2; // ASIGNADO
+            }
+
             return {
                 id: producto.id,
                 nombre: producto.nombre || 'Sin nombre',
@@ -1088,7 +1116,7 @@ router.get('/', async (req, res) => {
                 oc_numero: producto.oc_numero || '',
                 factura_numero: producto.factura_numero || '',
                 descripcion: producto.descripcion || '',
-                id_estado_equipo: producto.id_estado_equipo || 1,
+                id_estado_equipo: estadoIdFinal,
                 imagen_path: producto.imagen_path,
                 fecha_creacion: producto.fecha_creacion,
                 condicion: producto.condicion || 'NUEVO',
@@ -1098,7 +1126,7 @@ router.get('/', async (req, res) => {
                 stock: producto.cantidad || 1,
                 es_granel: producto.es_granel === 1 || producto.es_granel === true ? 1 : 0,
                 total_utilizado: producto.total_utilizado || 0,
-                estado: getEstadoTexto(producto.id_estado_equipo || 1),
+                estado: getEstadoTexto(estadoIdFinal),
                 colaborador_asignado: colaboradorAsignado,
                 asignacion_activa: asignacionActiva,
                 es_prestamo: esPrestamo ? 1 : 0

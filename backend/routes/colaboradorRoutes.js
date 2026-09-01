@@ -101,7 +101,7 @@ router.get('/empresas', authenticateToken, async (req, res) => {
         if (empresas.length === 0) {
             return res.json({ 
                 success: true, 
-                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'] 
+                data: ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO'] 
             });
         }
         
@@ -111,7 +111,7 @@ router.get('/empresas', authenticateToken, async (req, res) => {
         console.error('❌ Error en GET /colaboradores/empresas:', error);
         res.json({ 
             success: true, 
-            data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'] 
+            data: ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO'] 
         });
     }
 });
@@ -173,6 +173,26 @@ router.get('/', authenticateToken, async (req, res) => {
         const { estado, departamento, empresa, search } = req.query;
         const pool = await getConnection();
         
+// Función para asegurar la columna observaciones en INV.colaboradores
+async function ensureObservacionesColumn() {
+    try {
+        const pool = await getConnection();
+        await pool.request().query(`
+            IF NOT EXISTS (
+                SELECT * FROM sys.columns 
+                WHERE object_id = OBJECT_ID('INV.colaboradores') AND name = 'observaciones'
+            )
+            BEGIN
+                ALTER TABLE INV.colaboradores ADD observaciones NVARCHAR(MAX) NULL;
+            END
+        `);
+        console.log('✅ Columna observaciones verificada/configurada en INV.colaboradores');
+    } catch (err) {
+        console.error('❌ Error al verificar columna observaciones:', err.message);
+    }
+}
+ensureObservacionesColumn();
+
         let query = `
             SELECT 
                 c.id, 
@@ -187,6 +207,7 @@ router.get('/', authenticateToken, async (req, res) => {
                 c.estado,
                 c.fecha_ingreso,
                 c.fecha_nacimiento,
+                c.observaciones,
                 ISNULL((
                     SELECT COUNT(*) 
                     FROM INV.asignaciones a 
@@ -432,15 +453,16 @@ router.post('/', authenticateToken, async (req, res) => {
             .input('direccion', sql.NVarChar, direccion || '')
             .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
             .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
+            .input('observaciones', sql.NVarChar, observaciones || null)
             .input('estado', sql.NVarChar, 'ACTIVO')
             .input('fecha_ingreso', sql.Date, new Date())
             .query(`
                 INSERT INTO INV.colaboradores (
                     nombre, email, rut, cargo, departamento, telefono, 
-                    direccion, fecha_nacimiento, empresa, estado, fecha_ingreso
+                    direccion, fecha_nacimiento, empresa, observaciones, estado, fecha_ingreso
                 ) VALUES (
                     @nombre, @email, @rut, @cargo, @departamento, @telefono,
-                    @direccion, @fecha_nacimiento, @empresa, @estado, @fecha_ingreso
+                    @direccion, @fecha_nacimiento, @empresa, @observaciones, @estado, @fecha_ingreso
                 );
                 SELECT SCOPE_IDENTITY() as id;
             `);
@@ -461,6 +483,31 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// PUT - Actualizar observaciones de un colaborador directamente
+router.put('/:id/observaciones', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { observaciones } = req.body;
+        console.log(`📥 PUT /api/colaboradores/${id}/observaciones`);
+        
+        const idNum = parseInt(id);
+        if (isNaN(idNum)) {
+            return res.status(400).json({ success: false, message: 'ID inválido' });
+        }
+        
+        const pool = await getConnection();
+        await pool.request()
+            .input('id', sql.Int, idNum)
+            .input('observaciones', sql.NVarChar, observaciones !== undefined ? observaciones : null)
+            .query('UPDATE INV.colaboradores SET observaciones = @observaciones WHERE id = @id');
+            
+        res.json({ success: true, message: 'Observación actualizada exitosamente' });
+    } catch (error) {
+        console.error('❌ Error en PUT /colaboradores/:id/observaciones:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // PUT - Actualizar colaborador (CON EMPRESA)
 router.put('/:id', authenticateToken, async (req, res) => {
     try {
@@ -472,7 +519,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, message: 'ID inválido' });
         }
         
-        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, estado, empresa } = req.body;
+        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, estado, empresa, observaciones } = req.body;
         
         const isHiway = empresa && String(empresa).trim().toUpperCase() === 'HIWAY';
 
@@ -533,6 +580,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
             .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
             .input('estado', sql.NVarChar, estado || 'ACTIVO')
             .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
+            .input('observaciones', sql.NVarChar, observaciones !== undefined ? observaciones : null)
             .query(`
                 UPDATE INV.colaboradores SET
                     nombre = @nombre, 
@@ -544,7 +592,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
                     direccion = @direccion,
                     fecha_nacimiento = @fecha_nacimiento, 
                     estado = @estado, 
-                    empresa = @empresa
+                    empresa = @empresa,
+                    observaciones = @observaciones
                 WHERE id = @id
             `);
         

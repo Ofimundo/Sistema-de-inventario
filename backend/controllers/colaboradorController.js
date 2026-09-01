@@ -9,6 +9,17 @@ const colaboradorController = {
             const { estado, departamento, empresa, search } = req.query;
             const pool = await getConnection();
             
+            // Migración automática de registros 'DREAMTEC' a 'LATAM_LITE'
+            try {
+                await pool.request().query(`
+                    UPDATE [INV].[colaboradores] 
+                    SET empresa = 'LATAM_LITE' 
+                    WHERE UPPER(LTRIM(RTRIM(empresa))) = 'DREAMTEC'
+                `);
+            } catch (migErr) {
+                console.error('⚠️ Error en migración de empresa:', migErr.message);
+            }
+
             let query = `
                 SELECT 
                     c.id,
@@ -44,8 +55,13 @@ const colaboradorController = {
             }
             
             if (empresa) {
-                conditions.push('c.empresa = @empresa');
-                request.input('empresa', sql.NVarChar, empresa);
+                const empUpper = String(empresa).trim().toUpperCase();
+                if (empUpper === 'LATAM_LITE' || empUpper === 'LATAM LITE') {
+                    conditions.push("(UPPER(LTRIM(RTRIM(c.empresa))) IN ('LATAM_LITE', 'LATAM LITE', 'DREAMTEC'))");
+                } else {
+                    conditions.push('c.empresa = @empresa');
+                    request.input('empresa', sql.NVarChar, empresa);
+                }
             }
             
             if (search) {
@@ -208,9 +224,44 @@ const colaboradorController = {
 
             console.log(`✅ ${result.recordset.length} asignaciones encontradas`);
 
+            const fs = require('fs');
+            const path = require('path');
+            const CHECKLIST_DIR = path.join(__dirname, '../uploads/checklist');
+
+            const dataConChecklist = result.recordset.map(row => {
+                let checklistData = null;
+                let items_pendientes = [];
+
+                const posiblesArchivos = [
+                    path.join(CHECKLIST_DIR, `checklist_asignacion_${row.asignacion_id}.json`),
+                    path.join(CHECKLIST_DIR, `checklist_producto_${row.producto_id}.json`)
+                ];
+
+                for (const p of posiblesArchivos) {
+                    if (fs.existsSync(p)) {
+                        try {
+                            checklistData = JSON.parse(fs.readFileSync(p, 'utf8'));
+                            break;
+                        } catch (e) {
+                            console.error('Error leyendo checklist json:', e);
+                        }
+                    }
+                }
+
+                if (checklistData && Array.isArray(checklistData.items)) {
+                    items_pendientes = checklistData.items.filter(item => !item.ok || (item.observacion && item.observacion.trim().length > 0));
+                }
+
+                return {
+                    ...row,
+                    checklistData,
+                    items_pendientes
+                };
+            });
+
             res.json({
                 success: true,
-                data: result.recordset
+                data: dataConChecklist
             });
         } catch (error) {
             console.error('❌ Error en getProductosAsignados:', error);
@@ -594,7 +645,7 @@ const colaboradorController = {
             if (empresas.length === 0) {
                 return res.json({
                     success: true,
-                    data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY']
+                    data: ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO']
                 });
             }
 
@@ -606,7 +657,7 @@ const colaboradorController = {
             console.error('❌ Error en getEmpresas:', error);
             res.json({
                 success: true,
-                data: ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY']
+                data: ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO']
             });
         }
     }

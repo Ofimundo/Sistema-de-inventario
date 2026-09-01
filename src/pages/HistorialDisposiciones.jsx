@@ -312,7 +312,7 @@ const HistorialDisposiciones = () => {
     const [user, setUser] = useState(null);
     const [anchorEl, setAnchorEl] = useState(null);
     const [notificacionesAnchor, setNotificacionesAnchor] = useState(null);
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
     const [notificaciones, setNotificaciones] = useState([]);
     const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
@@ -904,7 +904,7 @@ const HistorialDisposiciones = () => {
                         key={item.text}
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) handleDrawerToggle();
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >

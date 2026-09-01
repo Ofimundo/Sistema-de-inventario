@@ -120,7 +120,7 @@ const AnexosPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery('(max-width:600px)');
     const drawerWidth = 260;
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     
     const [activeStep, setActiveStep] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
@@ -466,7 +466,7 @@ const AnexosPage = () => {
                         key={item.text} 
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) setDrawerOpen(false);
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >

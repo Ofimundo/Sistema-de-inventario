@@ -285,11 +285,14 @@ const CATEGORIAS_QR_PERMITIDAS = [
     'audifono', 'audífono', 'audifonos', 'audífonos', 'headset', 'headphone',
     'mouse', 'raton', 'ratón',
     'celular', 'smartphone', 'telefono', 'teléfono', 'móvil', 'movil',
-    'teclado', 'keyboard'
+    'teclado', 'keyboard',
+    'online', 'onlione', 'ups',
+    'all in one', 'all-in-one', 'allinone', 'aio'
 ];
 
 const esAptoParaQR = (producto) => {
     if (!producto) return false;
+    if (producto.es_granel) return false;
     const nombre = (producto.nombre || '').toLowerCase();
     const categoria = (producto.categoria || producto.tipo || '').toLowerCase();
     const descripcion = (producto.descripcion || '').toLowerCase();
@@ -2292,7 +2295,6 @@ function ProductoForm({ open, onClose, producto, onSave }) {
 
     const opcionesEstado = [
         'DISPONIBLE',
-        'ASIGNADO',
         'EN MANTENCIÓN',
         'EN REPARACIÓN',
         'NO DISPONIBLE'
@@ -3038,105 +3040,8 @@ function ProductoForm({ open, onClose, producto, onSave }) {
                             </FormControl>
                         </Grid>
 
-                        {formData.estado === 'ASIGNADO' && (
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" fontWeight={600} color={colors.primary} sx={{ mt: 2 }}>
-                                    Asignar a Colaborador
-                                </Typography>
-                                <Divider sx={{ mb: 2 }} />
-                                
-                                <FormControl fullWidth size="small" error={!!errores.asignacion}>
-                                    <InputLabel>Seleccionar Colaborador *</InputLabel>
-                                    <Select
-                                        value={colaboradorSeleccionado}
-                                        onChange={(e) => {
-                                            setColaboradorSeleccionado(e.target.value);
-                                            if (errores.asignacion) {
-                                                setErrores({ ...errores, asignacion: null });
-                                            }
-                                        }}
-                                        label="Seleccionar Colaborador *"
-                                        disabled={loading}
-                                        required
-                                    >
-                                        <MenuItem value="">
-                                            <em>Seleccione un colaborador</em>
-                                        </MenuItem>
-                                        {colaboradores.map((col) => (
-                                            <MenuItem key={col.id} value={col.id}>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.primary, 0.1) }}>
-                                                        {col.nombre?.charAt(0) || '?'}
-                                                    </Avatar>
-                                                    <Box>
-                                                        <Typography variant="body2">
-                                                            {col.nombre}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            {col.cargo} • {col.departamento}
-                                                        </Typography>
-                                                    </Box>
-                                                </Box>
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                    {errores.asignacion && <FormHelperText error>{errores.asignacion}</FormHelperText>}
-                                </FormControl>
 
-                                {colaboradorSeleccionado && (
-                                    <Box sx={{ mt: 2, p: 2, bgcolor: alpha(colors.success, 0.05), borderRadius: 2 }}>
-                                        <Typography variant="subtitle2" fontWeight={600} color={colors.success} gutterBottom>
-                                            Colaborador seleccionado:
-                                        </Typography>
-                                        {colaboradores.find(c => c.id === parseInt(colaboradorSeleccionado)) && (
-                                            <>
-                                                <Typography variant="body2">
-                                                    <strong>Nombre:</strong> {colaboradores.find(c => c.id === parseInt(colaboradorSeleccionado)).nombre}
-                                                </Typography>
-                                                <Typography variant="body2">
-                                                    <strong>Email:</strong> {colaboradores.find(c => c.id === parseInt(colaboradorSeleccionado)).email}
-                                                </Typography>
-                                                <Typography variant="body2">
-                                                    <strong>Cargo:</strong> {colaboradores.find(c => c.id === parseInt(colaboradorSeleccionado)).cargo || 'No especificado'}
-                                                </Typography>
-                                            </>
-                                        )}
-                                    </Box>
-                                )}
 
-                                <TextField
-                                    fullWidth
-                                    label="Motivo de asignación"
-                                    value={motivoAsignacion}
-                                    onChange={(e) => setMotivoAsignacion(e.target.value)}
-                                    placeholder="Ej: Uso temporal, Proyecto específico, Reemplazo de equipo, etc."
-                                    multiline
-                                    rows={2}
-                                    size="small"
-                                    disabled={loading}
-                                    sx={{ mt: 2 }}
-                                />
-
-                                <TextField
-                                    fullWidth
-                                    label="Observaciones adicionales"
-                                    value={observacionesAsignacion}
-                                    onChange={(e) => setObservacionesAsignacion(e.target.value)}
-                                    placeholder="Observaciones adicionales sobre la asignación..."
-                                    multiline
-                                    rows={2}
-                                    size="small"
-                                    disabled={loading}
-                                    sx={{ mt: 2 }}
-                                />
-                                
-                                {producto && producto.colaborador_asignado && producto.colaborador_asignado.id && !colaboradorSeleccionado && (
-                                    <Alert severity="info" sx={{ mt: 2 }}>
-                                        Este producto ya está asignado a <strong>{producto.colaborador_asignado.nombre}</strong>
-                                    </Alert>
-                                )}
-                            </Grid>
-                        )}
 
                         <Grid item xs={12} sm={6}>
                             <Autocomplete
@@ -3508,7 +3413,7 @@ const Productos = () => {
     const [dataLoaded, setDataLoaded] = useState(false);
     
     const [searchTerm, setSearchTerm] = useState('');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [filterType, setFilterType] = useState('todos');
     const [filters, setFilters] = useState({
         estado: '',
@@ -4077,7 +3982,7 @@ const Productos = () => {
     })();
 
     const drawerWidth = 260;
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     const menuItems = [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
@@ -4121,11 +4026,9 @@ const Productos = () => {
                 <Box display="flex" alignItems="center" gap={1}>
                     <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
                 </Box>
-                {isMobile && (
-                    <IconButton onClick={() => setDrawerOpen(false)}>
-                        <ChevronLeftIcon />
-                    </IconButton>
-                )}
+                <IconButton onClick={() => setDrawerOpen(false)}>
+                    <ChevronLeftIcon />
+                </IconButton>
             </Toolbar>
             <Divider />
             <List>
@@ -4134,7 +4037,7 @@ const Productos = () => {
                         key={item.text} 
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) setDrawerOpen(false);
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >
@@ -4189,39 +4092,83 @@ const Productos = () => {
                 <Toolbar />
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
+                {/* Header Banner estilo Cápsula con Botones Azules Ovalados */}
                 <Paper
                     sx={{
-                        p: { xs: 3, md: 4 },
-                        mb: 4,
-                        borderRadius: 4,
+                        px: { xs: 2.5, sm: 3.5 },
+                        py: { xs: 1.5, sm: 2 },
+                        mb: 2.5,
+                        borderRadius: '50px',
                         background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
                         color: 'white',
+                        display: 'flex',
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        alignItems: { xs: 'flex-start', sm: 'center' },
+                        justifyContent: 'space-between',
+                        gap: 2,
+                        boxShadow: '0 8px 25px rgba(124, 58, 237, 0.25)'
                     }}
                 >
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>
-                        Gestión de Productos
-                    </Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                        Administra el inventario de productos únicos por número de serie
-                    </Typography>
+                    <Box sx={{ pl: { sm: 1 } }}>
+                        <Typography variant={isMobile ? "subtitle1" : "h6"} sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                            Gestión de Productos
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.9, display: 'block', mt: 0.25 }}>
+                            Administra el inventario de productos únicos por número de serie
+                        </Typography>
+                    </Box>
                     
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <GradientButton
-                            startIcon={<AddIcon />}
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<AddIcon sx={{ color: '#FFFFFF', fontWeight: 800, fontSize: '1.1rem' }} />}
                             onClick={() => handleOpenForm()}
                             disabled={loading}
+                            sx={{
+                                background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+                                color: '#FFFFFF',
+                                fontWeight: 700,
+                                fontSize: '0.825rem',
+                                textTransform: 'none',
+                                borderRadius: '50px',
+                                border: '1px solid rgba(255, 255, 255, 0.4)',
+                                px: 2.2,
+                                py: 0.65,
+                                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                                whiteSpace: 'nowrap',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                                    boxShadow: '0 6px 18px rgba(37, 99, 235, 0.5)',
+                                    transform: 'translateY(-1px)'
+                                }
+                            }}
                         >
                             Nuevo Producto
-                        </GradientButton>
+                        </Button>
                         
                         <Button
-                            variant="outlined"
-                            startIcon={<DownloadIcon />}
+                            variant="contained"
+                            size="small"
+                            startIcon={<DownloadIcon sx={{ color: '#FFFFFF', fontSize: '1.1rem' }} />}
                             onClick={handleExportExcel}
                             sx={{
-                                borderColor: 'white',
-                                color: 'white',
-                                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
+                                background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+                                color: '#FFFFFF',
+                                fontWeight: 700,
+                                fontSize: '0.825rem',
+                                textTransform: 'none',
+                                borderRadius: '50px',
+                                border: '1px solid rgba(255, 255, 255, 0.4)',
+                                px: 2.2,
+                                py: 0.65,
+                                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                                whiteSpace: 'nowrap',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                                    boxShadow: '0 6px 18px rgba(37, 99, 235, 0.5)',
+                                    transform: 'translateY(-1px)'
+                                }
                             }}
                         >
                             Exportar Reporte
@@ -4229,7 +4176,7 @@ const Productos = () => {
                     </Stack>
 
                     {apiError && (
-                        <Alert severity="warning" sx={{ mt: 3 }} icon={<ErrorIcon />} action={
+                        <Alert severity="warning" sx={{ mt: 2, width: '100%' }} icon={<ErrorIcon />} action={
                             <Button color="inherit" size="small" onClick={handleRefresh}>
                                 REINTENTAR
                             </Button>
@@ -4245,81 +4192,7 @@ const Productos = () => {
                     counts={filterCounts}
                 />
 
-                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6} md={6}>
-                        <StyledCard>
-                            <CardContent>
-                                <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                                    <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 48, height: 48 }}>
-                                        <InventoryIcon />
-                                    </Avatar>
-                                </Box>
-                                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                    {loading && !dataLoaded ? <CircularProgress size={24} /> : filterCounts.todos}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Total Productos Activos
-                                </Typography>
-                                <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
-                                    ({filterCounts.disponibles} disponibles, {filterCounts.asignados} asignados, {filterCounts.prestamos} préstamos)
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                    
-                    <Grid item xs={12} sm={6} md={6}>
-                        <StyledCard>
-                            <CardContent>
-                                <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                                    <Avatar sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, width: 48, height: 48 }}>
-                                        <AttachMoneyIcon />
-                                    </Avatar>
-                                </Box>
-                                <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                                    {loading && !dataLoaded ? <CircularProgress size={24} /> : `$${stats.valorTotal.toLocaleString('es-CL')}`}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Valor Total Inventario
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                </Grid>
 
-                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={6} sm={4} md={2}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                            <Typography variant="h6" color={colors.warning}>
-                                {getProductosActivos(productos).filter(p => p.estado === 'EN MANTENCIÓN' || p.estado === 'EN REPARACIÓN').length}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                En Mantención
-                            </Typography>
-                        </Paper>
-                    </Grid>
-                    
-                    <Grid item xs={6} sm={4} md={2}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                            <Typography variant="h6" color={colors.error}>
-                                {bajas.length}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                Dados de Baja
-                            </Typography>
-                        </Paper>
-                    </Grid>
-                    
-                    <Grid item xs={6} sm={4} md={2}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                            <Typography variant="h6" color={colors.success}>
-                                {donaciones.length}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                Donados
-                            </Typography>
-                        </Paper>
-                    </Grid>
-                </Grid>
 
                 <FilterPaper className="filter-paper">
                     <Grid container spacing={2} alignItems="center">
@@ -4420,10 +4293,12 @@ const Productos = () => {
                                 paginatedProductos.map((producto) => {
                                     const bodegaEncontrada = bodegas.find(b => b.id === producto.bodega_id);
                                     const bodegaNombre = bodegaEncontrada?.nombre || producto.bodega_nombre || 'Sin asignar';
-                                    const disponible = producto.estado === 'DISPONIBLE';
+                                    const tieneColaborador = !!(producto.colaborador_asignado && producto.colaborador_asignado.nombre);
+                                    const estadoReal = (tieneColaborador && (producto.estado === 'DISPONIBLE' || !producto.estado)) ? 'ASIGNADO' : producto.estado;
+                                    const disponible = estadoReal === 'DISPONIBLE';
                                     const esPrestamo = getEsPrestamo(producto);
-                                    const estadoMostrar = esPrestamo ? 'PRÉSTAMO' : producto.estado;
-                                    const estadoColor = getEstadoColor(producto.estado, esPrestamo);
+                                    const estadoMostrar = esPrestamo ? 'PRÉSTAMO' : estadoReal;
+                                    const estadoColor = getEstadoColor(estadoReal, esPrestamo);
                                     
                                     return (
                                         <TableRow key={producto.id} hover>
@@ -4473,15 +4348,19 @@ const Productos = () => {
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                                <Chip
-                                                    icon={<StoreIcon />}
-                                                    label={bodegaNombre}
-                                                    size="small"
-                                                    sx={{ 
-                                                        backgroundColor: alpha(colors.info, 0.1),
-                                                        color: colors.info,
-                                                    }}
-                                                />
+                                                {estadoReal === 'ASIGNADO' ? (
+                                                    <Typography variant="body2" color="text.secondary">-</Typography>
+                                                ) : (
+                                                    <Chip
+                                                        icon={<StoreIcon />}
+                                                        label={bodegaNombre}
+                                                        size="small"
+                                                        sx={{ 
+                                                            backgroundColor: alpha(colors.info, 0.1),
+                                                            color: colors.info,
+                                                        }}
+                                                    />
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
@@ -4541,18 +4420,7 @@ const Productos = () => {
                                                         </IconButton>
                                                     </Tooltip>
                                                     
-                                                    {!producto.es_granel && (
-                                                        <Tooltip title={disponible ? "Asignar a colaborador" : "No disponible para asignar"}>
-                                                            <IconButton 
-                                                                size="small" 
-                                                                onClick={() => handleOpenAsignacion(producto)}
-                                                                disabled={!disponible}
-                                                                sx={{ color: colors.success, p: '3px' }}
-                                                            >
-                                                                <AssignmentIndIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
+
                                                     
                                                     <Tooltip title="Ver historial de uso">
                                                         <IconButton 

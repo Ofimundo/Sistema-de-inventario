@@ -58,159 +58,244 @@ function dibujarFirma(doc, firma, x, y, nombrePorDefecto) {
     return false;
 }
 
-// Función para generar acta de asignación PDF (VERSIÓN CORREGIDA)
+const htmlPdfNode = require('html-pdf-node');
+
+const DEFAULT_CHECKLIST_ITEMS = [
+    { id: 'equipo_revisado', label: 'Equipo revisado físicamente', ok: true },
+    { id: 'cargador', label: 'Cargador entregado', ok: true },
+    { id: 'mouse', label: 'Mouse entregado', ok: true },
+    { id: 'audifonos', label: 'Audífonos entregados', ok: true },
+    { id: 'telefono', label: 'Teléfono entregado / Celular', ok: true },
+    { id: 'esim', label: 'E-Sim / Chip de datos', ok: true },
+    { id: 'windows_actualizado', label: 'Windows actualizado', ok: true },
+    { id: 'drivers', label: 'Drivers instalados', ok: true },
+    { id: 'dominio', label: 'Equipo agregado dominio', ok: true },
+    { id: 'usuario_configurado', label: 'Usuario configurado', ok: true },
+    { id: 'outlook', label: 'Outlook configurado', ok: true },
+    { id: 'mfa', label: 'MFA habilitado', ok: true },
+    { id: 'teams', label: 'Teams instalado', ok: true },
+    { id: 'onedrive', label: 'OneDrive funcionando', ok: true },
+    { id: 'softland', label: 'Softland instalado', ok: true },
+    { id: 'unidad_softland', label: 'Unidad red Softland', ok: true },
+    { id: 'vpn_instalada', label: 'VPN instalada', ok: true },
+    { id: 'vpn_validada', label: 'VPN validada', ok: true },
+    { id: 'internet', label: 'Internet validado', ok: true },
+    { id: 'acceso_recursos', label: 'Acceso recursos internos', ok: true },
+    { id: 'antivirus', label: 'Antivirus operativo', ok: true },
+    { id: 'firewall', label: 'Firewall activo', ok: true }
+];
+
+function formatearFechaCorta(fecha) {
+    if (!fecha) return '';
+    const d = new Date(fecha);
+    if (isNaN(d.getTime())) return '';
+    const dia = d.getDate().toString().padStart(2, '0');
+    const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+    const año = d.getFullYear();
+    return `${dia}-${mes}-${año}`;
+}
+
+function construirHtmlChecklist(data) {
+    const colaborador = data.colaborador || {};
+    const producto = data.productos?.[0] || data.producto || {};
+    const ticketInfo = data.ticketInfo || {};
+    const specs = data.especificacionesTecnicas || data.especificaciones || {};
+    const rawItems = data.checklistData?.items || data.items;
+    
+    // Si no hay items personalizados, utilizar la lista completa por defecto
+    const itemsChecklist = (rawItems && rawItems.length > 0) ? rawItems : DEFAULT_CHECKLIST_ITEMS;
+    const fechaText = formatearFechaCorta(data.fecha_asignacion || new Date());
+    
+    const usuarioRed = data.usuarioRed || data.checklistData?.usuarioRed || (colaborador.email ? colaborador.email.split('@')[0] : '');
+    const claveRed = data.claveRed || data.checklistData?.claveRed || '********';
+
+    // 1. Información Grid de 2 columnas pareadas exactas (Imagen 2)
+    const rutVal = colaborador.rut && colaborador.rut !== '-' && colaborador.rut !== 'Sin RUT' ? colaborador.rut : '';
+    const cargoDeptoVal = [colaborador.cargo, colaborador.departamento].filter(Boolean).join(' - ');
+    const equipoModeloVal = `${producto.nombre || 'Equipo'} ${producto.marca || producto.modelo ? `(${[producto.marca, producto.modelo].filter(Boolean).join(' ')})` : ''}`.trim();
+    const nroSerieVal = producto.numero_serie && producto.numero_serie !== 'N/A' && producto.numero_serie !== '-' ? producto.numero_serie : '';
+    const ticketVal = ticketInfo.ticket ? `Ticket: ${ticketInfo.ticket} | Fecha: ${fechaText}` : `Ticket: - | Fecha: ${fechaText}`;
+    const tecnicoVal = ticketInfo.tecnico || data.usuario_responsable || colaborador.nombre || 'Técnico TI';
+
+    const infoGridHtml = `
+        <div class="info-row"><div class="info-label">Colaborador:</div><div class="info-value">${colaborador.nombre || ''}</div></div>
+        <div class="info-row"><div class="info-label">RUT:</div><div class="info-value">${rutVal}</div></div>
+        <div class="info-row"><div class="info-label">Cargo / Depto:</div><div class="info-value">${cargoDeptoVal}</div></div>
+        <div class="info-row"><div class="info-label">Usuario Red / Clave:</div><div class="info-value">${usuarioRed ? `${usuarioRed} / ${claveRed}` : ''}</div></div>
+        <div class="info-row"><div class="info-label">Equipo / Modelo:</div><div class="info-value">${equipoModeloVal}</div></div>
+        <div class="info-row"><div class="info-label">N° de Serie:</div><div class="info-value">${nroSerieVal}</div></div>
+        <div class="info-row"><div class="info-label">N° Ticket / Fecha:</div><div class="info-value">${ticketVal}</div></div>
+        <div class="info-row"><div class="info-label">Técnico TI:</div><div class="info-value">${tecnicoVal}</div></div>
+    `;
+
+    // 2. Checklist Items Table
+    const itemsRowsHtml = itemsChecklist.map(item => {
+        const isOk = item.ok !== false;
+        const estadoCell = isOk 
+            ? `<span style="color: #10B981; font-weight: bold;">✔ OK</span>` 
+            : `<span style="color: #EF4444; font-weight: bold;">❌ PENDIENTE</span>`;
+        const obsCell = item.observacion || (!isOk ? 'No entregado' : '-');
+        return `<tr>
+            <td>${item.label || item.id || ''}</td>
+            <td style="text-align: center;">${estadoCell}</td>
+            <td>${obsCell}</td>
+        </tr>`;
+    }).join('');
+
+    // 3. Specifications Table
+    const cpu = specs.cpu || '';
+    const ram = specs.ram || '';
+    const disco = specs.disco || '';
+    const gpu = specs.gpu || '';
+    const tipo = specs.tipo || producto.condicion || '';
+
+    // 4. Firmas
+    let firmaTrabajadorHtml = '';
+    const firmaVal = data.firma_trabajador || colaborador.nombre || '';
+    if (firmaVal && typeof firmaVal === 'string' && firmaVal.startsWith('data:image')) {
+        firmaTrabajadorHtml = `<img src="${firmaVal}" style="max-height: 40px; max-width: 160px; object-fit: contain;" />`;
+    } else {
+        firmaTrabajadorHtml = `<svg viewBox="0 0 100 30" style="height: 30px; width: 100px;"><path d="M 10 25 Q 30 5, 50 20 T 90 10" fill="none" stroke="#222" stroke-width="1.5"/></svg>`;
+    }
+
+    const firmaGerenteHtml = `<svg viewBox="0 0 100 30" style="height: 30px; width: 100px;"><path d="M 10 20 Q 30 28, 50 10 T 90 18" fill="none" stroke="#222" stroke-width="1.5"/></svg>`;
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Checklist_Entrega_${(colaborador.nombre || 'Colaborador').replace(/\s+/g, '_')}</title>
+    <style>
+        @page { size: A4; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; background: white; padding: 8px 12px; color: #111; font-size: 8px; }
+        .checklist-container { max-width: 100%; margin: 0 auto; background: white; border: 1.5px solid #333; padding: 10px 14px; }
+        .header { text-align: center; margin-bottom: 6px; border-bottom: 1.5px solid #333; padding-bottom: 4px; }
+        .header h1 { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; }
+        .header p { font-size: 8.5px; color: #444; font-weight: bold; }
+        
+        .section-title { font-size: 8.5px; font-weight: bold; text-transform: uppercase; background: #f0f0f0; padding: 2px 6px; border: 1px solid #333; margin-top: 6px; margin-bottom: 3px; }
+        
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 8px; margin-bottom: 6px; }
+        .info-row { display: flex; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 1px; }
+        .info-label { font-weight: bold; width: 115px; font-size: 8px; color: #222; }
+        .info-value { flex: 1; font-size: 8px; color: #111; }
+        
+        .checklist-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+        .checklist-table th { background-color: #f0f0f0; border: 1px solid #333; padding: 3px 6px; text-align: left; font-size: 7.5px; font-weight: bold; text-transform: uppercase; }
+        .checklist-table td { border: 1px solid #333; padding: 1.8px 6px; font-size: 7.5px; line-height: 1.1; }
+        
+        .specs-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+        .specs-table td { border: 1px solid #333; padding: 3px 6px; font-size: 7.5px; }
+        
+        .signature-section { display: flex; justify-content: space-around; margin-top: 10px; padding-top: 2px; page-break-inside: avoid; }
+        .signature-box { width: 42%; text-align: center; }
+        .signature-img-container { height: 25px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 2px; }
+        .signature-line { border-top: 1px solid #000; padding-top: 2px; font-weight: bold; font-size: 8.5px; }
+        .signature-subtitle { font-size: 7.5px; color: #444; }
+        .footer { margin-top: 6px; text-align: center; font-size: 7px; color: #666; border-top: 1px solid #ddd; padding-top: 3px; }
+    </style>
+</head>
+<body>
+    <div class="checklist-container">
+        <div class="header">
+            <h1>CHECKLIST DE ENTREGA Y PREPARACIÓN DE EQUIPO</h1>
+            <p>DEPARTAMENTO DE TECNOLOGÍA E INNOVACIÓN</p>
+        </div>
+
+        <div class="section-title">1. INFORMACIÓN DEL COLABORADOR Y EQUIPO</div>
+        <div class="info-grid">
+            ${infoGridHtml}
+        </div>
+
+        <div class="section-title">2. VERIFICACIÓN Y CONFIGURACIÓN DE EQUIPO</div>
+        <table class="checklist-table">
+            <thead>
+                <tr>
+                    <th style="width: 55%">ITEM DE VERIFICACIÓN</th>
+                    <th style="width: 15%; text-align: center">ESTADO</th>
+                    <th style="width: 30%">OBSERVACIONES</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsRowsHtml}
+            </tbody>
+        </table>
+
+        <div class="section-title">3. ESPECIFICACIONES TÉCNICAS DEL EQUIPO</div>
+        <table class="specs-table">
+            <tbody>
+                <tr>
+                    <td style="width: 20%; font-weight: bold; background: #fafafa">CPU:</td>
+                    <td style="width: 30%">${cpu}</td>
+                    <td style="width: 20%; font-weight: bold; background: #fafafa">RAM:</td>
+                    <td style="width: 30%">${ram}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold; background: #fafafa">Disco:</td>
+                    <td>${disco}</td>
+                    <td style="font-weight: bold; background: #fafafa">GPU:</td>
+                    <td>${gpu}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold; background: #fafafa">Tipo de Equipo:</td>
+                    <td colspan="3">${tipo}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="section-title">4. CONFORMIDAD Y FIRMAS</div>
+        <p style="font-size: 7.5px; margin-bottom: 6px; line-height: 1.2; color: #333;">
+            El colaborador declara haber recibido el equipo especificado en el presente documento en óptimas condiciones de funcionamiento, habiéndose verificado todos los puntos del checklist anterior.
+        </p>
+
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-img-container">
+                    ${firmaTrabajadorHtml}
+                </div>
+                <div class="signature-line">Firma del Colaborador</div>
+                <div style="font-size: 8.5px; font-weight: bold; margin-top: 1px;">${colaborador.nombre || 'Colaborador'}</div>
+                ${colaborador.rut ? `<div class="signature-subtitle">RUT: ${colaborador.rut}</div>` : ''}
+            </div>
+
+            <div class="signature-box">
+                <div class="signature-img-container">
+                    ${firmaGerenteHtml}
+                </div>
+                <div class="signature-line">V°B° Gerente de Tecnología</div>
+                <div style="font-size: 8.5px; font-weight: bold; margin-top: 1px;">María Eugenia Nabalón</div>
+                <div class="signature-subtitle">Gerente de Tecnología e Innovación</div>
+            </div>
+        </div>
+
+        <div class="footer"><p>Documento oficial generado por Sistema de Inventario y Gestión TI</p></div>
+    </div>
+</body>
+</html>`;
+}
+
+// Función para generar Checklist de Entrega PDF oficial (usando la plantilla HTML exacta del usuario)
 async function generarActaAsignacionPDF(data) {
-    return new Promise((resolve, reject) => {
+    const htmlContent = construirHtmlChecklist(data);
+    const options = {
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    };
+    const file = { content: htmlContent };
+
+    for (let intento = 1; intento <= 3; intento++) {
         try {
-            const doc = new PDFDocument({ margin: 50, size: 'A4' });
-            const chunks = [];
-            
-            doc.on('data', chunk => chunks.push(chunk));
-            doc.on('end', () => resolve(Buffer.concat(chunks)));
-            
-            // Header
-            doc.font('Helvetica-Bold').fontSize(18).text(EMPRESA.nombre, { align: 'center' }).moveDown(0.3);
-            doc.font('Helvetica').fontSize(10)
-               .text(`RUT: ${EMPRESA.rut} | ${EMPRESA.domicilio}`, { align: 'center' })
-               .text(`Email: ${EMPRESA.email} - Fono: ${EMPRESA.telefono}`, { align: 'center' })
-               .moveDown(0.5);
-            doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-            doc.moveDown(0.5);
-            
-            // Título
-            doc.font('Helvetica-Bold').fontSize(16).text('ACTA DE ASIGNACIÓN DE EQUIPO', { align: 'center' }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10)
-               .text(`Fecha de Asignación: ${formatearFecha(data.fecha_asignacion)}`, { align: 'left' })
-               .text(`ID Asignación: ${data.id_asignacion}`, { align: 'left' })
-               .moveDown(1);
-            
-            // 1. DATOS DE LA EMPRESA
-            doc.font('Helvetica-Bold').fontSize(12).text('1. DATOS DE LA EMPRESA', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10)
-               .text(`Razón Social: ${EMPRESA.nombre}`)
-               .text(`RUT: ${EMPRESA.rut}`)
-               .text(`Representante Legal: ${EMPRESA.representante_legal}`)
-               .text(`Cargo: ${EMPRESA.cargo_representante}`)
-               .text(`Domicilio: ${EMPRESA.domicilio}`)
-               .moveDown(1);
-            
-            // 2. DATOS DEL TRABAJADOR
-            doc.font('Helvetica-Bold').fontSize(12).text('2. DATOS DEL TRABAJADOR', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10)
-               .text(`Nombre: ${data.colaborador.nombre || ''}`)
-               .text(`RUT: ${data.colaborador.rut || ''}`)
-               .text(`Nacionalidad: ${data.colaborador.nacionalidad || 'chilena'}`)
-               .text(`Profesión/Oficio: ${data.colaborador.cargo || ''}`)
-               .text(`Email: ${data.colaborador.email || ''}`)
-               .text(`Departamento: ${data.colaborador.departamento || 'Tecnología e Innovación'}`)
-               .moveDown(1);
-            
-            // 3. DATOS DEL EQUIPO ENTREGADO
-            doc.font('Helvetica-Bold').fontSize(12).text('3. DATOS DEL EQUIPO ENTREGADO', { underline: true }).moveDown(0.5);
-            
-            // Asegurar que productos sea un array
-            const productosArray = Array.isArray(data.productos) ? data.productos : [data.producto || data.productos];
-            
-            const colPositions = { num: 40, tipo: 80, marca: 150, modelo: 220, serie: 300, estado: 380, cantidad: 460 };
-            const tableTop = doc.y;
-            doc.font('Helvetica-Bold').fontSize(9)
-               .text('#', colPositions.num, tableTop)
-               .text('TIPO', colPositions.tipo, tableTop)
-               .text('MARCA', colPositions.marca, tableTop)
-               .text('MODELO', colPositions.modelo, tableTop)
-               .text('N° SERIE', colPositions.serie, tableTop)
-               .text('ESTADO', colPositions.estado, tableTop)
-               .text('CANT.', colPositions.cantidad, tableTop);
-            doc.moveTo(40, tableTop + 15).lineTo(560, tableTop + 15).stroke();
-            
-            let currentY = tableTop + 25;
-            productosArray.forEach((producto, index) => {
-                doc.font('Helvetica').fontSize(9)
-                   .text((index + 1).toString(), colPositions.num, currentY)
-                   .text(producto.tipo || producto.nombre || 'Equipo', colPositions.tipo, currentY)
-                   .text(producto.marca || 'N/A', colPositions.marca, currentY)
-                   .text(producto.modelo || 'N/A', colPositions.modelo, currentY)
-                   .text(producto.numero_serie || 'N/A', colPositions.serie, currentY)
-                   .text(producto.condicion || 'NUEVO', colPositions.estado, currentY)
-                   .text((producto.cantidad || 1).toString(), colPositions.cantidad, currentY);
-                currentY += 20;
-                if (currentY > 700 && index < productosArray.length - 1) { 
-                    doc.addPage(); 
-                    currentY = 50; 
-                }
-            });
-            doc.moveDown(2);
-            
-            // 4. MOTIVO DE LA ASIGNACIÓN
-            doc.font('Helvetica-Bold').fontSize(12).text('4. MOTIVO DE LA ASIGNACIÓN', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10)
-               .text(data.motivo || 'Asignación de equipo para uso laboral', { width: 520 });
-            doc.moveDown(2);
-            
-            // 5. OBSERVACIONES
-            doc.font('Helvetica-Bold').fontSize(12).text('5. OBSERVACIONES', { underline: true }).moveDown(0.5);
-            doc.font('Helvetica').fontSize(10)
-               .text(data.observaciones || 'Sin observaciones', { width: 520 });
-            doc.moveDown(2);
-            
-            // 6. INFORMACIÓN DEL TICKET
-            if (data.ticketInfo && data.ticketInfo.ticket) {
-                doc.font('Helvetica-Bold').fontSize(12).text('6. INFORMACIÓN DEL TICKET', { underline: true }).moveDown(0.5);
-                doc.font('Helvetica').fontSize(10)
-                   .text(`N° Ticket: ${data.ticketInfo.ticket}`)
-                   .text(`Técnico Responsable: ${data.ticketInfo.tecnico || 'No especificado'}`);
-                doc.moveDown(2);
-            }
-            
-            // 7. ESPECIFICACIONES TÉCNICAS
-            if (data.especificaciones) {
-                doc.font('Helvetica-Bold').fontSize(12).text('7. ESPECIFICACIONES TÉCNICAS', { underline: true }).moveDown(0.5);
-                doc.font('Helvetica').fontSize(10)
-                   .text(`CPU: ${data.especificaciones.cpu || 'N/A'}`)
-                   .text(`RAM: ${data.especificaciones.ram || 'N/A'}`)
-                   .text(`Disco: ${data.especificaciones.disco || 'N/A'}`)
-                   .text(`GPU: ${data.especificaciones.gpu || 'N/A'}`)
-                   .text(`Tipo: ${data.especificaciones.tipo || 'N/A'}`);
-                doc.moveDown(2);
-            }
-            
-            // FIRMAS (nueva página)
-            doc.addPage();
-            doc.moveDown(2);
-            
-            doc.font('Helvetica-Bold').fontSize(14).text('FIRMAS', { align: 'center', underline: true });
-            doc.moveDown(3);
-            
-            // Firma del Trabajador
-            doc.font('Helvetica-Bold').fontSize(11).text('RECIBÍ CONFORME', { align: 'right' });
-            doc.moveDown(1);
-            const lineaTrabajadorY = doc.y;
-            doc.moveTo(120, lineaTrabajadorY).lineTo(480, lineaTrabajadorY).stroke();
-            dibujarFirma(doc, data.firma_trabajador, 120, lineaTrabajadorY - 28, data.colaborador.nombre);
-            doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text('FIRMA DEL TRABAJADOR', { align: 'center' });
-            doc.moveDown(4);
-            
-            // Firma del Gerente
-            doc.font('Helvetica-Bold').fontSize(11).text('ENTREGÓ CONFORME', { align: 'right' });
-            doc.moveDown(1);
-            const lineaGerenteY = doc.y;
-            doc.moveTo(120, lineaGerenteY).lineTo(480, lineaGerenteY).stroke();
-            dibujarFirma(doc, data.firma_gerente, 120, lineaGerenteY - 28, EMPRESA.representante_legal);
-            doc.moveDown(2);
-            doc.font('Helvetica').fontSize(9).text(EMPRESA.cargo_representante, { align: 'center' });
-            doc.moveDown(3);
-            
-            // Footer
-            doc.font('Helvetica-Oblique').fontSize(8)
-               .text('Este documento es una representación digital de la entrega de equipos.', { align: 'center' })
-               .text('Los datos contenidos en este documento son de carácter informativo.', { align: 'center' });
-            
-            doc.end();
-        } catch (error) {
-            reject(error);
+            const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
+            return pdfBuffer;
+        } catch (err) {
+            console.error(`⚠️ Intento ${intento} fallido al generar PDF HTML:`, err.message);
+            if (intento === 3) throw err;
+            await new Promise(res => setTimeout(res, 300));
         }
-    });
+    }
 }
 
 // Función para generar acta de recepción PDF
@@ -583,17 +668,17 @@ const asignacionController = {
             
             const pdfBuffer = await generarActaAsignacionPDF(pdfData);
             
-            const filename = `acta_asignacion_${data.id_asignacion}_${Date.now()}.pdf`;
+            const filename = `checklist_entrega_${data.id_asignacion}_${Date.now()}.pdf`;
             const filepath = path.join(DOCS_DIR, filename);
             
             fs.writeFileSync(filepath, pdfBuffer);
             
-            console.log('✅ Acta generada:', filename);
+            console.log('✅ Checklist de entrega generado:', filename);
             
             res.json({ 
                 success: true, 
                 filename, 
-                message: 'Acta de asignación generada correctamente' 
+                message: 'Checklist de entrega generado correctamente' 
             });
             
         } catch (error) {
@@ -1142,4 +1227,7 @@ const asignacionController = {
     }
 };
 
-module.exports = asignacionController;
+module.exports = {
+    ...asignacionController,
+    generarActaAsignacionPDF
+};

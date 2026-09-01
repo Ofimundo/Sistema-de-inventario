@@ -88,6 +88,17 @@ export const colaboradorService = {
         }
     },
 
+    updateObservaciones: async (id, observaciones) => {
+        try {
+            console.log(`📤 Actualizando observaciones del colaborador ${id}`);
+            const response = await api.put(`/colaboradores/${id}/observaciones`, { observaciones });
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error en updateObservaciones:', error);
+            throw error;
+        }
+    },
+
     deleteColaborador: async (id) => {
         try {
             console.log(`📤 Eliminando colaborador ${id}`);
@@ -134,9 +145,9 @@ export const colaboradorService = {
                 // NUEVO: estadísticas por empresa
                 por_empresa: {
                     GLOBAL: 0,
-                    DREAMTEC: 0,
-                    OFIMUNDO: 0,
-                    HIWAY: 0
+                    HIWAY: 0,
+                    LATAM_LITE: 0,
+                    OFIMUNDO: 0
                 }
             };
         } catch (error) {
@@ -150,9 +161,9 @@ export const colaboradorService = {
                 equipos_activos: 0,
                 por_empresa: {
                     GLOBAL: 0,
-                    DREAMTEC: 0,
-                    OFIMUNDO: 0,
-                    HIWAY: 0
+                    HIWAY: 0,
+                    LATAM_LITE: 0,
+                    OFIMUNDO: 0
                 }
             };
         }
@@ -182,10 +193,10 @@ export const colaboradorService = {
             if (response.data && response.data.success) {
                 return response.data.data;
             }
-            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'];
+            return ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO'];
         } catch (error) {
             console.error('❌ Error en getEmpresas:', error);
-            return ['GLOBAL', 'DREAMTEC', 'OFIMUNDO', 'HIWAY'];
+            return ['GLOBAL', 'HIWAY', 'LATAM_LITE', 'OFIMUNDO'];
         }
     },
     

@@ -134,14 +134,10 @@ const MantencionPage = () => {
 
   // User & Layout States
   const [user, setUser] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [globalSearchTerm, setGlobalSearchTerm] = useState("");
-
-  useEffect(() => {
-    setDrawerOpen(!isMobile);
-  }, [isMobile]);
 
   // Data states
   const [mantenciones, setMantenciones] = useState([]);
@@ -640,7 +636,7 @@ const MantencionPage = () => {
               key={item.path}
               onClick={() => { 
                 navigate(item.path); 
-                if (isMobile) setDrawerOpen(false); 
+                setDrawerOpen(false); 
               }}
               selected={isSelected}
             >

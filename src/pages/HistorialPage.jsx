@@ -317,7 +317,7 @@ const HistorialPage = () => {
     const [user, setUser] = useState(null);
     const [anchorEl, setAnchorEl] = useState(null);
     const [notificacionesAnchor, setNotificacionesAnchor] = useState(null);
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
     const [notificaciones, setNotificaciones] = useState([]);
     const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
@@ -882,7 +882,7 @@ const HistorialPage = () => {
                         key={item.text}
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) handleDrawerToggle();
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >
@@ -1489,12 +1489,12 @@ const HistorialPage = () => {
                                                     <StyledTableRow key={generarKeyUnica(item, index)} hover>
                                                         <TableCell>
                                                             <Chip 
-                                                                icon={item.tipo === 'anexo' ? <DescriptionIcon /> : (item.tipo === 'asignacion' ? <AssignmentIcon /> : <ReceiptIcon />)}
-                                                                label={item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' ? 'Acta Asignación' : 'Acta Recepción')}
+                                                                icon={item.tipo === 'anexo' ? <DescriptionIcon /> : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? <AssignmentIcon /> : <ReceiptIcon />)}
+                                                                label={item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? 'Checklist de Entrega' : 'Acta Recepción')}
                                                                 size="small"
                                                                 sx={{
-                                                                    bgcolor: item.tipo === 'anexo' ? alpha('#8B5CF6', 0.1) : (item.tipo === 'asignacion' ? alpha(colors.primary, 0.1) : alpha(colors.success, 0.1)),
-                                                                    color: item.tipo === 'anexo' ? '#8B5CF6' : (item.tipo === 'asignacion' ? colors.primary : colors.success)
+                                                                    bgcolor: item.tipo === 'anexo' ? alpha('#8B5CF6', 0.1) : ((item.tipo === 'asignacion' || item.tipo === 'checklist') ? alpha(colors.primary, 0.1) : alpha(colors.success, 0.1)),
+                                                                    color: item.tipo === 'anexo' ? '#8B5CF6' : ((item.tipo === 'asignacion' || item.tipo === 'checklist') ? colors.primary : colors.success)
                                                                 }}
                                                             />
                                                         </TableCell>

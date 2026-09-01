@@ -70,7 +70,10 @@ import {
     Build as BuildIcon,
     Description as DescriptionIcon,
     Inventory2 as Inventory2Icon,
-    History as HistoryIcon
+    History as HistoryIcon,
+    Check as CheckIcon,
+    Save as SaveIcon,
+    Comment as CommentIcon
 } from '@mui/icons-material';
 import { Drawer, List, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -98,25 +101,29 @@ const colors = {
     border: '#E5E7EB'
 };
 
-// Opciones de empresas
+// Opciones de empresas (ordenadas alfabéticamente)
 const OPCIONES_EMPRESA = [
     { valor: 'GLOBAL', label: 'Global', color: '#8B5CF6', icon: '🌍' },
-    { valor: 'DREAMTEC', label: 'Dreamtec', color: '#EC4899', icon: '✨' },
-    { valor: 'OFIMUNDO', label: 'Ofimundo', color: '#0A66C2', icon: '🏢' },
-    { valor: 'HIWAY', label: 'HIway', color: '#10B981', icon: '🛣️' }
+    { valor: 'HIWAY', label: 'HIway', color: '#10B981', icon: '🛣️' },
+    { valor: 'LATAM_LITE', label: 'Latam Lite', color: '#EC4899', icon: '✨' },
+    { valor: 'OFIMUNDO', label: 'Ofimundo', color: '#0A66C2', icon: '🏢' }
 ];
 
 // Obtener color de empresa
 const getEmpresaColor = (empresa) => {
     if (!empresa) return '#6B7280';
-    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === String(empresa).trim().toUpperCase());
+    const empUpper = String(empresa).trim().toUpperCase();
+    if (empUpper === 'DREAMTEC') return '#EC4899';
+    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === empUpper || e.label.toUpperCase() === empUpper);
     return found ? found.color : '#6B7280';
 };
 
 // Obtener label de empresa
 const getEmpresaLabel = (empresa) => {
     if (!empresa) return 'No asignada';
-    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === String(empresa).trim().toUpperCase());
+    const empUpper = String(empresa).trim().toUpperCase();
+    if (empUpper === 'DREAMTEC') return 'Latam Lite';
+    const found = OPCIONES_EMPRESA.find(e => e.valor.toUpperCase() === empUpper || e.label.toUpperCase() === empUpper);
     return found ? found.label : String(empresa);
 };
 
@@ -174,90 +181,40 @@ const GradientButton = styled(Button)(({ theme }) => ({
 }));
 
 // Componente de filtros avanzados
-const AdvancedFilters = ({ filters, onFilterChange, onClearFilters, departamentos, activeFiltersCount }) => {
+const AdvancedFilters = ({ filters, onFilterChange, onClearFilters, activeFiltersCount }) => {
     return (
-        <Box sx={{ mt: 3 }}>
-            <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Empresa</InputLabel>
+        <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${colors.border}` }}>
+            <Grid container spacing={2.5} alignItems="center">
+                <Grid item xs={12} sm={6} md={6}>
+                    <FormControl fullWidth size="small" sx={{ minWidth: 220 }}>
+                        <InputLabel id="select-label-estado">Estado</InputLabel>
                         <Select
-                            value={filters.empresa}
-                            onChange={(e) => onFilterChange('empresa', e.target.value)}
-                            label="Empresa"
-                        >
-                            <MenuItem value="">Todas</MenuItem>
-                            {OPCIONES_EMPRESA.map((emp) => (
-                                <MenuItem key={emp.valor} value={emp.valor}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <span>{emp.icon}</span>
-                                        {emp.label}
-                                    </Box>
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Estado</InputLabel>
-                        <Select
+                            labelId="select-label-estado"
                             value={filters.estado}
                             onChange={(e) => onFilterChange('estado', e.target.value)}
                             label="Estado"
+                            sx={{ borderRadius: 2 }}
                         >
-                            <MenuItem value="">Todos</MenuItem>
+                            <MenuItem value="">Todos los Estados</MenuItem>
                             <MenuItem value="ACTIVO">Activos</MenuItem>
                             <MenuItem value="INACTIVO">Inactivos</MenuItem>
                         </Select>
                     </FormControl>
                 </Grid>
-                <Grid item xs={12} md={4}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Departamento</InputLabel>
+                <Grid item xs={12} sm={6} md={6}>
+                    <FormControl fullWidth size="small" sx={{ minWidth: 220 }}>
+                        <InputLabel id="select-label-asignaciones">Asignaciones</InputLabel>
                         <Select
-                            value={filters.departamento}
-                            onChange={(e) => onFilterChange('departamento', e.target.value)}
-                            label="Departamento"
-                        >
-                            <MenuItem value="">Todos</MenuItem>
-                            {departamentos.map((depto) => (
-                                <MenuItem key={depto} value={depto}>{depto}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Asignaciones</InputLabel>
-                        <Select
+                            labelId="select-label-asignaciones"
                             value={filters.asignaciones}
                             onChange={(e) => onFilterChange('asignaciones', e.target.value)}
                             label="Asignaciones"
+                            sx={{ borderRadius: 2 }}
                         >
-                            <MenuItem value="">Todos</MenuItem>
+                            <MenuItem value="">Todas las Asignaciones</MenuItem>
                             <MenuItem value="con_asignaciones">Con productos asignados</MenuItem>
                             <MenuItem value="sin_asignaciones">Sin productos asignados</MenuItem>
                             <MenuItem value="con_historial">Con historial de asignaciones</MenuItem>
-                        </Select>
-                    </FormControl>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                    <FormControl fullWidth size="small">
-                        <InputLabel>Ordenar por</InputLabel>
-                        <Select
-                            value={filters.ordenarPor}
-                            onChange={(e) => onFilterChange('ordenarPor', e.target.value)}
-                            label="Ordenar por"
-                        >
-                            <MenuItem value="nombre_asc">Nombre (A-Z)</MenuItem>
-                            <MenuItem value="nombre_desc">Nombre (Z-A)</MenuItem>
-                            <MenuItem value="empresa_asc">Empresa (A-Z)</MenuItem>
-                            <MenuItem value="empresa_desc">Empresa (Z-A)</MenuItem>
-                            <MenuItem value="asignaciones_desc">Más asignaciones</MenuItem>
-                            <MenuItem value="asignaciones_asc">Menos asignaciones</MenuItem>
-                            <MenuItem value="fecha_ingreso_desc">Más recientes</MenuItem>
-                            <MenuItem value="fecha_ingreso_asc">Más antiguos</MenuItem>
                         </Select>
                     </FormControl>
                 </Grid>
@@ -282,6 +239,32 @@ const AdvancedFilters = ({ filters, onFilterChange, onClearFilters, departamento
 
 // Diálogo de detalle de colaborador
 const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], onRefresh, loading }) => {
+    const [editingObservaciones, setEditingObservaciones] = useState(false);
+    const [observacionesText, setObservacionesText] = useState('');
+    const [savingObservaciones, setSavingObservaciones] = useState(false);
+
+    useEffect(() => {
+        if (colaborador) {
+            setObservacionesText(colaborador.observaciones || '');
+            setEditingObservaciones(false);
+        }
+    }, [colaborador, open]);
+
+    const handleSaveObservaciones = async () => {
+        if (!colaborador) return;
+        setSavingObservaciones(true);
+        try {
+            await colaboradorService.updateObservaciones(colaborador.id, observacionesText);
+            colaborador.observaciones = observacionesText;
+            setEditingObservaciones(false);
+            if (onRefresh) onRefresh();
+        } catch (err) {
+            console.error('Error guardando observaciones:', err);
+        } finally {
+            setSavingObservaciones(false);
+        }
+    };
+
     const formatDate = (dateString) => {
         if (!dateString) return 'No registrada';
         try {
@@ -307,7 +290,7 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
     if (!colaborador) return null;
 
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
             <DialogTitle sx={{ 
                 borderBottom: 1, 
                 borderColor: 'divider',
@@ -351,7 +334,7 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
 
             <DialogContent dividers>
                 <Grid container spacing={3}>
-                    <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={4}>
                         <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                             Información Personal
                         </Typography>
@@ -388,16 +371,11 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                     <Typography color="text.secondary">Dirección:</Typography>
                                     <Typography fontWeight={500}>{colaborador.direccion || 'No registrada'}</Typography>
                                 </Box>
-                                <Divider />
-                                <Box display="flex" justifyContent="space-between">
-                                    <Typography color="text.secondary">Fecha Nacimiento:</Typography>
-                                    <Typography fontWeight={500}>{formatDate(colaborador.fecha_nacimiento)}</Typography>
-                                </Box>
                             </Stack>
                         </Paper>
                     </Grid>
 
-                    <Grid item xs={12} md={6}>
+                    <Grid item xs={12} md={4}>
                         <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                             Información Laboral
                         </Typography>
@@ -434,6 +412,104 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                     />
                                 </Box>
                             </Stack>
+                        </Paper>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                                Observación de Equipamiento
+                            </Typography>
+                            {!editingObservaciones ? (
+                                <IconButton size="small" color="primary" onClick={() => setEditingObservaciones(true)} title="Editar observaciones">
+                                    <EditIcon fontSize="small" />
+                                </IconButton>
+                            ) : (
+                                <IconButton size="small" color="success" onClick={handleSaveObservaciones} disabled={savingObservaciones} title="Guardar">
+                                    {savingObservaciones ? <CircularProgress size={16} /> : <CheckIcon fontSize="small" />}
+                                </IconButton>
+                            )}
+                        </Box>
+                        <Paper variant="outlined" sx={{ p: 2, minHeight: 180, display: 'flex', flexDirection: 'column' }}>
+                            {(() => {
+                                const itemsPendientesChecklist = (productos || [])
+                                    .filter(p => !p.fecha_devolucion || String(p.estado_asignacion).toUpperCase() === 'ACTIVA')
+                                    .flatMap(p => {
+                                        let items = p.items_pendientes;
+                                        if (!items || items.length === 0) {
+                                            let data = p.checklistData;
+                                            if (!data) {
+                                                const prodId = p.producto_id || p.id;
+                                                const local = localStorage.getItem(`checklist_producto_${prodId}`);
+                                                if (local) {
+                                                    try { data = JSON.parse(local); } catch(e) {}
+                                                }
+                                            }
+                                            if (data && Array.isArray(data.items)) {
+                                                items = data.items.filter(i => !i.ok || (i.observacion && i.observacion.trim().length > 0));
+                                            } else {
+                                                items = [];
+                                            }
+                                        }
+                                        return (items || [])
+                                            .filter(i => i && (!i.ok || String(i.ok) === 'false'))
+                                            .map(item => ({ ...item, productoNombre: p.producto_nombre || p.nombre || 'Equipo' }));
+                                    });
+
+                                return itemsPendientesChecklist.length > 0 ? (
+                                    <Box mb={2} sx={{ p: 1.5, borderRadius: 1.5, bgcolor: alpha(colors.warning, 0.08), border: `1px solid ${alpha(colors.warning, 0.3)}` }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                                            ⚠️ Faltantes / Pendientes del Checklist:
+                                        </Typography>
+                                        <Stack spacing={1}>
+                                            {itemsPendientesChecklist.map((item, idx) => (
+                                                <Box key={idx} sx={{ p: 1, borderRadius: 1, bgcolor: 'background.paper', border: `1px dashed ${colors.border}` }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary', display: 'block' }}>
+                                                        • {item.label || item.id} {item.productoNombre ? `(${item.productoNombre})` : ''}
+                                                    </Typography>
+                                                    {item.observacion && (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1.5, fontStyle: 'italic' }}>
+                                                            Nota: "{item.observacion}"
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                ) : null;
+                            })()}
+
+                            {editingObservaciones ? (
+                                <Box display="flex" flexDirection="column" gap={1.5} flexGrow={1}>
+                                    <TextField
+                                        fullWidth
+                                        multiline
+                                        rows={4}
+                                        size="small"
+                                        placeholder="Ej: No requiere audífonos por trabajo presencial. Mouse y teclado propios..."
+                                        value={observacionesText}
+                                        onChange={(e) => setObservacionesText(e.target.value)}
+                                        disabled={savingObservaciones}
+                                    />
+                                    <Box display="flex" justifyContent="flex-end" gap={1}>
+                                        <Button size="small" variant="outlined" onClick={() => { setEditingObservaciones(false); setObservacionesText(colaborador.observaciones || ''); }}>
+                                            Cancelar
+                                        </Button>
+                                        <Button size="small" variant="contained" color="primary" onClick={handleSaveObservaciones} disabled={savingObservaciones}>
+                                            Guardar
+                                        </Button>
+                                    </Box>
+                                </Box>
+                            ) : (
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                        Observación General de Equipamiento:
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: colaborador.observaciones ? 'text.primary' : 'text.disabled', fontStyle: colaborador.observaciones ? 'normal' : 'italic' }}>
+                                        {colaborador.observaciones || 'Sin observaciones generales registradas.'}
+                                    </Typography>
+                                </Box>
+                            )}
                         </Paper>
                     </Grid>
 
@@ -534,7 +610,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
         fecha_ingreso: '',
         estado: 'ACTIVO',
         direccion: '',
-        fecha_nacimiento: '',
+        observaciones: '',
         empresa: 'OFIMUNDO'
     });
 
@@ -556,7 +632,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     fecha_ingreso: colaborador.fecha_ingreso?.split('T')[0] || '',
                     estado: colaborador.estado || 'ACTIVO',
                     direccion: colaborador.direccion || '',
-                    fecha_nacimiento: colaborador.fecha_nacimiento?.split('T')[0] || '',
+                    observaciones: colaborador.observaciones || '',
                     empresa: colaborador.empresa || 'OFIMUNDO'
                 });
             } else {
@@ -570,7 +646,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                     fecha_ingreso: '',
                     estado: 'ACTIVO',
                     direccion: '',
-                    fecha_nacimiento: '',
+                    observaciones: '',
                     empresa: 'OFIMUNDO'
                 });
             }
@@ -697,7 +773,7 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
             fecha_ingreso: '',
             estado: 'ACTIVO',
             direccion: '',
-            fecha_nacimiento: '',
+            observaciones: '',
             empresa: 'OFIMUNDO'
         });
         setErrores({});
@@ -870,15 +946,16 @@ const ColaboradorForm = ({ open, onClose, colaborador, onSave }) => {
                         />
                     </Grid>
 
-                    <Grid item xs={12} md={6}>
+                    <Grid item xs={12}>
                         <TextField
                             fullWidth
-                            type="date"
-                            label="Fecha de nacimiento"
-                            name="fecha_nacimiento"
-                            value={formData.fecha_nacimiento}
+                            multiline
+                            rows={3}
+                            label="Observaciones de equipamiento (motivo por falta de audífonos, mouse, teclado, etc.)"
+                            name="observaciones"
+                            value={formData.observaciones || ''}
                             onChange={handleChange}
-                            InputLabelProps={{ shrink: true }}
+                            placeholder="Ej: No requiere audífonos por trabajo presencial. Mouse y teclado propios..."
                             size="small"
                             disabled={loading}
                         />
@@ -974,7 +1051,7 @@ const ColaboradoresPage = () => {
     const isTablet = useMediaQuery('(min-width:601px) and (max-width:960px)');
     const navigate = useNavigate();
     const drawerWidth = 260;
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     // Estados
     const [colaboradores, setColaboradores] = useState([]);
@@ -995,6 +1072,7 @@ const ColaboradoresPage = () => {
     });
     const [departamentos, setDepartamentos] = useState([]);
     const [stats, setStats] = useState({
+        total_empresas: OPCIONES_EMPRESA.length,
         total_colaboradores: 0,
         activos: 0,
         inactivos: 0,
@@ -1084,7 +1162,15 @@ const ColaboradoresPage = () => {
         }
 
         if (filters.empresa) {
-            result = result.filter(col => col && col.empresa && String(col.empresa).trim().toUpperCase() === String(filters.empresa).trim().toUpperCase());
+            const filterEmpUpper = String(filters.empresa).trim().toUpperCase();
+            result = result.filter(col => {
+                if (!col || !col.empresa) return false;
+                const colEmpUpper = String(col.empresa).trim().toUpperCase();
+                if (filterEmpUpper === 'LATAM_LITE' || filterEmpUpper === 'LATAM LITE') {
+                    return colEmpUpper === 'LATAM_LITE' || colEmpUpper === 'LATAM LITE' || colEmpUpper === 'DREAMTEC';
+                }
+                return colEmpUpper === filterEmpUpper;
+            });
         }
 
         if (filters.estado) {
@@ -1119,18 +1205,13 @@ const ColaboradoresPage = () => {
         applyFilters();
     }, [applyFilters]);
 
-    // Función para cargar datos - CON PREVENCIÓN DE LLAMADAS MÚLTIPLES
+    // Función para cargar datos
     const fetchData = useCallback(async (showRefresh = false) => {
-        if (isFetchingRef.current) return;
-        
         if (showRefresh) {
             setRefreshing(true);
         } else {
             setLoading(true);
         }
-        
-        isFetchingRef.current = true;
-        setIsFetching(true);
 
         try {
             const data = await colaboradorService.getColaboradores();
@@ -1142,7 +1223,9 @@ const ColaboradoresPage = () => {
             const inactivos = list.filter(c => c && c.estado === 'INACTIVO').length;
             const departamentosUnicos = [...new Set(list.map(c => c?.departamento).filter(Boolean))];
             
+            setDepartamentos(departamentosUnicos);
             setStats({
+                total_empresas: OPCIONES_EMPRESA.length,
                 total_colaboradores: list.length,
                 activos: activos,
                 inactivos: inactivos,
@@ -1159,32 +1242,13 @@ const ColaboradoresPage = () => {
         } finally {
             setLoading(false);
             setRefreshing(false);
-            isFetchingRef.current = false;
-            setIsFetching(false);
         }
     }, [showSnackbar]);
 
-    // Función para cargar datos iniciales
-    const fetchInitialData = useCallback(async () => {
-        try {
-            const colaboradoresData = await colaboradorService.getColaboradores();
-            if (Array.isArray(colaboradoresData)) {
-                const departamentosUnicos = [...new Set(colaboradoresData.map(c => c?.departamento).filter(Boolean))];
-                setDepartamentos(departamentosUnicos);
-            }
-        } catch (error) {
-            console.error('Error cargando datos iniciales:', error);
-        }
-    }, []);
-
     // Efecto único para carga inicial
     useEffect(() => {
-        const loadData = async () => {
-            await fetchData();
-            await fetchInitialData();
-        };
-        loadData();
-    }, []);
+        fetchData();
+    }, [fetchData]);
 
     // Función para cargar productos asignados
     const loadProductosAsignados = useCallback(async (colaboradorId) => {
@@ -1259,9 +1323,8 @@ const ColaboradoresPage = () => {
         }
         refreshTimeoutRef.current = setTimeout(() => {
             fetchData();
-            fetchInitialData();
         }, 500);
-    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
+    }, [selectedColaborador, fetchData, showSnackbar]);
 
     const handleOpenDetail = useCallback(async (colaborador) => {
         try {
@@ -1296,14 +1359,13 @@ const ColaboradoresPage = () => {
             await colaboradorService.deleteColaborador(selectedColaborador.id);
             showSnackbar('Colaborador eliminado', 'success');
             await fetchData();
-            await fetchInitialData();
         } catch (error) {
             console.error('Error eliminando:', error);
             showSnackbar(error.message || 'Error al eliminar', 'error');
         } finally {
             setSelectedColaborador(null);
         }
-    }, [selectedColaborador, fetchData, fetchInitialData, showSnackbar]);
+    }, [selectedColaborador, fetchData, showSnackbar]);
 
     const handleRefresh = useCallback(() => {
         if (refreshTimeoutRef.current) {
@@ -1336,7 +1398,15 @@ const ColaboradoresPage = () => {
     const statsPorEmpresa = OPCIONES_EMPRESA.map(emp => ({
         ...emp,
         cantidad: Array.isArray(colaboradores)
-            ? colaboradores.filter(c => c && c.empresa && String(c.empresa).trim().toUpperCase() === emp.valor.toUpperCase()).length
+            ? colaboradores.filter(c => {
+                if (!c || !c.empresa) return false;
+                const cEmp = String(c.empresa).trim().toUpperCase();
+                const empVal = emp.valor.toUpperCase();
+                if (empVal === 'LATAM_LITE' || empVal === 'LATAM LITE') {
+                    return cEmp === 'LATAM_LITE' || cEmp === 'LATAM LITE' || cEmp === 'DREAMTEC';
+                }
+                return cEmp === empVal;
+            }).length
             : 0
     }));
 
@@ -1373,11 +1443,9 @@ const ColaboradoresPage = () => {
                 <Box display="flex" alignItems="center" gap={1}>
                     <img src="/Logo_transparente.png" alt="OFILAB Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
                 </Box>
-                {isMobile && (
-                    <IconButton onClick={() => setDrawerOpen(false)}>
-                        <ChevronLeftIcon />
-                    </IconButton>
-                )}
+                <IconButton onClick={() => setDrawerOpen(false)}>
+                    <ChevronLeftIcon />
+                </IconButton>
             </Toolbar>
             <Divider />
             <List>
@@ -1386,7 +1454,7 @@ const ColaboradoresPage = () => {
                         key={item.text} 
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) setDrawerOpen(false);
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >
@@ -1435,42 +1503,81 @@ const ColaboradoresPage = () => {
 
                 <Toolbar />
 
-            <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
-                {/* Header con gradiente */}
+                <Container maxWidth="xl" sx={{ p: { xs: 2, sm: 3 } }}>
+                    {/* Header con gradiente estilo cápsula y botón azul ovalado */}
                 <Paper
                     sx={{
-                        p: { xs: 3, md: 4 },
-                        mb: 4,
-                        borderRadius: 4,
+                        px: { xs: 2.5, sm: 3.5 },
+                        py: { xs: 1.5, sm: 2 },
+                        mb: 2.5,
+                        borderRadius: '50px',
                         background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
                         color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 1.5,
+                        boxShadow: '0 8px 25px rgba(124, 58, 237, 0.25)'
                     }}
                 >
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>
-                        Gestión de Colaboradores
-                    </Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                        Administra la información de los colaboradores y sus asignaciones
-                    </Typography>
+                    <Box sx={{ pl: { sm: 1 } }}>
+                        <Typography variant={isMobile ? "subtitle1" : "h6"} sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                            Gestión de Colaboradores
+                        </Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.9, display: 'block', mt: 0.25 }}>
+                            Administra la información de los colaboradores y sus asignaciones
+                        </Typography>
+                    </Box>
 
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <GradientButton
-                            startIcon={<AddIcon />}
-                            onClick={() => handleOpenForm()}
-                            disabled={loading}
-                        >
-                            Nuevo Colaborador
-                        </GradientButton>
-                    </Stack>
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<AddIcon sx={{ color: '#FFFFFF', fontWeight: 800, fontSize: '1.1rem' }} />}
+                        onClick={() => handleOpenForm()}
+                        disabled={loading}
+                        sx={{
+                            background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+                            color: '#FFFFFF',
+                            fontWeight: 700,
+                            fontSize: '0.825rem',
+                            textTransform: 'none',
+                            borderRadius: '50px',
+                            border: '1px solid rgba(255, 255, 255, 0.4)',
+                            px: 2.2,
+                            py: 0.65,
+                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                            whiteSpace: 'nowrap',
+                            '&:hover': {
+                                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                                boxShadow: '0 6px 18px rgba(37, 99, 235, 0.5)',
+                                transform: 'translateY(-1px)'
+                            }
+                        }}
+                    >
+                        Nuevo Colaborador
+                    </Button>
                 </Paper>
 
                 {/* Stats Cards con empresas */}
-                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={6} sm={3}>
+                <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: 3 }}>
+                    <Grid item xs={6} sm={3} md={2.5}>
                         <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.total_colaboradores}
+                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: colors.secondary }}>
+                                    {loading ? <CircularProgress size={20} /> : stats.total_empresas}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Total Empresas
+                                </Typography>
+                            </CardContent>
+                        </StyledCard>
+                    </Grid>
+                    <Grid item xs={6} sm={3} md={2.5}>
+                        <StyledCard>
+                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: colors.primary }}>
+                                    {loading ? <CircularProgress size={20} /> : stats.total_colaboradores}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Total Colaboradores
@@ -1478,51 +1585,15 @@ const ColaboradoresPage = () => {
                             </CardContent>
                         </StyledCard>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.success }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.activos}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Activos
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.warning }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.total_departamentos}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Departamentos
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.info }}>
-                                    {loading ? <CircularProgress size={24} /> : stats.total_equipos_asignados}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Equipos Asignados
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
                 </Grid>
 
                 {/* Stats por empresa - FILTRO RÁPIDO */}
-                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={4} sm={4} md={4}>
+                <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: 3 }}>
+                    <Grid item xs={6} sm={2.4} md={2.4}>
                         <Paper
                             variant="outlined"
                             sx={{
-                                p: 2,
+                                p: 1.5,
                                 textAlign: 'center',
                                 borderRadius: 2,
                                 borderTop: `3px solid ${colors.info}`,
@@ -1531,26 +1602,26 @@ const ColaboradoresPage = () => {
                             }}
                             onClick={() => handleFilterChange('empresa', '')}
                         >
-                            <Typography variant="h6" sx={{ fontSize: '1.5rem' }}>
+                            <Typography variant="h6" sx={{ fontSize: '1.3rem' }}>
                                 📊
                             </Typography>
-                            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.info }}>
-                                {loading ? <CircularProgress size={20} color="inherit" /> : colaboradores.length}
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: colors.info }}>
+                                {loading ? <CircularProgress size={18} color="inherit" /> : colaboradores.length}
                             </Typography>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" display="block">
                                 Todos
                             </Typography>
                             {!filters.empresa && (
-                                <Chip size="small" label="Activo" color="info" sx={{ mt: 1 }} />
+                                <Chip size="small" label="Activo" color="info" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
                             )}
                         </Paper>
                     </Grid>
                     {statsPorEmpresa.map((emp) => (
-                        <Grid item xs={4} sm={4} md={4} key={emp.valor}>
+                        <Grid item xs={6} sm={2.4} md={2.4} key={emp.valor}>
                             <Paper
                                 variant="outlined"
                                 sx={{
-                                    p: 2,
+                                    p: 1.5,
                                     textAlign: 'center',
                                     borderRadius: 2,
                                     borderTop: `3px solid ${emp.color}`,
@@ -1565,17 +1636,17 @@ const ColaboradoresPage = () => {
                                     }
                                 }}
                             >
-                                <Typography variant="h6" sx={{ fontSize: '1.5rem' }}>
+                                <Typography variant="h6" sx={{ fontSize: '1.3rem' }}>
                                     {emp.icon}
                                 </Typography>
-                                <Typography variant="h5" sx={{ fontWeight: 700, color: emp.color }}>
-                                    {loading ? <CircularProgress size={20} color="inherit" /> : emp.cantidad}
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: emp.color }}>
+                                    {loading ? <CircularProgress size={18} color="inherit" /> : emp.cantidad}
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="caption" color="text.secondary" display="block">
                                     {emp.label}
                                 </Typography>
                                 {filters.empresa === emp.valor && (
-                                    <Chip size="small" label="Filtro activo" color="primary" sx={{ mt: 1 }} />
+                                    <Chip size="small" label="Filtro activo" color="primary" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
                                 )}
                             </Paper>
                         </Grid>
@@ -1634,7 +1705,6 @@ const ColaboradoresPage = () => {
                             filters={filters}
                             onFilterChange={handleFilterChange}
                             onClearFilters={handleClearFilters}
-                            departamentos={departamentos}
                             activeFiltersCount={activeFiltersCount}
                         />
                     </Collapse>
@@ -1670,14 +1740,6 @@ const ColaboradoresPage = () => {
                                 variant="outlined"
                             />
                         )}
-                        {filters.departamento && (
-                            <Chip
-                                size="small"
-                                label={`Departamento: ${filters.departamento}`}
-                                onDelete={() => handleFilterChange('departamento', '')}
-                                variant="outlined"
-                            />
-                        )}
                         {filters.asignaciones && (
                             <Chip
                                 size="small"
@@ -1686,12 +1748,6 @@ const ColaboradoresPage = () => {
                                 variant="outlined"
                             />
                         )}
-                        <Chip
-                            size="small"
-                            icon={<SortByAlphaIcon />}
-                            label={`Orden: ${filters.ordenarPor === 'nombre_asc' ? 'Nombre A-Z' : filters.ordenarPor === 'nombre_desc' ? 'Nombre Z-A' : filters.ordenarPor === 'empresa_asc' ? 'Empresa A-Z' : filters.ordenarPor === 'empresa_desc' ? 'Empresa Z-A' : filters.ordenarPor === 'asignaciones_desc' ? 'Más asignaciones' : filters.ordenarPor === 'asignaciones_asc' ? 'Menos asignaciones' : 'Más recientes'}`}
-                            variant="outlined"
-                        />
                     </Box>
                 )}
 

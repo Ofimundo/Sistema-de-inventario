@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getConnection, sql } = require('../config/database');
 
-// GET - Obtener todas las bodegas (con conteo de productos)
+// GET - Obtener todas las bodegas (con conteo de productos DISPONIBLES)
 router.get('/', async (req, res) => {
     try {
         console.log('📥 GET /api/bodegas');
@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
                         SELECT COUNT(*)
                         FROM INV.productos p
                         WHERE p.bodega_id = b.id
+                          AND (p.id_estado_equipo = 1 OR p.id_estado_equipo IS NULL)
                     ), 0) as total_productos
                 FROM INV.bodegas b
                 ORDER BY b.nombre
@@ -30,7 +31,7 @@ router.get('/', async (req, res) => {
         
         console.log(`📦 Bodegas encontradas: ${result.recordset.length}`);
         result.recordset.forEach(b => {
-            console.log(`   - ${b.nombre}: ${b.total_productos} productos`);
+            console.log(`   - ${b.nombre}: ${b.total_productos} productos disponibles`);
         });
         
         res.json({ success: true, data: result.recordset });
@@ -41,7 +42,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET - Obtener bodega por ID con sus productos (CORREGIDO)
+// GET - Obtener bodega por ID con sus productos DISPONIBLES
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -70,6 +71,7 @@ router.get('/:id', async (req, res) => {
                         SELECT COUNT(*)
                         FROM INV.productos p
                         WHERE p.bodega_id = b.id
+                          AND (p.id_estado_equipo = 1 OR p.id_estado_equipo IS NULL)
                     ), 0) as total_productos
                 FROM INV.bodegas b
                 WHERE b.id = @id
@@ -79,7 +81,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Bodega no encontrada' });
         }
         
-        // ✅ CORREGIDO: Eliminada la columna 'cantidad' que no existe
+        // Solo productos DISPONIBLES en la bodega (id_estado_equipo = 1)
         const productosResult = await pool.request()
             .input('bodega_id', sql.Int, idNum)
             .query(`
@@ -92,7 +94,6 @@ router.get('/:id', async (req, res) => {
                     p.precio,
                     p.condicion,
                     p.id_estado_equipo,
-                    -- Usar 1 como valor por defecto para cantidad si la columna no existe
                     1 as cantidad,
                     CASE 
                         WHEN p.id_estado_equipo = 1 THEN 'DISPONIBLE'
@@ -105,6 +106,7 @@ router.get('/:id', async (req, res) => {
                     END as estado_texto
                 FROM INV.productos p
                 WHERE p.bodega_id = @bodega_id
+                  AND (p.id_estado_equipo = 1 OR p.id_estado_equipo IS NULL)
                 ORDER BY p.nombre
             `);
         

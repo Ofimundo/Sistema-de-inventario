@@ -116,6 +116,26 @@ const ESTADO_TEXTO = {
     6: 'BAJA'
 };
 
+// 4 Empresas oficiales
+const OPCIONES_EMPRESA_STOCK = [
+    { valor: 'GLOBAL', label: 'Global' },
+    { valor: 'HIWAY', label: 'HIway' },
+    { valor: 'LATAM_LITE', label: 'Latam Lite' },
+    { valor: 'OFIMUNDO', label: 'Ofimundo' }
+];
+
+// Helper para obtener label bonito de empresa (Dreamtec -> Latam Lite)
+const formatEmpresaLabel = (empresa) => {
+    if (!empresa) return '';
+    const empUpper = String(empresa).trim().toUpperCase();
+    if (empUpper === 'DREAMTEC') return 'Latam Lite';
+    if (empUpper === 'LATAM_LITE' || empUpper === 'LATAM LITE') return 'Latam Lite';
+    if (empUpper === 'HIWAY') return 'HIway';
+    if (empUpper === 'OFIMUNDO') return 'Ofimundo';
+    if (empUpper === 'GLOBAL') return 'Global';
+    return String(empresa);
+};
+
 // Componentes Styled
 const StyledCard = styled(Card)(({ theme }) => ({
     height: '100%',
@@ -259,26 +279,32 @@ function DetalleProductoDialog({ open, onClose, productos, titulo, onDescontar }
             <DialogTitle>
                 <Box display="flex" alignItems="center" gap={1}>
                     <InventoryIcon sx={{ color: colors.primary }} />
-                    <Typography variant="h6">{titulo}</Typography>
+                    <Typography variant="h6" fontWeight={700}>{titulo}</Typography>
                 </Box>
             </DialogTitle>
-            <DialogContent dividers>
-                <TableContainer component={Paper} variant="outlined">
+            <DialogContent dividers sx={{ p: 2 }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                     <Table size="small">
                         <TableHead>
-                            <TableRow sx={{ bgcolor: alpha(colors.primary, 0.02) }}>
-                                <StyledTableCell>N° Serie / Tipo</StyledTableCell>
-                                <StyledTableCell>Quedan (Stock)</StyledTableCell>
-                                <StyledTableCell>Utilizados</StyledTableCell>
-                                <StyledTableCell>Estado</StyledTableCell>
-                                <StyledTableCell>Bodega</StyledTableCell>
-                                <StyledTableCell>Asignado a</StyledTableCell>
-                                <StyledTableCell align="center">Acciones</StyledTableCell>
+                            <TableRow sx={{ bgcolor: alpha(colors.primary, 0.04) }}>
+                                <StyledTableCell sx={{ fontWeight: 700 }}>N° Serie / Tipo</StyledTableCell>
+                                <StyledTableCell sx={{ fontWeight: 700 }}>Estado</StyledTableCell>
+                                <StyledTableCell sx={{ fontWeight: 700 }}>Asignado a</StyledTableCell>
+                                <StyledTableCell sx={{ fontWeight: 700 }}>Bodega</StyledTableCell>
+                                <StyledTableCell sx={{ fontWeight: 700 }}>Condición</StyledTableCell>
+                                {productos.some(p => p.es_granel === 1 || p.es_granel === true) && (
+                                    <StyledTableCell align="center" sx={{ fontWeight: 700 }}>Acciones</StyledTableCell>
+                                )}
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {productos.map((producto) => {
                                 const esGranel = producto.es_granel === 1 || producto.es_granel === true;
+                                const colaboradorNombre = producto.colaborador_asignado?.colaborador_nombre || producto.colaborador_asignado?.nombre || producto.colaborador_nombre;
+                                const tieneColaborador = !!colaboradorNombre;
+                                const esAsignado = producto.id_estado_equipo === 2 || producto.estado === 'ASIGNADO' || tieneColaborador;
+                                const esDisponible = (producto.id_estado_equipo === 1 || producto.estado === 'DISPONIBLE' || !producto.estado) && !tieneColaborador;
+
                                 return (
                                     <TableRow key={producto.id} hover>
                                         <TableCell>
@@ -293,81 +319,94 @@ function DetalleProductoDialog({ open, onClose, productos, titulo, onDescontar }
                                                     label={producto.numero_serie || 'N/A'} 
                                                     size="small" 
                                                     variant="outlined"
+                                                    sx={{ fontWeight: 700, fontFamily: 'monospace', bgcolor: alpha(colors.primary, 0.03), borderColor: alpha(colors.primary, 0.3) }}
                                                 />
                                             )}
                                         </TableCell>
-                                        <TableCell>
-                                            <Typography variant="body2" fontWeight={600} color={esGranel ? colors.secondary : 'text.primary'}>
-                                                {esGranel ? `${producto.cantidad !== undefined ? producto.cantidad : 1} unidades` : '1 unidad'}
-                                            </Typography>
-                                        </TableCell>
+
                                         <TableCell>
                                             {esGranel ? (
-                                                <Chip 
-                                                    label={`${producto.total_utilizado || 0} ud.`} 
-                                                    size="small"
-                                                    sx={{ bgcolor: alpha(colors.warning, 0.1), color: colors.warning, fontWeight: 600 }}
-                                                />
+                                                <Typography variant="body2" fontWeight={600} color={colors.secondary}>
+                                                    {producto.cantidad !== undefined ? producto.cantidad : 1} ud. disponibles
+                                                </Typography>
                                             ) : (
-                                                <Typography variant="body2" color="text.secondary">-</Typography>
+                                                <Chip 
+                                                    label={esAsignado ? 'ASIGNADO' : esDisponible ? 'DISPONIBLE' : (producto.estado || 'NO DISPONIBLE')} 
+                                                    size="small"
+                                                    sx={{ 
+                                                        bgcolor: alpha(esDisponible ? colors.success : esAsignado ? colors.info : colors.warning, 0.1),
+                                                        color: esDisponible ? colors.success : esAsignado ? colors.info : colors.warning,
+                                                        fontWeight: 700
+                                                    }}
+                                                />
                                             )}
                                         </TableCell>
+
                                         <TableCell>
-                                            <Chip 
-                                                label={producto.estado || ESTADO_TEXTO[producto.id_estado_equipo] || 'DESCONOCIDO'} 
-                                                size="small"
-                                                sx={{ 
-                                                    bgcolor: alpha(
-                                                        producto.id_estado_equipo === 1 ? colors.success :
-                                                        producto.id_estado_equipo === 2 ? colors.warning :
-                                                        producto.id_estado_equipo === 3 ? colors.info :
-                                                        producto.id_estado_equipo === 4 ? colors.error :
-                                                        colors.text.disabled, 0.1
-                                                    ),
-                                                    color: producto.id_estado_equipo === 1 ? colors.success :
-                                                           producto.id_estado_equipo === 2 ? colors.warning :
-                                                           producto.id_estado_equipo === 3 ? colors.info :
-                                                           producto.id_estado_equipo === 4 ? colors.error :
-                                                           colors.text.disabled
-                                                }}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip 
-                                                icon={<StoreIcon />} 
-                                                label={producto.bodega_nombre || 'Sin bodega'} 
-                                                size="small" 
-                                                sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} 
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            {producto.colaborador_asignado?.colaborador_nombre || producto.colaborador_nombre ? (
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.success, 0.1) }}>
-                                                        <PersonIcon sx={{ fontSize: 14 }} />
-                                                    </Avatar>
-                                                    <Typography variant="body2">
-                                                        {producto.colaborador_asignado?.colaborador_nombre || producto.colaborador_nombre}
-                                                    </Typography>
+                                            {colaboradorNombre ? (
+                                                <Box display="flex" flexDirection="column" gap={0.25}>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <Avatar sx={{ width: 22, height: 22, bgcolor: alpha(colors.primary, 0.1), color: colors.primary, fontSize: 11, fontWeight: 700 }}>
+                                                            {colaboradorNombre.charAt(0)}
+                                                        </Avatar>
+                                                        <Typography variant="body2" fontWeight={600}>
+                                                            {colaboradorNombre}
+                                                        </Typography>
+                                                    </Box>
+                                                    {(producto.colaborador_asignado?.empresa || producto.colaborador_empresa) && (
+                                                        <Chip 
+                                                            label={formatEmpresaLabel(producto.colaborador_asignado?.empresa || producto.colaborador_empresa)} 
+                                                            size="small" 
+                                                            sx={{ 
+                                                                height: 18, 
+                                                                fontSize: '0.675rem', 
+                                                                fontWeight: 700, 
+                                                                bgcolor: alpha(colors.primary, 0.08), 
+                                                                color: colors.primary,
+                                                                alignSelf: 'flex-start',
+                                                                ml: 3.75
+                                                            }} 
+                                                        />
+                                                    )}
                                                 </Box>
                                             ) : (
                                                 <Typography variant="body2" color="text.secondary">-</Typography>
                                             )}
                                         </TableCell>
-                                        <TableCell align="center">
-                                            {esGranel && (
-                                                <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    color="secondary"
-                                                    startIcon={<OutboxIcon fontSize="small" />}
-                                                    onClick={() => onDescontar(producto)}
-                                                    sx={{ textTransform: 'none' }}
-                                                >
-                                                    Descontar
-                                                </Button>
+
+                                        <TableCell>
+                                            {esAsignado ? (
+                                                <Typography variant="body2" color="text.secondary">-</Typography>
+                                            ) : (
+                                                <Chip 
+                                                    icon={<StoreIcon />} 
+                                                    label={producto.bodega_nombre || 'Sin bodega'} 
+                                                    size="small" 
+                                                    sx={{ backgroundColor: alpha(colors.info, 0.08), color: colors.info }} 
+                                                />
                                             )}
                                         </TableCell>
+
+                                        <TableCell>
+                                            <Typography variant="body2">{producto.condicion || 'NUEVO'}</Typography>
+                                        </TableCell>
+
+                                        {productos.some(p => p.es_granel === 1 || p.es_granel === true) && (
+                                            <TableCell align="center">
+                                                {esGranel && (
+                                                    <Button
+                                                        size="small"
+                                                        variant="contained"
+                                                        color="secondary"
+                                                        startIcon={<OutboxIcon fontSize="small" />}
+                                                        onClick={() => onDescontar(producto)}
+                                                        sx={{ textTransform: 'none' }}
+                                                    >
+                                                        Descontar
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 );
                             })}
@@ -375,8 +414,8 @@ function DetalleProductoDialog({ open, onClose, productos, titulo, onDescontar }
                     </Table>
                 </TableContainer>
             </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
+            <DialogActions sx={{ p: 2 }}>
+                <Button onClick={onClose} variant="outlined">Cerrar</Button>
             </DialogActions>
         </Dialog>
     );
@@ -387,7 +426,7 @@ const StockPage = () => {
     const isMobile = useMediaQuery('(max-width:600px)');
     const navigate = useNavigate();
     const drawerWidth = 260;
-    const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     
     const [productos, setProductos] = useState([]);
     const [resumenStock, setResumenStock] = useState([]);
@@ -396,8 +435,12 @@ const StockPage = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterMarca, setFilterMarca] = useState('');
+    const [filterCategoria, setFilterCategoria] = useState('');
+    const [filterEmpresa, setFilterEmpresa] = useState('');
     const [filterTipo, setFilterTipo] = useState('todos'); // 'todos', 'equipos', 'granel'
     const [marcas, setMarcas] = useState([]);
+    const [categorias, setCategorias] = useState([]);
+    const [empresas, setEmpresas] = useState([]);
     const [expanded, setExpanded] = useState(null);
     const [detalleOpen, setDetalleOpen] = useState(false);
     const [detalleProductos, setDetalleProductos] = useState([]);
@@ -420,28 +463,41 @@ const StockPage = () => {
         navigate('/dashboard');
     };
 
-    // Función para agrupar productos por marca, modelo y nombre
+    // Función para agrupar productos por marca y modelo (insensible a mayúsculas/minúsculas y espacios)
     const agruparProductos = (productosList) => {
         const grupos = {};
         
         productosList.forEach(producto => {
-            // Ignorar productos dados de baja
-            if (producto.id_estado_equipo === 6) return;
+            // Ignorar productos dados de baja (id_estado_equipo = 6)
+            if (producto.id_estado_equipo === 6 || producto.estado === 'BAJA') return;
             
-            const marca = producto.marca || 'SIN MARCA';
-            const modelo = producto.modelo || 'SIN MODELO';
-            const nombre = producto.nombre || 'SIN NOMBRE';
-            const key = `${marca}|${modelo}|${nombre}`;
+            const rawMarca = (producto.marca || 'SIN MARCA').trim();
+            const rawModelo = (producto.modelo || 'SIN MODELO').trim();
+            const rawNombre = (producto.nombre || 'SIN NOMBRE').trim();
+
+            const marcaNorm = rawMarca.toUpperCase();
+            const modeloNorm = rawModelo.toUpperCase();
+            const nombreNorm = rawNombre.toUpperCase();
+            
+            // Agrupar por Marca + Modelo + Nombre insensibles a mayúsculas
+            const key = `${marcaNorm}|${modeloNorm}|${nombreNorm}`;
             
             const esGranel = producto.es_granel === 1 || producto.es_granel === true;
             const stockActual = producto.cantidad !== undefined ? parseInt(producto.cantidad) : 1;
             const utilizados = producto.total_utilizado !== undefined ? parseInt(producto.total_utilizado) : 0;
+
+            const colaboradorNombre = producto.colaborador_asignado?.colaborador_nombre || producto.colaborador_asignado?.nombre || producto.colaborador_nombre;
+            const tieneColaborador = !!colaboradorNombre;
+            const esAsignado = producto.id_estado_equipo === 2 || producto.estado === 'ASIGNADO' || tieneColaborador;
+            const esDisponible = (producto.id_estado_equipo === 1 || producto.estado === 'DISPONIBLE' || !producto.estado) && !tieneColaborador;
+            const esMantencion = producto.id_estado_equipo === 3 || producto.estado === 'EN MANTENCIÓN';
+            const esReparacion = producto.id_estado_equipo === 4 || producto.estado === 'EN REPARACIÓN';
             
             if (!grupos[key]) {
                 grupos[key] = {
-                    marca: marca,
-                    modelo: modelo,
-                    nombre: nombre,
+                    marca: rawMarca,
+                    modelo: rawModelo,
+                    nombre: rawNombre,
                     total: 0,
                     disponibles: 0,
                     asignados: 0,
@@ -464,20 +520,23 @@ const StockPage = () => {
                 grupos[key].totalGranelUtilizados += utilizados;
                 grupos[key].totalGranelInicial += (stockActual + utilizados);
                 grupos[key].total += stockActual;
-                if (producto.id_estado_equipo === 1 && stockActual > 0) {
+                if (esDisponible && stockActual > 0) {
                     grupos[key].disponibles += stockActual;
                 } else {
                     grupos[key].noDisponibles += stockActual;
                 }
             } else {
                 grupos[key].total++;
-                switch(producto.id_estado_equipo) {
-                    case 1: grupos[key].disponibles++; break;
-                    case 2: grupos[key].asignados++; break;
-                    case 3: grupos[key].enMantencion++; break;
-                    case 4: grupos[key].enReparacion++; break;
-                    case 5: grupos[key].noDisponibles++; break;
-                    default: break;
+                if (esAsignado) {
+                    grupos[key].asignados++;
+                } else if (esDisponible) {
+                    grupos[key].disponibles++;
+                } else if (esMantencion) {
+                    grupos[key].enMantencion++;
+                } else if (esReparacion) {
+                    grupos[key].enReparacion++;
+                } else {
+                    grupos[key].noDisponibles++;
                 }
             }
         });
@@ -517,10 +576,16 @@ const StockPage = () => {
             setResumenStock(grupos);
             setResumenFiltrado(grupos);
             
-            // Obtener marcas únicas para filtro
-            const marcasUnicas = [...new Set(productosActivos.map(p => p.marca || 'SIN MARCA'))].sort();
+            // Obtener categorías y marcas únicas para filtros
+            const categoriasUnicas = [...new Set(productosActivos.map(p => (p.nombre || 'SIN TIPO').trim()))].sort();
+            setCategorias(categoriasUnicas);
+
+            const marcasUnicas = [...new Set(productosActivos.map(p => (p.marca || 'SIN MARCA').trim()))].sort();
             setMarcas(marcasUnicas);
             
+            // Empresas oficiales (Global, HIway, Latam Lite, Ofimundo)
+            setEmpresas(OPCIONES_EMPRESA_STOCK);
+
             setApiError(false);
             
             if (showRefresh) {
@@ -552,12 +617,21 @@ const StockPage = () => {
             filtrados = filtrados.filter(g => 
                 g.nombre?.toLowerCase().includes(term) ||
                 g.marca?.toLowerCase().includes(term) ||
-                g.modelo?.toLowerCase().includes(term)
+                g.modelo?.toLowerCase().includes(term) ||
+                g.productos.some(p => 
+                    p.numero_serie?.toLowerCase().includes(term) ||
+                    (p.colaborador_asignado?.nombre || p.colaborador_nombre)?.toLowerCase().includes(term) ||
+                    (p.colaborador_asignado?.empresa || p.colaborador_empresa)?.toLowerCase().includes(term)
+                )
             );
         }
         
+        if (filterCategoria) {
+            filtrados = filtrados.filter(g => g.nombre?.trim().toLowerCase() === filterCategoria.trim().toLowerCase());
+        }
+
         if (filterMarca) {
-            filtrados = filtrados.filter(g => g.marca === filterMarca);
+            filtrados = filtrados.filter(g => g.marca?.trim().toLowerCase() === filterMarca.trim().toLowerCase());
         }
 
         if (filterTipo === 'granel') {
@@ -565,9 +639,24 @@ const StockPage = () => {
         } else if (filterTipo === 'equipos') {
             filtrados = filtrados.filter(g => !g.esGranel);
         }
+
+        if (filterEmpresa) {
+            const filterEmpUpper = filterEmpresa.trim().toUpperCase();
+            filtrados = filtrados.filter(g => 
+                g.productos.some(p => {
+                    const rawEmp = p.colaborador_asignado?.empresa || p.colaborador_empresa;
+                    if (!rawEmp) return false;
+                    const empUpper = String(rawEmp).trim().toUpperCase();
+                    if (filterEmpUpper === 'LATAM_LITE' || filterEmpUpper === 'LATAM LITE') {
+                        return empUpper === 'LATAM_LITE' || empUpper === 'LATAM LITE' || empUpper === 'DREAMTEC';
+                    }
+                    return empUpper === filterEmpUpper;
+                })
+            );
+        }
         
         setResumenFiltrado(filtrados);
-    }, [searchTerm, filterMarca, filterTipo, resumenStock]);
+    }, [searchTerm, filterCategoria, filterMarca, filterTipo, filterEmpresa, resumenStock]);
 
     const handleVerDetalle = (grupo) => {
         setDetalleProductos(grupo.productos);
@@ -591,8 +680,10 @@ const StockPage = () => {
 
     const handleClearFilters = () => {
         setSearchTerm('');
+        setFilterCategoria('');
         setFilterMarca('');
         setFilterTipo('todos');
+        setFilterEmpresa('');
     };
 
     // Calcular estadísticas
@@ -670,7 +761,7 @@ const StockPage = () => {
                         key={item.text} 
                         onClick={() => {
                             navigate(item.path);
-                            if (isMobile) setDrawerOpen(false);
+                            setDrawerOpen(false);
                         }}
                         selected={window.location.pathname === item.path}
                     >
@@ -706,38 +797,34 @@ const StockPage = () => {
                 <Toolbar />
 
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
-                <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 4, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
-                    <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, mb: 1 }}>
-                        Control de Stock e Insumos
-                    </Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>
-                        Visualiza equipos individuales y productos a granel (cables, conectores) con el desglose de cuántos se utilizaron y cuántos quedan.
-                    </Typography>
-                    <Grid container spacing={2} sx={{ opacity: 0.95 }}>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Typography variant="body2">
-                                💻 Equipos Serializados: <strong>{productosEquipos.length}</strong>
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Typography variant="body2">
-                                🟢 Equipos Disponibles: <strong>{totalDisponiblesEquipos}</strong>
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Typography variant="body2">
-                                📦 A Granel Quedan: <strong>{totalGranelQuedan} ud.</strong>
-                            </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Typography variant="body2">
-                                📤 A Granel Utilizados: <strong>{totalGranelUtilizados} ud.</strong>
-                            </Typography>
-                        </Grid>
-                    </Grid>
+                {/* Header Banner estilo Cápsula */}
+                <Paper
+                    sx={{
+                        px: { xs: 2.5, sm: 3.5 },
+                        py: { xs: 1.5, sm: 2 },
+                        mb: 2.5,
+                        borderRadius: '50px',
+                        background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`,
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 1.5,
+                        boxShadow: '0 8px 25px rgba(124, 58, 237, 0.25)'
+                    }}
+                >
+                    <Box sx={{ pl: { sm: 1 } }}>
+                        <Typography variant={isMobile ? "subtitle1" : "h6"} sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                            Control de Stock e Insumos
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.9, display: 'block', mt: 0.25 }}>
+                            Visualiza equipos individuales y productos a granel (cables, conectores) con el desglose de cuántos se utilizaron y cuántos quedan
+                        </Typography>
+                    </Box>
 
                     {apiError && (
-                        <Alert severity="warning" sx={{ mt: 3 }} icon={<ErrorIcon />} action={
+                        <Alert severity="warning" sx={{ mt: 1, width: '100%' }} icon={<ErrorIcon />} action={
                             <Button color="inherit" size="small" onClick={() => fetchData(true)}>REINTENTAR</Button>
                         }>
                             No se pudo conectar con el servidor.
@@ -745,122 +832,57 @@ const StockPage = () => {
                     )}
                 </Paper>
 
-                {/* Tarjetas de Estadísticas */}
-                <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Avatar sx={{ bgcolor: alpha(colors.primary, 0.1), color: colors.primary, width: 48, height: 48, mb: 1 }}>
-                                    <InventoryIcon />
-                                </Avatar>
-                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : totalProductos}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Total Registro de Productos</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {productosEquipos.length} equipos | {productosGranel.length} insumos a granel
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                    
-                    <Grid item xs={12} sm={6} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Avatar sx={{ bgcolor: alpha(colors.secondary, 0.1), color: colors.secondary, width: 48, height: 48, mb: 1 }}>
-                                    <OutboxIcon />
-                                </Avatar>
-                                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.secondary }}>
-                                    {loading ? <CircularProgress size={24} /> : totalGranelQuedan}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Stock a Granel Quedan</Typography>
-                                <LinearProgress 
-                                    variant="determinate" 
-                                    value={totalGranelInicial > 0 ? (totalGranelQuedan / totalGranelInicial) * 100 : 0} 
-                                    sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: alpha(colors.secondary, 0.15) }}
-                                />
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                                    {totalGranelUtilizados} unidades utilizadas
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-
-                    <Grid item xs={12} sm={6} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Avatar sx={{ bgcolor: alpha(colors.success, 0.1), color: colors.success, width: 48, height: 48, mb: 1 }}>
-                                    <CheckCircleIcon />
-                                </Avatar>
-                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : totalDisponiblesEquipos}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Equipos Disponibles</Typography>
-                                <LinearProgress 
-                                    variant="determinate" 
-                                    value={productosEquipos.length ? (totalDisponiblesEquipos / productosEquipos.length) * 100 : 0} 
-                                    sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: alpha(colors.success, 0.2) }}
-                                />
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                                    {totalAsignadosEquipos} asignados a colaboradores
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-
-                    <Grid item xs={12} sm={6} md={3}>
-                        <StyledCard>
-                            <CardContent>
-                                <Avatar sx={{ bgcolor: alpha(colors.info, 0.1), color: colors.info, width: 48, height: 48, mb: 1 }}>
-                                    <AttachMoneyIcon />
-                                </Avatar>
-                                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                                    {loading ? <CircularProgress size={24} /> : `$${valorTotalInventario.toLocaleString()}`}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Valor Total Inventario</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    Equipos e Insumos evaluados
-                                </Typography>
-                            </CardContent>
-                        </StyledCard>
-                    </Grid>
-                </Grid>
-
                 {/* Top Marcas */}
                 {topMarcas.length > 0 && (
-                    <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
-                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TrendingUpIcon sx={{ color: colors.primary }} />
-                            Top Marcas con Mayor Registro
-                        </Typography>
-                        <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2.5, borderRadius: 3, bgcolor: '#FFFFFF' }}>
+                        <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                            <TrendingUpIcon sx={{ color: colors.primary, fontSize: '1.2rem' }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: colors.text.primary, fontSize: '0.85rem' }}>
+                                Top Marcas con Mayor Registro
+                            </Typography>
+                        </Box>
+                        <Stack direction="row" spacing={1.2} flexWrap="wrap" useFlexGap>
                             {topMarcas.map((marca) => (
-                                <Grid item xs={12} sm={6} md={2.4} key={marca.marca}>
-                                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(colors.primary, 0.02) }}>
-                                        <Typography variant="h6" fontWeight="bold" color={colors.primary}>
-                                            {marca.cantidad}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {marca.marca}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                                <Paper 
+                                    key={marca.marca} 
+                                    variant="outlined" 
+                                    sx={{ 
+                                        px: 2, 
+                                        py: 1, 
+                                        minWidth: 80, 
+                                        textAlign: 'center', 
+                                        borderRadius: 2, 
+                                        bgcolor: alpha(colors.primary, 0.03),
+                                        borderColor: alpha(colors.primary, 0.15)
+                                    }}
+                                >
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 800, color: colors.primary, fontSize: '0.95rem', lineHeight: 1.1 }}>
+                                        {marca.cantidad}
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.725rem', textTransform: 'uppercase', display: 'block', mt: 0.2 }}>
+                                        {marca.marca}
+                                    </Typography>
+                                </Paper>
                             ))}
-                        </Grid>
+                        </Stack>
                     </Paper>
                 )}
 
                 {/* Filtros */}
-                <FilterPaper>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={4}>
+                <FilterPaper sx={{ p: 2.5, mb: 3 }}>
+                    <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="flex-end">
+                        {/* Campo de búsqueda */}
+                        <Box sx={{ flex: '2 1 300px', minWidth: 260 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: colors.text.secondary, mb: 0.5, display: 'block', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: 0.5 }}>
+                                Buscar Equipo / Insumo
+                            </Typography>
                             <TextField
                                 fullWidth
-                                placeholder="Buscar por nombre (ej: cable), marca o modelo..."
+                                placeholder="Buscar por nombre, marca, modelo, N° serie o colaborador..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 InputProps={{
-                                    startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
+                                    startAdornment: <InputAdornment position="start"><SearchIcon color="action" /></InputAdornment>,
                                     endAdornment: searchTerm && (
                                         <InputAdornment position="end">
                                             <IconButton size="small" onClick={() => setSearchTerm('')}>
@@ -871,28 +893,37 @@ const StockPage = () => {
                                 }}
                                 size="small"
                             />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        </Box>
+
+                        {/* Filtro: Tipo de Producto */}
+                        <Box sx={{ flex: '1 1 220px', minWidth: 220 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: colors.text.secondary, mb: 0.5, display: 'block', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: 0.5 }}>
+                                Tipo de Producto
+                            </Typography>
                             <FormControl fullWidth size="small">
-                                <InputLabel>Tipo de Producto</InputLabel>
                                 <Select
-                                    value={filterTipo}
-                                    onChange={(e) => setFilterTipo(e.target.value)}
-                                    label="Tipo de Producto"
+                                    value={filterCategoria}
+                                    onChange={(e) => setFilterCategoria(e.target.value)}
+                                    displayEmpty
                                 >
-                                    <MenuItem value="todos">Todos los productos</MenuItem>
-                                    <MenuItem value="equipos">Solo Equipos Individuales (Con Serie)</MenuItem>
-                                    <MenuItem value="granel">Solo A Granel / Insumos (Cables, etc.)</MenuItem>
+                                    <MenuItem value="">Todos los tipos</MenuItem>
+                                    {categorias.map(cat => (
+                                        <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
+                        </Box>
+
+                        {/* Filtro: Marca */}
+                        <Box sx={{ flex: '1 1 200px', minWidth: 200 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: colors.text.secondary, mb: 0.5, display: 'block', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: 0.5 }}>
+                                Marca
+                            </Typography>
                             <FormControl fullWidth size="small">
-                                <InputLabel>Filtrar por Marca</InputLabel>
                                 <Select
                                     value={filterMarca}
                                     onChange={(e) => setFilterMarca(e.target.value)}
-                                    label="Filtrar por Marca"
+                                    displayEmpty
                                 >
                                     <MenuItem value="">Todas las marcas</MenuItem>
                                     {marcas.map(marca => (
@@ -900,19 +931,42 @@ const StockPage = () => {
                                     ))}
                                 </Select>
                             </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
+                        </Box>
+
+                        {/* Filtro: Empresa */}
+                        <Box sx={{ flex: '1 1 200px', minWidth: 200 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: colors.text.secondary, mb: 0.5, display: 'block', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: 0.5 }}>
+                                Empresa
+                            </Typography>
+                            <FormControl fullWidth size="small">
+                                <Select
+                                    value={filterEmpresa}
+                                    onChange={(e) => setFilterEmpresa(e.target.value)}
+                                    displayEmpty
+                                >
+                                    <MenuItem value="">Todas las empresas</MenuItem>
+                                    {OPCIONES_EMPRESA_STOCK.map(emp => (
+                                        <MenuItem key={emp.valor} value={emp.valor}>{emp.label}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
+
+                        {/* Botón Limpiar */}
+                        <Box sx={{ flex: '0 0 auto', minWidth: 140 }}>
                             <Button 
                                 fullWidth 
                                 variant="outlined" 
                                 onClick={handleClearFilters}
                                 startIcon={<ClearIcon />}
-                                disabled={!searchTerm && !filterMarca && filterTipo === 'todos'}
+                                disabled={!searchTerm && !filterCategoria && !filterMarca && !filterEmpresa}
+                                size="small"
+                                sx={{ py: 0.85, height: 40 }}
                             >
-                                Limpiar
+                                Limpiar Filtros
                             </Button>
-                        </Grid>
-                    </Grid>
+                        </Box>
+                    </Stack>
                 </FilterPaper>
 
                 {/* Lista de Grupos de Productos */}
@@ -1085,9 +1139,11 @@ const StockPage = () => {
                                                 {grupo.productos.slice(0, 5).map((producto) => {
                                                     const asignacionActiva = asignacionesActivas.find(a => a.producto_id === producto.id);
                                                     const esGranel = producto.es_granel === 1 || producto.es_granel === true;
+                                                    const colaboradorNombre = producto.colaborador_asignado?.colaborador_nombre || producto.colaborador_asignado?.nombre || producto.colaborador_nombre || asignacionActiva?.colaborador_nombre;
+                                                    const esAsignado = producto.id_estado_equipo === 2 || producto.estado === 'ASIGNADO' || !!colaboradorNombre;
                                                     const estadoColor = 
+                                                        esAsignado ? colors.warning :
                                                         producto.id_estado_equipo === 1 ? colors.success :
-                                                        producto.id_estado_equipo === 2 ? colors.warning :
                                                         producto.id_estado_equipo === 3 ? colors.info :
                                                         producto.id_estado_equipo === 4 ? colors.error :
                                                         colors.text.disabled;
@@ -1141,12 +1197,16 @@ const StockPage = () => {
                                                             </TableCell>
 
                                                             <TableCell>
-                                                                <Chip 
-                                                                    icon={<StoreIcon />} 
-                                                                    label={producto.bodega_nombre || 'Sin bodega'} 
-                                                                    size="small" 
-                                                                    sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} 
-                                                                />
+                                                                {esAsignado ? (
+                                                                    <Typography variant="body2" color="text.secondary">-</Typography>
+                                                                ) : (
+                                                                    <Chip 
+                                                                        icon={<StoreIcon />} 
+                                                                        label={producto.bodega_nombre || 'Sin bodega'} 
+                                                                        size="small" 
+                                                                        sx={{ backgroundColor: alpha(colors.info, 0.1), color: colors.info }} 
+                                                                    />
+                                                                )}
                                                             </TableCell>
 
                                                             {/* Columna 5: Acciones o Asignado */}
@@ -1162,14 +1222,31 @@ const StockPage = () => {
                                                                     >
                                                                         Descontar Stock
                                                                     </Button>
-                                                                ) : asignacionActiva ? (
-                                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                                        <Avatar sx={{ width: 24, height: 24, bgcolor: alpha(colors.success, 0.1) }}>
-                                                                            <PersonIcon sx={{ fontSize: 14 }} />
-                                                                        </Avatar>
-                                                                        <Typography variant="body2">
-                                                                            {asignacionActiva.colaborador_nombre}
-                                                                        </Typography>
+                                                                ) : colaboradorNombre ? (
+                                                                    <Box display="flex" flexDirection="column" gap={0.25}>
+                                                                        <Box display="flex" alignItems="center" gap={1}>
+                                                                            <Avatar sx={{ width: 22, height: 22, bgcolor: alpha(colors.primary, 0.1), color: colors.primary, fontSize: 11, fontWeight: 700 }}>
+                                                                                {colaboradorNombre.charAt(0)}
+                                                                            </Avatar>
+                                                                            <Typography variant="body2" fontWeight={600}>
+                                                                                {colaboradorNombre}
+                                                                            </Typography>
+                                                                        </Box>
+                                                                        {(producto.colaborador_asignado?.empresa || producto.colaborador_empresa) && (
+                                                                            <Chip 
+                                                                                label={formatEmpresaLabel(producto.colaborador_asignado?.empresa || producto.colaborador_empresa)} 
+                                                                                size="small" 
+                                                                                sx={{ 
+                                                                                    height: 18, 
+                                                                                    fontSize: '0.675rem', 
+                                                                                    fontWeight: 700, 
+                                                                                    bgcolor: alpha(colors.primary, 0.08), 
+                                                                                    color: colors.primary,
+                                                                                    alignSelf: 'flex-start',
+                                                                                    ml: 3.75
+                                                                                }} 
+                                                                            />
+                                                                        )}
                                                                     </Box>
                                                                 ) : (
                                                                     <Typography variant="body2" color="text.secondary">-</Typography>
