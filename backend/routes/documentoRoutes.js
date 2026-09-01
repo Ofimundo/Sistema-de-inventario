@@ -27,7 +27,7 @@ if (!fs.existsSync(CHECKLIST_DIR)) {
     console.log(`📁 Directorio creado: ${CHECKLIST_DIR}`);
 }
 
-// Renombrar cualquier archivo físico antiguo acta_asignacion_* a checklist_entrega_*
+// Renombrar cualquier archivo físico antiguo acta_asignacion_* o acta_recepcion_* a sus correspondientes checklist_*
 function renombrarActasAChecklist() {
     try {
         if (fs.existsSync(DOCS_DIR)) {
@@ -35,6 +35,16 @@ function renombrarActasAChecklist() {
             for (const f of files) {
                 if (f.startsWith('acta_asignacion_')) {
                     const newName = f.replace('acta_asignacion_', 'checklist_entrega_');
+                    const oldPath = path.join(DOCS_DIR, f);
+                    const newPath = path.join(DOCS_DIR, newName);
+                    if (!fs.existsSync(newPath)) {
+                        fs.renameSync(oldPath, newPath);
+                        console.log(`🔄 Archivo renombrado de ${f} a ${newName}`);
+                    } else {
+                        try { fs.unlinkSync(oldPath); } catch(e) {}
+                    }
+                } else if (f.startsWith('acta_recepcion_')) {
+                    const newName = f.replace('acta_recepcion_', 'checklist_recepcion_');
                     const oldPath = path.join(DOCS_DIR, f);
                     const newPath = path.join(DOCS_DIR, newName);
                     if (!fs.existsSync(newPath)) {
@@ -74,12 +84,12 @@ router.get('/todos', authenticateToken, async (req, res) => {
                 let tipo = 'documento';
                 let nombre = file;
                 
-                if (file.includes('checklist') || file.includes('acta_asignacion')) {
+                if (file.includes('checklist_entrega') || file.includes('checklist_asignacion') || file.includes('acta_asignacion') || file.includes('asignacion')) {
                     tipo = 'asignacion';
                     nombre = 'Checklist de Entrega';
-                } else if (file.includes('acta_recepcion')) {
+                } else if (file.includes('checklist_recepcion') || file.includes('acta_recepcion') || file.includes('recepcion')) {
                     tipo = 'recepcion';
-                    nombre = 'Acta de Recepción';
+                    nombre = 'Checklist de Recepción';
                 }
                 
                 documentos.push({
@@ -403,6 +413,72 @@ router.get('/descargar/:filename', authenticateToken, async (req, res) => {
                     }
                 } catch (errGen) {
                     console.error('Error regenerando PDF a nuevo formato:', errGen);
+                }
+            }
+        }
+
+        // Si es un documento de RECEPCION / CHECKLIST DE RECEPCION:
+        if (safeFilename.includes('acta_recepcion') || safeFilename.includes('checklist_recepcion') || safeFilename.includes('recepcion')) {
+            const idMatch = safeFilename.match(/\d+/);
+            if (idMatch) {
+                const asignacionId = parseInt(idMatch[0]);
+                try {
+                    const { generarActaRecepcionPDF } = require('../controllers/asignacionController');
+                    let row = null;
+                    try {
+                        const pool = await getConnection();
+                        const asigRes = await pool.request()
+                            .input('id', sql.Int, asignacionId)
+                            .query(`
+                                SELECT a.id, a.producto_id, a.colaborador_id, a.fecha_asignacion, a.fecha_devolucion, a.motivo, a.observaciones, a.es_prestamo, a.usuario_responsable,
+                                       p.nombre as producto_nombre, p.marca as producto_marca, p.modelo as producto_modelo, p.numero_serie, p.condicion as producto_condicion,
+                                       c.nombre as colaborador_nombre, c.rut as colaborador_rut, c.email as colaborador_email,
+                                       c.cargo as colaborador_cargo, c.departamento as colaborador_departamento, c.direccion as colaborador_direccion, c.empresa as colaborador_empresa
+                                FROM INV.asignaciones a
+                                LEFT JOIN INV.productos p ON a.producto_id = p.id
+                                LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                                WHERE a.id = @id OR a.producto_id = @id
+                            `);
+                        if (asigRes.recordset.length > 0) {
+                            row = asigRes.recordset[0];
+                        }
+                    } catch(eSql) {}
+
+                    const payload = {
+                        id_asignacion: asignacionId,
+                        colaborador: {
+                            nombre: row?.colaborador_nombre || '',
+                            rut: row?.colaborador_rut || '',
+                            email: row?.colaborador_email || '',
+                            cargo: row?.colaborador_cargo || '',
+                            departamento: row?.colaborador_departamento || '',
+                            empresa: row?.colaborador_empresa || ''
+                        },
+                        productos: [{
+                            nombre: row?.producto_nombre || '',
+                            marca: row?.producto_marca || '',
+                            modelo: row?.producto_modelo || '',
+                            numero_serie: row?.numero_serie || '',
+                            condicion: row?.producto_condicion || ''
+                        }],
+                        fecha_recepcion: row?.fecha_devolucion || row?.fecha_asignacion || new Date(),
+                        usuario_responsable: row?.usuario_responsable || '',
+                        observaciones: row?.observaciones || '',
+                        firma_trabajador: row?.colaborador_nombre || '',
+                        firma_gerente: 'María Eugenia Nabalón'
+                    };
+
+                    const pdfBuffer = await generarActaRecepcionPDF(payload);
+                    if (pdfBuffer && pdfBuffer.length > 0) {
+                        try { fs.writeFileSync(filepath, pdfBuffer); } catch(e) {}
+
+                        res.setHeader('Content-Type', 'application/pdf');
+                        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+                        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+                        return res.send(pdfBuffer);
+                    }
+                } catch (errRec) {
+                    console.error('Error regenerando PDF de recepcion:', errRec);
                 }
             }
         }

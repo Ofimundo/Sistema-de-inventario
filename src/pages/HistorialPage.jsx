@@ -1490,7 +1490,7 @@ const HistorialPage = () => {
                                                         <TableCell>
                                                             <Chip 
                                                                 icon={item.tipo === 'anexo' ? <DescriptionIcon /> : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? <AssignmentIcon /> : <ReceiptIcon />)}
-                                                                label={item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? 'Checklist de Entrega' : 'Acta Recepción')}
+                                                                label={item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? 'Checklist de Entrega' : 'Checklist de Recepción')}
                                                                 size="small"
                                                                 sx={{
                                                                     bgcolor: item.tipo === 'anexo' ? alpha('#8B5CF6', 0.1) : ((item.tipo === 'asignacion' || item.tipo === 'checklist') ? alpha(colors.primary, 0.1) : alpha(colors.success, 0.1)),
@@ -1509,7 +1509,7 @@ const HistorialPage = () => {
                                                                 size="small"
                                                                 variant="contained"
                                                                 startIcon={downloadingDoc ? <CircularProgress size={16} /> : <PdfIcon />}
-                                                                onClick={() => handleDescargarDocumento(item.filename, item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' ? 'Acta Asignación' : 'Acta Recepción'))}
+                                                                onClick={() => handleDescargarDocumento(item.filename, item.tipo === 'anexo' ? 'Anexo' : (item.tipo === 'asignacion' || item.tipo === 'checklist' ? 'Checklist de Entrega' : 'Checklist de Recepción'))}
                                                                 disabled={downloadingDoc}
                                                                 sx={{
                                                                     bgcolor: '#dc2626',
