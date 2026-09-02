@@ -275,26 +275,170 @@ function construirHtmlChecklist(data) {
 </html>`;
 }
 
-// Función para generar Checklist de Entrega PDF oficial (usando la plantilla HTML exacta del usuario)
-async function generarActaAsignacionPDF(data) {
-    const htmlContent = construirHtmlChecklist(data);
-    const options = {
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    };
-    const file = { content: htmlContent };
-
-    for (let intento = 1; intento <= 3; intento++) {
+// Función de respaldo nativa (PDFKit) para la VM
+function generarChecklistConPDFKit(data) {
+    return new Promise((resolve, reject) => {
         try {
-            const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
-            return pdfBuffer;
+            console.log('📌 Generando Checklist de Entrega con PDFKit (Fallback VM)...');
+            const doc = new PDFDocument({ margin: 30, size: 'A4' });
+            const buffers = [];
+            doc.on('data', buffers.push.bind(buffers));
+            doc.on('end', () => resolve(Buffer.concat(buffers)));
+            doc.on('error', reject);
+
+            const colaborador = data.colaborador || {};
+            const producto = data.productos?.[0] || data.producto || {};
+            const ticketInfo = data.ticketInfo || {};
+            const specs = data.especificacionesTecnicas || data.especificaciones || {};
+            const rawItems = data.checklistData?.items || data.items;
+            const itemsChecklist = (rawItems && rawItems.length > 0) ? rawItems : DEFAULT_CHECKLIST_ITEMS;
+            const fechaText = formatearFechaCorta(data.fecha_asignacion || new Date());
+            const usuarioRed = data.usuarioRed || data.checklistData?.usuarioRed || (colaborador.email ? colaborador.email.split('@')[0] : '');
+            const claveRed = data.claveRed || data.checklistData?.claveRed || '********';
+
+            // Encabezado
+            doc.font('Helvetica-Bold').fontSize(14).fillColor('#111111').text('CHECKLIST DE ENTREGA Y PREPARACIÓN DE EQUIPO', { align: 'center' });
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#444444').text('DEPARTAMENTO DE TECNOLOGÍA E INNOVACIÓN', { align: 'center' }).moveDown(0.5);
+            doc.moveTo(30, doc.y).lineTo(565, doc.y).strokeColor('#333333').stroke();
+            doc.moveDown(0.5);
+
+            // Sección 1: Información
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#333333').text('1. INFORMACIÓN DEL COLABORADOR Y EQUIPO').moveDown(0.3);
+            doc.font('Helvetica').fontSize(8.5).fillColor('#000000');
+            
+            const startY = doc.y;
+            // Columna 1
+            doc.text(`Colaborador: ${colaborador.nombre || ''}`, 30, startY);
+            doc.text(`RUT: ${colaborador.rut || ''}`, 30, startY + 12);
+            doc.text(`Cargo / Depto: ${[colaborador.cargo, colaborador.departamento].filter(Boolean).join(' - ')}`, 30, startY + 24);
+            doc.text(`Usuario Red / Clave: ${usuarioRed ? `${usuarioRed} / ${claveRed}` : ''}`, 30, startY + 36);
+
+            // Columna 2
+            const equipoModelo = `${producto.nombre || 'Equipo'} ${[producto.marca, producto.modelo].filter(Boolean).join(' ')}`.trim();
+            doc.text(`Equipo / Modelo: ${equipoModelo}`, 300, startY);
+            doc.text(`N° de Serie: ${producto.numero_serie || 'N/A'}`, 300, startY + 12);
+            doc.text(`Ticket / Fecha: Ticket: ${ticketInfo.ticket || '-'} | Fecha: ${fechaText}`, 300, startY + 24);
+            doc.text(`Técnico TI: ${ticketInfo.tecnico || data.usuario_responsable || 'Técnico TI'}`, 300, startY + 36);
+
+            doc.y = startY + 52;
+            doc.moveTo(30, doc.y).lineTo(565, doc.y).strokeColor('#CCCCCC').stroke();
+            doc.moveDown(0.5);
+
+            // Sección 2: Checklist Items
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#333333').text('2. VERIFICACIÓN Y CONFIGURACIÓN DE EQUIPO').moveDown(0.3);
+
+            let currentY = doc.y;
+            // Header Tabla
+            doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#000000');
+            doc.text('ITEM DE VERIFICACIÓN', 35, currentY);
+            doc.text('ESTADO', 320, currentY);
+            doc.text('OBSERVACIONES', 400, currentY);
+            currentY += 14;
+            doc.moveTo(30, currentY).lineTo(565, currentY).strokeColor('#333333').stroke();
+            currentY += 4;
+
+            doc.font('Helvetica').fontSize(8);
+            itemsChecklist.forEach((item) => {
+                if (currentY > 740) {
+                    doc.addPage();
+                    currentY = 40;
+                }
+                const isOk = item.ok !== false;
+                const estadoText = isOk ? '✔ OK' : '❌ PENDIENTE';
+                const obsText = item.observacion || (!isOk ? 'No entregado' : '-');
+
+                doc.fillColor('#000000').text(item.label || item.id || '', 35, currentY, { width: 270 });
+                if (isOk) {
+                    doc.fillColor('#10B981').text(estadoText, 320, currentY);
+                } else {
+                    doc.fillColor('#EF4444').text(estadoText, 320, currentY);
+                }
+                doc.fillColor('#333333').text(obsText, 400, currentY, { width: 160 });
+                currentY += 12;
+            });
+
+            doc.y = currentY + 5;
+            if (doc.y > 680) {
+                doc.addPage();
+            }
+
+            // Sección 3: Especificaciones
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#333333').text('3. ESPECIFICACIONES TÉCNICAS DEL EQUIPO').moveDown(0.3);
+            doc.font('Helvetica').fontSize(8.5).fillColor('#000000');
+            const specY = doc.y;
+            doc.text(`CPU: ${specs.cpu || 'N/A'}`, 35, specY);
+            doc.text(`RAM: ${specs.ram || 'N/A'}`, 180, specY);
+            doc.text(`Disco: ${specs.disco || 'N/A'}`, 320, specY);
+            doc.text(`GPU: ${specs.gpu || 'N/A'}`, 440, specY);
+            doc.text(`Tipo de Equipo: ${specs.tipo || producto.condicion || 'Standard'}`, 35, specY + 14);
+
+            doc.y = specY + 34;
+
+            // Sección 4: Conformidad y Firmas
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#333333').text('4. CONFORMIDAD Y FIRMAS').moveDown(0.3);
+            doc.font('Helvetica').fontSize(7.5).fillColor('#444444')
+               .text('El colaborador declara haber recibido el equipo especificado en el presente documento en óptimas condiciones de funcionamiento, habiéndose verificado todos los puntos del checklist anterior.')
+               .moveDown(1);
+
+            const firmaY = doc.y + 20;
+            // Firma Colaborador
+            dibujarFirma(doc, data.firma_trabajador || colaborador.nombre, 60, firmaY, colaborador.nombre || 'Firma Colaborador');
+            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000000').text('Firma del Colaborador', 60, firmaY + 15);
+            doc.font('Helvetica').fontSize(8).text(colaborador.nombre || '', 60, firmaY + 27);
+            if (colaborador.rut) doc.fontSize(7.5).text(`RUT: ${colaborador.rut}`, 60, firmaY + 37);
+
+            // Firma Gerente
+            dibujarFirma(doc, data.firma_gerente, 350, firmaY, 'María Eugenia Nabalón');
+            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000000').text('V°B° Gerente de Tecnología', 350, firmaY + 15);
+            doc.font('Helvetica').fontSize(8).text('María Eugenia Nabalón', 350, firmaY + 27);
+            doc.fontSize(7.5).text('Gerente de Tecnología e Innovación', 350, firmaY + 37);
+
+            doc.end();
         } catch (err) {
-            console.error(`⚠️ Intento ${intento} fallido al generar PDF HTML:`, err.message);
-            if (intento === 3) throw err;
-            await new Promise(res => setTimeout(res, 300));
+            reject(err);
         }
+    });
+}
+
+// Función para generar Checklist de Entrega PDF oficial
+async function generarActaAsignacionPDF(data) {
+    try {
+        const htmlContent = construirHtmlChecklist(data);
+        const options = {
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-zygote',
+                '--single-process',
+                '--disable-software-rasterizer'
+            ]
+        };
+        if (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN) {
+            options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN;
+        }
+        const file = { content: htmlContent };
+
+        for (let intento = 1; intento <= 2; intento++) {
+            try {
+                const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
+                if (pdfBuffer && pdfBuffer.length > 0) {
+                    return pdfBuffer;
+                }
+            } catch (err) {
+                console.warn(`⚠️ Intento ${intento} con Puppeteer falló: ${err.message}`);
+                if (intento < 2) await new Promise(res => setTimeout(res, 200));
+            }
+        }
+        console.warn('⚠️ Puppeteer no está disponible o falló en esta máquina virtual. Generando PDF con PDFKit (Respaldo)...');
+        return await generarChecklistConPDFKit(data);
+    } catch (err) {
+        console.error('⚠️ Fallback general activado para PDF de asignación:', err.message);
+        return await generarChecklistConPDFKit(data);
     }
 }
 
@@ -523,26 +667,99 @@ function construirHtmlChecklistRecepcion(data) {
 </html>`;
 }
 
+// Función de respaldo nativa (PDFKit) para Recepción en la VM
+function generarRecepcionConPDFKit(data) {
+    return new Promise((resolve, reject) => {
+        try {
+            console.log('📌 Generando Checklist de Recepción con PDFKit (Fallback VM)...');
+            const doc = new PDFDocument({ margin: 30, size: 'A4' });
+            const buffers = [];
+            doc.on('data', buffers.push.bind(buffers));
+            doc.on('end', () => resolve(Buffer.concat(buffers)));
+            doc.on('error', reject);
+
+            const colaborador = data.colaborador || {};
+            const producto = data.productos?.[0] || data.producto || {};
+            const fechaText = formatearFechaCorta(data.fecha_recepcion || data.fecha_asignacion || new Date());
+
+            doc.font('Helvetica-Bold').fontSize(14).fillColor('#4C1D95').text('CHECKLIST DE RECEPCIÓN DE EQUIPO DEVUELTO', { align: 'center' });
+            doc.font('Helvetica').fontSize(9).fillColor('#6B21A8').text('CONTROL INTERNO DE ACTIVOS TECNOLÓGICOS - DEPARTAMENTO DE TI', { align: 'center' }).moveDown(0.5);
+            doc.moveTo(30, doc.y).lineTo(565, doc.y).strokeColor('#7E22CE').stroke();
+            doc.moveDown(0.5);
+
+            doc.font('Helvetica').fontSize(8.5).fillColor('#000000');
+            const startY = doc.y;
+            doc.text(`Usuario que entrega: ${colaborador.nombre || ''}`, 30, startY);
+            doc.text(`Fecha: ${fechaText}`, 300, startY);
+            doc.text(`Tipo de equipo: ${producto.tipo || producto.nombre || 'Equipo'}`, 30, startY + 12);
+            doc.text(`Marca / Modelo: ${[producto.marca, producto.modelo].filter(Boolean).join(' / ') || '-'}`, 300, startY + 12);
+            doc.text(`N° de Serie: ${producto.numero_serie || '-'}`, 30, startY + 24);
+            doc.text(`Recibido por: ${data.recibido_por || data.usuario_responsable || 'Técnico TI'}`, 300, startY + 24);
+
+            doc.y = startY + 40;
+            doc.moveTo(30, doc.y).lineTo(565, doc.y).strokeColor('#CCCCCC').stroke();
+            doc.moveDown(0.5);
+
+            if (data.observaciones) {
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#333333').text('OBSERVACIONES / DAÑOS DETECTADOS:').moveDown(0.2);
+                doc.font('Helvetica').fontSize(8.5).fillColor('#111111').text(data.observaciones).moveDown(0.5);
+            }
+
+            const firmaY = doc.y + 30;
+            dibujarFirma(doc, data.firma_trabajador || colaborador.nombre, 60, firmaY, colaborador.nombre || 'Firma Usuario');
+            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000000').text('FIRMA USUARIO QUE ENTREGA', 60, firmaY + 15);
+            doc.font('Helvetica').fontSize(8).text(colaborador.nombre || '', 60, firmaY + 27);
+
+            dibujarFirma(doc, data.firma_gerente, 350, firmaY, 'María Eugenia Nabalón');
+            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000000').text('V°B° GERENTE DE TECNOLOGÍA', 350, firmaY + 15);
+            doc.font('Helvetica').fontSize(8).text('María Eugenia Nabalón', 350, firmaY + 27);
+
+            doc.end();
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
 // Función para generar acta de recepción PDF (Plantilla HTML oficial Checklist de Recepción)
 async function generarActaRecepcionPDF(data) {
-    const htmlContent = construirHtmlChecklistRecepcion(data);
-    const options = {
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    };
-    const file = { content: htmlContent };
-
-    for (let intento = 1; intento <= 3; intento++) {
-        try {
-            const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
-            return pdfBuffer;
-        } catch (err) {
-            console.error(`⚠️ Intento ${intento} fallido al generar PDF HTML Recepcion:`, err.message);
-            if (intento === 3) throw err;
-            await new Promise(res => setTimeout(res, 300));
+    try {
+        const htmlContent = construirHtmlChecklistRecepcion(data);
+        const options = {
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-zygote',
+                '--single-process',
+                '--disable-software-rasterizer'
+            ]
+        };
+        if (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN) {
+            options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN;
         }
+        const file = { content: htmlContent };
+
+        for (let intento = 1; intento <= 2; intento++) {
+            try {
+                const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
+                if (pdfBuffer && pdfBuffer.length > 0) {
+                    return pdfBuffer;
+                }
+            } catch (err) {
+                console.warn(`⚠️ Intento ${intento} con Puppeteer Recepción falló: ${err.message}`);
+                if (intento < 2) await new Promise(res => setTimeout(res, 200));
+            }
+        }
+        console.warn('⚠️ Puppeteer Recepción no disponible. Generando PDF con PDFKit (Respaldo)...');
+        return await generarRecepcionConPDFKit(data);
+    } catch (err) {
+        console.error('⚠️ Fallback general activado para PDF de recepción:', err.message);
+        return await generarRecepcionConPDFKit(data);
     }
 }
 
