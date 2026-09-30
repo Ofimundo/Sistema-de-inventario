@@ -499,6 +499,51 @@ router.get('/descargar/:filename', authenticateToken, async (req, res) => {
             filepath = path.join(CHECKLIST_DIR, safeFilename);
             found = fs.existsSync(filepath);
         }
+        
+        // Si sigue sin encontrarse y es un anexo, intentar regeneración On-The-Fly
+        if (!found && (safeFilename.includes('anexo') || safeFilename.endsWith('.docx'))) {
+            try {
+                const pool = await getConnection();
+                const anexoRes = await pool.request()
+                    .input('filename', sql.NVarChar, safeFilename)
+                    .query(`
+                        SELECT a.id, a.colaborador_id, a.producto_id, a.empresa, a.fecha_anexo, a.fecha_creacion,
+                               c.nombre as colaborador_nombre, c.rut as colaborador_rut
+                        FROM INV.anexos a
+                        LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                        WHERE a.documento_generado = @filename
+                    `);
+                if (anexoRes.recordset.length > 0) {
+                    const anexo = anexoRes.recordset[0];
+                    const { execFileSync } = require('child_process');
+                    const scriptPath = path.join(__dirname, '../scripts/generar_anexo.py');
+                    const templatePath = path.join(__dirname, '../../public/Documentos_Anexo', 
+                        (anexo.empresa || '').toLowerCase().includes('global') ? 'EstructuraGlobal.docx' :
+                        (anexo.empresa || '').toLowerCase().includes('latam') ? 'EstructuraLatam.docx' : 'Estructura.docx'
+                    );
+                    
+                    const targetFilepath = path.join(ANEXOS_DIR, safeFilename);
+                    const jsonInput = JSON.stringify({
+                        template_path: templatePath,
+                        output_path: targetFilepath,
+                        fecha: new Date(anexo.fecha_anexo || anexo.fecha_creacion).toLocaleDateString('es-CL'),
+                        nombre: anexo.colaborador_nombre || '',
+                        rut: anexo.colaborador_rut || '',
+                        equipos_list: []
+                    });
+                    
+                    execFileSync('python', [scriptPath, jsonInput], { encoding: 'utf-8' });
+                    if (fs.existsSync(targetFilepath)) {
+                        filepath = targetFilepath;
+                        found = true;
+                        console.log(`✨ Anexo regenerado On-The-Fly en documentoRoutes: ${safeFilename}`);
+                    }
+                }
+            } catch (errAnexo) {
+                console.error('⚠️ Error al regenerar anexo en documentoRoutes:', errAnexo.message);
+            }
+        }
+        
         if (!found) {
             console.log(`❌ Documento no encontrado: ${safeFilename}`);
             return res.status(404).json({ success: false, message: 'Documento no encontrado' });

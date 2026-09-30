@@ -355,26 +355,169 @@ router.get('/', async (req, res) => {
 });
 
 // ============================================
-// DESCARGAR ANEXO
+// DESCARGAR ANEXO (CON GENERACIÓN DINÁMICA ON-THE-FLY)
 // ============================================
 router.get('/descargar/:id', async (req, res) => {
+    console.log(`📥 GET /api/anexos/descargar/${req.params.id}`);
     try {
         const { id } = req.params;
         const pool = await getConnection();
         
-        const result = await pool.request()
-            .input('id', sql.Int, id)
-            .query(`SELECT documento_generado FROM INV.anexos WHERE id = @id`);
+        let anexo = null;
+        const isNumeric = !isNaN(parseInt(id));
         
-        if (result.recordset.length === 0 || !result.recordset[0].documento_generado) {
-            return res.status(404).json({ success: false, message: 'Documento no encontrado' });
+        // 1. Buscar registro en INV.anexos por ID
+        if (isNumeric) {
+            const result = await pool.request()
+                .input('id', sql.Int, parseInt(id))
+                .query(`
+                    SELECT 
+                        a.id, 
+                        a.colaborador_id, 
+                        a.producto_id, 
+                        a.empresa, 
+                        a.observaciones, 
+                        a.documento_generado, 
+                        a.fecha_creacion, 
+                        a.fecha_anexo,
+                        c.nombre as colaborador_nombre, 
+                        c.rut as colaborador_rut,
+                        c.email as colaborador_email,
+                        c.cargo as colaborador_cargo,
+                        c.departamento as colaborador_departamento,
+                        p.nombre as producto_nombre, 
+                        p.numero_serie, 
+                        p.marca, 
+                        p.modelo,
+                        p.condicion as producto_condicion
+                    FROM INV.anexos a
+                    LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                    LEFT JOIN INV.productos p ON a.producto_id = p.id
+                    WHERE a.id = @id
+                `);
+            if (result.recordset.length > 0) {
+                anexo = result.recordset[0];
+            }
         }
         
-        const filename = result.recordset[0].documento_generado;
-        const filepath = path.join(ANEXOS_DIR, filename);
+        // 2. Si no se encontró por ID numérico, buscar por documento_generado
+        if (!anexo) {
+            const resultByFile = await pool.request()
+                .input('filename', sql.NVarChar, id)
+                .query(`
+                    SELECT 
+                        a.id, 
+                        a.colaborador_id, 
+                        a.producto_id, 
+                        a.empresa, 
+                        a.observaciones, 
+                        a.documento_generado, 
+                        a.fecha_creacion, 
+                        a.fecha_anexo,
+                        c.nombre as colaborador_nombre, 
+                        c.rut as colaborador_rut,
+                        c.email as colaborador_email,
+                        c.cargo as colaborador_cargo,
+                        c.departamento as colaborador_departamento,
+                        p.nombre as producto_nombre, 
+                        p.numero_serie, 
+                        p.marca, 
+                        p.modelo,
+                        p.condicion as producto_condicion
+                    FROM INV.anexos a
+                    LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                    LEFT JOIN INV.productos p ON a.producto_id = p.id
+                    WHERE a.documento_generado = @filename
+                `);
+            if (resultByFile.recordset.length > 0) {
+                anexo = resultByFile.recordset[0];
+            }
+        }
+
+        // 3. Fallback: Si no existe el registro de anexo, verificar si la ID corresponde a un colaborador
+        if (!anexo && isNumeric) {
+            const colabRes = await pool.request()
+                .input('id', sql.Int, parseInt(id))
+                .query(`SELECT id, nombre, rut, empresa FROM INV.colaboradores WHERE id = @id`);
+            if (colabRes.recordset.length > 0) {
+                const c = colabRes.recordset[0];
+                anexo = {
+                    id: parseInt(id),
+                    colaborador_id: c.id,
+                    empresa: c.empresa || 'STUEDEMANN S.A',
+                    colaborador_nombre: c.nombre,
+                    colaborador_rut: c.rut,
+                    fecha_anexo: new Date()
+                };
+            }
+        }
         
-        if (!fs.existsSync(filepath)) {
-            return res.status(404).json({ success: false, message: 'Archivo no encontrado en el servidor' });
+        // Si definitivamente no hay datos
+        if (!anexo) {
+            console.log(`❌ Registro de anexo no encontrado en BD para ID/Filename: ${id}`);
+            return res.status(404).json({ success: false, message: `No se encontró el anexo ID ${id} en la base de datos` });
+        }
+        
+        let filename = anexo.documento_generado;
+        if (!filename) {
+            const nombreColabLimpio = (anexo.colaborador_nombre || 'colaborador').replace(/[^a-zA-Z0-9]/g, '_');
+            const empresaLimpia = (anexo.empresa || 'empresa').replace(/[^a-zA-Z0-9]/g, '_');
+            filename = `anexo_${empresaLimpia}_${nombreColabLimpio}_${anexo.id}.docx`;
+        }
+        
+        let filepath = path.join(ANEXOS_DIR, filename);
+        let docBuffer = null;
+        
+        // 4. Comprobar si el archivo físico existe en el servidor
+        if (fs.existsSync(filepath)) {
+            console.log(`✅ Archivo físico existente encontrado: ${filepath}`);
+            docBuffer = fs.readFileSync(filepath);
+        } else {
+            // 5. GENERACIÓN DINÁMICA ON-THE-FLY
+            console.log(`⚡ Archivo físico no encontrado (${filepath}). Generando anexo ON-THE-FLY...`);
+            
+            let equipos = [];
+            if (anexo.colaborador_id || anexo.colaborador_rut) {
+                equipos = await obtenerEquiposAsignadosColaborador(pool, anexo.colaborador_id, anexo.colaborador_rut, anexo.colaborador_nombre);
+            }
+            if (equipos.length === 0 && (anexo.producto_nombre || anexo.producto_id)) {
+                equipos = [{
+                    id: anexo.producto_id,
+                    nombre: anexo.producto_nombre || 'Equipo',
+                    marca: anexo.marca || '',
+                    modelo: anexo.modelo || '',
+                    numero_serie: anexo.numero_serie || '',
+                    estado: anexo.producto_condicion || 'BUENO'
+                }];
+            }
+            
+            try {
+                docBuffer = generarDocxAnexo({
+                    empresa: anexo.empresa || 'STUEDEMANN S.A',
+                    colaborador: {
+                        id: anexo.colaborador_id,
+                        nombre: anexo.colaborador_nombre || '',
+                        rut: anexo.colaborador_rut || ''
+                    },
+                    fecha: anexo.fecha_anexo || anexo.fecha_creacion || new Date(),
+                    equipos: equipos
+                }, filepath);
+                
+                // Actualizar documento_generado en BD si estaba nulo
+                if (!anexo.documento_generado && anexo.id) {
+                    try {
+                        await pool.request()
+                            .input('id', sql.Int, anexo.id)
+                            .input('filename', sql.NVarChar, filename)
+                            .query(`UPDATE INV.anexos SET documento_generado = @filename WHERE id = @id`);
+                    } catch (eUpd) {}
+                }
+                
+                console.log(`✨ Anexo generado exitosamente ON-THE-FLY: ${filename}`);
+            } catch (errGen) {
+                console.error('❌ Error generando anexo ON-THE-FLY:', errGen.message);
+                return res.status(500).json({ success: false, message: `Error al regenerar el anexo: ${errGen.message}` });
+            }
         }
         
         const isDocx = filename.endsWith('.docx');
@@ -385,11 +528,11 @@ router.get('/descargar/:id', async (req, res) => {
         }
         
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        const fileStream = fs.createReadStream(filepath);
-        fileStream.pipe(res);
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+        return res.send(docBuffer);
         
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Error en descarga de anexo:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
