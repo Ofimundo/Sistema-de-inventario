@@ -237,19 +237,43 @@ const colaboradorController = {
                     path.join(CHECKLIST_DIR, `checklist_producto_${row.producto_id}.json`)
                 ];
 
+                let masRecienteFile = null;
+                let masRecienteMtime = 0;
+
                 for (const p of posiblesArchivos) {
                     if (fs.existsSync(p)) {
                         try {
-                            checklistData = JSON.parse(fs.readFileSync(p, 'utf8'));
-                            break;
+                            const stat = fs.statSync(p);
+                            if (stat.mtimeMs > masRecienteMtime) {
+                                masRecienteMtime = stat.mtimeMs;
+                                masRecienteFile = p;
+                            }
                         } catch (e) {
-                            console.error('Error leyendo checklist json:', e);
+                            console.error('Error verificando stat de checklist json:', e);
                         }
                     }
                 }
 
-                if (checklistData && Array.isArray(checklistData.items)) {
-                    items_pendientes = checklistData.items.filter(item => !item.ok || (item.observacion && item.observacion.trim().length > 0));
+                if (masRecienteFile) {
+                    try {
+                        checklistData = JSON.parse(fs.readFileSync(masRecienteFile, 'utf8'));
+                    } catch (e) {
+                        console.error('Error leyendo checklist json:', e);
+                    }
+                }
+
+                if (checklistData) {
+                    let rawItems = checklistData.items;
+                    if (!rawItems && Array.isArray(checklistData.categorias)) {
+                        rawItems = checklistData.categorias.flatMap(c => c.items || []);
+                    }
+                    if (Array.isArray(rawItems)) {
+                        items_pendientes = rawItems.filter(item => 
+                            !item.ok || 
+                            String(item.ok) === 'false' || 
+                            (item.observacion && item.observacion.trim().length > 0)
+                        );
+                    }
                 }
 
                 return {

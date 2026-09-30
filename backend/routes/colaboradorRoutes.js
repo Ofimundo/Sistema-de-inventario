@@ -342,7 +342,64 @@ router.get('/:id/productos-asignados', authenticateToken, async (req, res) => {
         
         console.log(`✅ Productos encontrados: ${result.recordset.length}`);
         
-        res.json({ success: true, data: result.recordset });
+        const fs = require('fs');
+        const path = require('path');
+        const CHECKLIST_DIR = path.join(__dirname, '../uploads/checklist');
+
+        const dataConChecklist = result.recordset.map(row => {
+            let checklistData = null;
+            let items_pendientes = [];
+
+            const posiblesArchivos = [
+                path.join(CHECKLIST_DIR, `checklist_asignacion_${row.asignacion_id}.json`),
+                path.join(CHECKLIST_DIR, `checklist_producto_${row.producto_id}.json`)
+            ];
+
+            let masRecienteFile = null;
+            let masRecienteMtime = 0;
+
+            for (const p of posiblesArchivos) {
+                if (fs.existsSync(p)) {
+                    try {
+                        const stat = fs.statSync(p);
+                        if (stat.mtimeMs > masRecienteMtime) {
+                            masRecienteMtime = stat.mtimeMs;
+                            masRecienteFile = p;
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            if (masRecienteFile) {
+                try {
+                    checklistData = JSON.parse(fs.readFileSync(masRecienteFile, 'utf8'));
+                } catch (e) {
+                    console.error('Error leyendo checklist json:', e);
+                }
+            }
+
+            if (checklistData) {
+                let rawItems = checklistData.items;
+                if (!rawItems && Array.isArray(checklistData.categorias)) {
+                    rawItems = checklistData.categorias.flatMap(c => c.items || []);
+                }
+                if (Array.isArray(rawItems)) {
+                    items_pendientes = rawItems.filter(item => 
+                        !item.ok || 
+                        String(item.ok) === 'false' || 
+                        (item.observacion && item.observacion.trim().length > 0)
+                    );
+                }
+            }
+
+            return {
+                ...row,
+                checklistData,
+                items_pendientes
+            };
+        });
+        
+        res.json({ success: true, data: dataConChecklist });
         
     } catch (error) {
         console.error('❌ Error en GET /colaboradores/:id/productos-asignados:', error);
@@ -383,7 +440,62 @@ router.get('/:id/productos', authenticateToken, async (req, res) => {
                 ORDER BY a.fecha_asignacion DESC
             `);
         
-        res.json({ success: true, data: result.recordset });
+        const CHECKLIST_DIR = path.join(__dirname, '../uploads/checklist');
+
+        const dataConChecklist = result.recordset.map(row => {
+            let checklistData = null;
+            let items_pendientes = [];
+
+            const posiblesArchivos = [
+                path.join(CHECKLIST_DIR, `checklist_asignacion_${row.asignacion_id}.json`),
+                path.join(CHECKLIST_DIR, `checklist_producto_${row.producto_id}.json`)
+            ];
+
+            let masRecienteFile = null;
+            let masRecienteMtime = 0;
+
+            for (const p of posiblesArchivos) {
+                if (fs.existsSync(p)) {
+                    try {
+                        const stat = fs.statSync(p);
+                        if (stat.mtimeMs > masRecienteMtime) {
+                            masRecienteMtime = stat.mtimeMs;
+                            masRecienteFile = p;
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            if (masRecienteFile) {
+                try {
+                    checklistData = JSON.parse(fs.readFileSync(masRecienteFile, 'utf8'));
+                } catch (e) {
+                    console.error('Error leyendo checklist json:', e);
+                }
+            }
+
+            if (checklistData) {
+                let rawItems = checklistData.items;
+                if (!rawItems && Array.isArray(checklistData.categorias)) {
+                    rawItems = checklistData.categorias.flatMap(c => c.items || []);
+                }
+                if (Array.isArray(rawItems)) {
+                    items_pendientes = rawItems.filter(item => 
+                        !item.ok || 
+                        String(item.ok) === 'false' || 
+                        (item.observacion && item.observacion.trim().length > 0)
+                    );
+                }
+            }
+
+            return {
+                ...row,
+                checklistData,
+                items_pendientes
+            };
+        });
+        
+        res.json({ success: true, data: dataConChecklist });
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ success: false, message: error.message });

@@ -993,6 +993,13 @@ const EditarChecklistDialog = ({ open, onClose, asignacion, producto, onChecklis
                     producto_id: producto.id,
                     checklistData: checklistPayload
                 });
+                if (producto?.id) {
+                    localStorage.setItem(`checklist_producto_${producto.id}`, JSON.stringify(checklistPayload));
+                    localStorage.setItem(`checklist_fecha_${producto.id}`, new Date().toISOString());
+                }
+                if (asignacion?.id) {
+                    localStorage.setItem(`checklist_asignacion_${asignacion.id}`, JSON.stringify(checklistPayload));
+                }
             } catch (err) {
                 console.warn('Error guardando en backend, continuando local:', err);
             }

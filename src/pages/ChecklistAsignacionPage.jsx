@@ -315,6 +315,13 @@ const ChecklistAsignacionPage = () => {
                         observacion: item.observacion
                     }))
                 })),
+                items: checklist.flatMap(cat => (cat.items || []).map(item => ({
+                    id: item.id,
+                    label: item.label,
+                    ok: item.ok,
+                    observacion: item.observacion,
+                    categoria: cat.nombre
+                }))),
                 tipo: tipoAccion,
                 completado: true
             };

@@ -433,83 +433,104 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                         <Paper variant="outlined" sx={{ p: 2, minHeight: 180, display: 'flex', flexDirection: 'column' }}>
                             {(() => {
                                 const itemsPendientesChecklist = (productos || [])
-                                    .filter(p => !p.fecha_devolucion || String(p.estado_asignacion).toUpperCase() === 'ACTIVA')
                                     .flatMap(p => {
                                         let items = p.items_pendientes;
                                         if (!items || items.length === 0) {
                                             let data = p.checklistData;
                                             if (!data) {
                                                 const prodId = p.producto_id || p.id;
-                                                const local = localStorage.getItem(`checklist_producto_${prodId}`);
-                                                if (local) {
-                                                    try { data = JSON.parse(local); } catch(e) {}
+                                                const asigId = p.asignacion_id || p.id_asignacion;
+                                                if (asigId) {
+                                                    const localAsig = localStorage.getItem(`checklist_asignacion_${asigId}`);
+                                                    if (localAsig) { try { data = JSON.parse(localAsig); } catch(e) {} }
+                                                }
+                                                if (!data && prodId) {
+                                                    const localProd = localStorage.getItem(`checklist_producto_${prodId}`);
+                                                    if (localProd) { try { data = JSON.parse(localProd); } catch(e) {} }
                                                 }
                                             }
-                                            if (data && Array.isArray(data.items)) {
-                                                items = data.items.filter(i => !i.ok || (i.observacion && i.observacion.trim().length > 0));
-                                            } else {
-                                                items = [];
+                                            if (data) {
+                                                let rawItems = data.items;
+                                                if (!rawItems && Array.isArray(data.categorias)) {
+                                                    rawItems = data.categorias.flatMap(c => c.items || []);
+                                                }
+                                                if (Array.isArray(rawItems)) {
+                                                    items = rawItems.filter(i => !i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0));
+                                                } else {
+                                                    items = [];
+                                                }
                                             }
                                         }
                                         return (items || [])
-                                            .filter(i => i && (!i.ok || String(i.ok) === 'false'))
+                                            .filter(i => i && (!i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0)))
                                             .map(item => ({ ...item, productoNombre: p.producto_nombre || p.nombre || 'Equipo' }));
                                     });
 
-                                return itemsPendientesChecklist.length > 0 ? (
-                                    <Box mb={2} sx={{ p: 1.5, borderRadius: 1.5, bgcolor: alpha(colors.warning, 0.08), border: `1px solid ${alpha(colors.warning, 0.3)}` }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                                            ⚠️ Faltantes / Pendientes del Checklist:
-                                        </Typography>
-                                        <Stack spacing={1}>
-                                            {itemsPendientesChecklist.map((item, idx) => (
-                                                <Box key={idx} sx={{ p: 1, borderRadius: 1, bgcolor: 'background.paper', border: `1px dashed ${colors.border}` }}>
-                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary', display: 'block' }}>
-                                                        • {item.label || item.id} {item.productoNombre ? `(${item.productoNombre})` : ''}
-                                                    </Typography>
-                                                    {item.observacion && (
-                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1.5, fontStyle: 'italic' }}>
-                                                            Nota: "{item.observacion}"
-                                                        </Typography>
-                                                    )}
-                                                </Box>
-                                            ))}
-                                        </Stack>
-                                    </Box>
-                                ) : null;
-                            })()}
+                                const tieneObservacionesOItems = colaborador?.observaciones || itemsPendientesChecklist.length > 0;
 
-                            {editingObservaciones ? (
-                                <Box display="flex" flexDirection="column" gap={1.5} flexGrow={1}>
-                                    <TextField
-                                        fullWidth
-                                        multiline
-                                        rows={4}
-                                        size="small"
-                                        placeholder="Ej: No requiere audífonos por trabajo presencial. Mouse y teclado propios..."
-                                        value={observacionesText}
-                                        onChange={(e) => setObservacionesText(e.target.value)}
-                                        disabled={savingObservaciones}
-                                    />
-                                    <Box display="flex" justifyContent="flex-end" gap={1}>
-                                        <Button size="small" variant="outlined" onClick={() => { setEditingObservaciones(false); setObservacionesText(colaborador.observaciones || ''); }}>
-                                            Cancelar
-                                        </Button>
-                                        <Button size="small" variant="contained" color="primary" onClick={handleSaveObservaciones} disabled={savingObservaciones}>
-                                            Guardar
-                                        </Button>
-                                    </Box>
-                                </Box>
-                            ) : (
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                                        Observación General de Equipamiento:
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: colaborador.observaciones ? 'text.primary' : 'text.disabled', fontStyle: colaborador.observaciones ? 'normal' : 'italic' }}>
-                                        {colaborador.observaciones || 'Sin observaciones generales registradas.'}
-                                    </Typography>
-                                </Box>
-                            )}
+                                return (
+                                    <>
+                                        {itemsPendientesChecklist.length > 0 && (
+                                            <Box mb={2} sx={{ p: 1.5, borderRadius: 1.5, bgcolor: alpha(colors.warning, 0.08), border: `1px solid ${alpha(colors.warning, 0.3)}` }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                                                    ⚠️ Faltantes / Observaciones del Checklist:
+                                                </Typography>
+                                                <Stack spacing={1}>
+                                                    {itemsPendientesChecklist.map((item, idx) => (
+                                                        <Box key={idx} sx={{ p: 1, borderRadius: 1, bgcolor: 'background.paper', border: `1px dashed ${colors.border}` }}>
+                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary', display: 'block' }}>
+                                                                • {item.label || item.id} {item.productoNombre ? `(${item.productoNombre})` : ''}
+                                                            </Typography>
+                                                            {item.observacion && (
+                                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1.5, fontStyle: 'italic' }}>
+                                                                    Nota: "{item.observacion}"
+                                                                </Typography>
+                                                            )}
+                                                        </Box>
+                                                    ))}
+                                                </Stack>
+                                            </Box>
+                                        )}
+
+                                        {editingObservaciones ? (
+                                            <Box display="flex" flexDirection="column" gap={1.5} flexGrow={1}>
+                                                <TextField
+                                                    fullWidth
+                                                    multiline
+                                                    rows={4}
+                                                    size="small"
+                                                    placeholder="Ej: No requiere audífonos por trabajo presencial. Mouse y teclado propios..."
+                                                    value={observacionesText}
+                                                    onChange={(e) => setObservacionesText(e.target.value)}
+                                                    disabled={savingObservaciones}
+                                                />
+                                                <Box display="flex" justifyContent="flex-end" gap={1}>
+                                                    <Button size="small" variant="outlined" onClick={() => { setEditingObservaciones(false); setObservacionesText(colaborador.observaciones || ''); }}>
+                                                        Cancelar
+                                                    </Button>
+                                                    <Button size="small" variant="contained" color="primary" onClick={handleSaveObservaciones} disabled={savingObservaciones}>
+                                                        Guardar
+                                                    </Button>
+                                                </Box>
+                                            </Box>
+                                        ) : (
+                                            <Box>
+                                                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                                    Observación General de Equipamiento:
+                                                </Typography>
+                                                <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: tieneObservacionesOItems ? 'text.primary' : 'text.disabled', fontStyle: tieneObservacionesOItems ? 'normal' : 'italic' }}>
+                                                    {colaborador?.observaciones 
+                                                        ? colaborador.observaciones 
+                                                        : (itemsPendientesChecklist.length > 0 
+                                                            ? `⚠️ Observaciones/Pendientes registradas en checklist (${itemsPendientesChecklist.length} ítem(s) detallados arriba)` 
+                                                            : 'Sin observaciones generales registradas.')
+                                                    }
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </Paper>
                     </Grid>
 

@@ -1,0 +1,205 @@
+{
+  "fecha": "2026-09-02T16:46:56.839Z",
+  "items": [
+    {
+      "id": "equipo_fisico",
+      "label": "Equipo revisado físicamente",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "cargador",
+      "label": "Cargador entregado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mouse",
+      "label": "Mouse entregado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "audifonos",
+      "label": "Audífonos entregados",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "telefono",
+      "label": "Teléfono entregado / Celular",
+      "ok": false,
+      "observacion": "No entregado"
+    },
+    {
+      "id": "esim",
+      "label": "E-Sim / Chip de datos",
+      "ok": false,
+      "observacion": "No entregado"
+    },
+    {
+      "id": "windows_actualizado",
+      "label": "Windows actualizado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "drivers",
+      "label": "Drivers instalados",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "dominio",
+      "label": "Equipo agregado dominio",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "usuario_configurado",
+      "label": "Usuario configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "outlook",
+      "label": "Outlook configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mfa",
+      "label": "MFA habilitado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "teams",
+      "label": "Teams instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "onedrive",
+      "label": "OneDrive funcionando",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "softland",
+      "label": "Softland instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "unidad_red",
+      "label": "Unidad red Softland",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn",
+      "label": "VPN instalada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn_validada",
+      "label": "VPN validada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "internet",
+      "label": "Internet validado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "recursos_internos",
+      "label": "Acceso recursos internos",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "antivirus",
+      "label": "Antivirus operativo",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "firewall",
+      "label": "Firewall activo",
+      "ok": true,
+      "observacion": ""
+    }
+  ],
+  "especificacionesTecnicas": {
+    "cpu": "Intel Core i5/i7",
+    "ram": "16 GB",
+    "disco": "512 GB SSD",
+    "gpu": "Integrada",
+    "tipo": "USADO"
+  },
+  "ticketInfo": {
+    "ticket": "",
+    "tecnico": "Técnico TI"
+  },
+  "usuarioConforme": true,
+  "firmaTrabajador": "Ricardo Romero",
+  "firmaGerente": "María Eugenia Nabalón",
+  "producto": {
+    "id": 370,
+    "nombre": "All-in-One",
+    "numero_serie": "8JNR082",
+    "marca": "DELL",
+    "modelo": "onlione",
+    "precio": 0,
+    "oc_numero": "",
+    "factura_numero": "",
+    "descripcion": "",
+    "id_estado_equipo": 2,
+    "imagen_path": null,
+    "fecha_creacion": "2026-08-26T15:13:51.950Z",
+    "condicion": "USADO",
+    "bodega_id": 1,
+    "bodega_nombre": "BODEGA TI",
+    "cantidad": 1,
+    "stock": 1,
+    "es_granel": 0,
+    "total_utilizado": 0,
+    "estado": "ASIGNADO",
+    "colaborador_asignado": {
+      "id": 57,
+      "nombre": "Ricardo Romero",
+      "email": "rromero@ofimundo.cl",
+      "rut": "15990962K",
+      "cargo": "",
+      "departamento": "Mesa de ayuda",
+      "empresa": "OFIMUNDO",
+      "es_prestamo": 0
+    },
+    "asignacion_activa": {
+      "id": 263,
+      "es_prestamo": 0,
+      "motivo": "uso diario",
+      "colaborador": {
+        "id": 57,
+        "nombre": "Ricardo Romero",
+        "email": "rromero@ofimundo.cl",
+        "rut": "15990962K",
+        "cargo": "",
+        "departamento": "Mesa de ayuda",
+        "empresa": "OFIMUNDO",
+        "es_prestamo": 0
+      }
+    },
+    "es_prestamo": 0
+  },
+  "colaborador": {
+    "nombre": "Ricardo Romero",
+    "rut": "15990962K",
+    "cargo": "",
+    "departamento": "Mesa de ayuda"
+  }
+}

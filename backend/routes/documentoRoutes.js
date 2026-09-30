@@ -209,11 +209,17 @@ router.get('/checklist/:id', authenticateToken, async (req, res) => {
         ];
 
         let foundPath = null;
+        let masRecienteMtime = 0;
         for (const file of posiblesArchivos) {
             const p = path.join(CHECKLIST_DIR, file);
             if (fs.existsSync(p)) {
-                foundPath = p;
-                break;
+                try {
+                    const stat = fs.statSync(p);
+                    if (stat.mtimeMs > masRecienteMtime) {
+                        masRecienteMtime = stat.mtimeMs;
+                        foundPath = p;
+                    }
+                } catch(e) {}
             }
         }
 
@@ -299,7 +305,7 @@ async function migrarTodosLosPDFsAChecklist() {
                                 ticketInfo: checklistData?.ticketInfo || { ticket: '', tecnico: row?.usuario_responsable || '' },
                                 especificacionesTecnicas: checklistData?.especificacionesTecnicas || { cpu: '', ram: '', disco: '', gpu: '', tipo: row?.producto_condicion || '' },
                                 checklistData: checklistData,
-                                items: checklistData?.items,
+                                items: checklistData?.items || (checklistData?.categorias ? checklistData.categorias.flatMap(c => c.items || []) : undefined),
                                 firma_trabajador: checklistData?.firmaTrabajador || row?.colaborador_nombre || '',
                                 firma_gerente: checklistData?.firmaGerente || 'María Eugenia Nabalón'
                             };
@@ -397,7 +403,7 @@ router.get('/descargar/:filename', authenticateToken, async (req, res) => {
                         ticketInfo: checklistData?.ticketInfo || { ticket: '', tecnico: row?.usuario_responsable || '' },
                         especificacionesTecnicas: checklistData?.especificacionesTecnicas || { cpu: '', ram: '', disco: '', gpu: '', tipo: row?.producto_condicion || '' },
                         checklistData: checklistData,
-                        items: checklistData?.items,
+                        items: checklistData?.items || (checklistData?.categorias ? checklistData.categorias.flatMap(c => c.items || []) : undefined),
                         firma_trabajador: checklistData?.firmaTrabajador || row?.colaborador_nombre || '',
                         firma_gerente: checklistData?.firmaGerente || 'María Eugenia Nabalón'
                     };
