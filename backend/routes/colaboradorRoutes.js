@@ -508,7 +508,7 @@ router.post('/', authenticateToken, async (req, res) => {
         console.log('📥 POST /api/colaboradores');
         console.log('Body:', req.body);
         
-        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, empresa } = req.body;
+        const { nombre, email, rut, cargo, departamento, telefono, direccion, fecha_nacimiento, fecha_ingreso, estado, empresa, observaciones } = req.body;
         
         const isHiway = empresa && String(empresa).trim().toUpperCase() === 'HIWAY';
 
@@ -566,8 +566,8 @@ router.post('/', authenticateToken, async (req, res) => {
             .input('fecha_nacimiento', sql.Date, fecha_nacimiento || null)
             .input('empresa', sql.NVarChar, empresa || 'OFIMUNDO')
             .input('observaciones', sql.NVarChar, observaciones || null)
-            .input('estado', sql.NVarChar, 'ACTIVO')
-            .input('fecha_ingreso', sql.Date, new Date())
+            .input('estado', sql.NVarChar, estado || 'ACTIVO')
+            .input('fecha_ingreso', sql.Date, fecha_ingreso ? new Date(fecha_ingreso) : new Date())
             .query(`
                 INSERT INTO INV.colaboradores (
                     nombre, email, rut, cargo, departamento, telefono, 
