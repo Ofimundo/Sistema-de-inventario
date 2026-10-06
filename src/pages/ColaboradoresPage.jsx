@@ -432,63 +432,129 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                         </Box>
                         <Paper variant="outlined" sx={{ p: 2, minHeight: 180, display: 'flex', flexDirection: 'column' }}>
                             {(() => {
-                                const itemsPendientesChecklist = (productos || [])
-                                    .flatMap(p => {
-                                        let items = p.items_pendientes;
-                                        if (!items || items.length === 0) {
-                                            let data = p.checklistData;
-                                            if (!data) {
-                                                const prodId = p.producto_id || p.id;
-                                                const asigId = p.asignacion_id || p.id_asignacion;
-                                                if (asigId) {
-                                                    const localAsig = localStorage.getItem(`checklist_asignacion_${asigId}`);
-                                                    if (localAsig) { try { data = JSON.parse(localAsig); } catch(e) {} }
-                                                }
-                                                if (!data && prodId) {
-                                                    const localProd = localStorage.getItem(`checklist_producto_${prodId}`);
-                                                    if (localProd) { try { data = JSON.parse(localProd); } catch(e) {} }
-                                                }
+                                const checklistsPorProducto = (productos || []).map(p => {
+                                    const asigId = p.asignacion_id || p.id_asignacion || p.id;
+                                    const prodId = p.producto_id || p.id;
+                                    let data = p.checklistData;
+                                    
+                                    if (!data) {
+                                        if (asigId) {
+                                            const localAsig = localStorage.getItem(`checklist_asignacion_${asigId}`);
+                                            if (localAsig) { try { data = JSON.parse(localAsig); } catch(e) {} }
+                                        }
+                                        if (!data && prodId) {
+                                            const localProd = localStorage.getItem(`checklist_producto_${prodId}`);
+                                            if (localProd) { try { data = JSON.parse(localProd); } catch(e) {} }
+                                        }
+                                    }
+
+                                    let items = p.items_pendientes;
+                                    if (!items || items.length === 0) {
+                                        if (data) {
+                                            let rawItems = data.items;
+                                            if (!rawItems && Array.isArray(data.categorias)) {
+                                                rawItems = data.categorias.flatMap(c => c.items || []);
                                             }
-                                            if (data) {
-                                                let rawItems = data.items;
-                                                if (!rawItems && Array.isArray(data.categorias)) {
-                                                    rawItems = data.categorias.flatMap(c => c.items || []);
-                                                }
-                                                if (Array.isArray(rawItems)) {
-                                                    items = rawItems.filter(i => !i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0));
-                                                } else {
-                                                    items = [];
-                                                }
+                                            if (Array.isArray(rawItems)) {
+                                                items = rawItems.filter(i => i && (!i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0)));
+                                            } else {
+                                                items = [];
                                             }
                                         }
-                                        return (items || [])
-                                            .filter(i => i && (!i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0)))
-                                            .map(item => ({ ...item, productoNombre: p.producto_nombre || p.nombre || 'Equipo' }));
-                                    });
+                                    }
 
-                                const tieneObservacionesOItems = colaborador?.observaciones || itemsPendientesChecklist.length > 0;
+                                    const itemsFiltrados = (items || []).filter(i => i && (!i.ok || String(i.ok) === 'false' || (i.observacion && i.observacion.trim().length > 0)));
+
+                                    return {
+                                        asignacionId: asigId,
+                                        productoId: prodId,
+                                        nombre: p.producto_nombre || p.nombre || 'Equipo',
+                                        numeroSerie: p.numero_serie || 'N/A',
+                                        codigoChecklist: asigId ? `CHK-#${asigId}` : (prodId ? `CHK-PROD-#${prodId}` : 'CHK-S/N'),
+                                        fecha: p.fecha_asignacion,
+                                        items: itemsFiltrados
+                                    };
+                                }).filter(group => group.items && group.items.length > 0);
+
+                                const totalItemsPendientes = checklistsPorProducto.reduce((sum, g) => sum + g.items.length, 0);
+                                const tieneObservacionesOItems = colaborador?.observaciones || totalItemsPendientes > 0;
 
                                 return (
                                     <>
-                                        {itemsPendientesChecklist.length > 0 && (
-                                            <Box mb={2} sx={{ p: 1.5, borderRadius: 1.5, bgcolor: alpha(colors.warning, 0.08), border: `1px solid ${alpha(colors.warning, 0.3)}` }}>
-                                                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                                                    ⚠️ Faltantes / Observaciones del Checklist:
+                                        {checklistsPorProducto.length > 0 && (
+                                            <Box mb={2} sx={{ maxHeight: 320, overflowY: 'auto', pr: 0.5 }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1.5 }}>
+                                                    ⚠️ Faltantes / Observaciones por Checklist ({totalItemsPendientes} ítems):
                                                 </Typography>
-                                                <Stack spacing={1}>
-                                                    {itemsPendientesChecklist.map((item, idx) => (
-                                                        <Box key={idx} sx={{ p: 1, borderRadius: 1, bgcolor: 'background.paper', border: `1px dashed ${colors.border}` }}>
-                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary', display: 'block' }}>
-                                                                • {item.label || item.id} {item.productoNombre ? `(${item.productoNombre})` : ''}
-                                                            </Typography>
-                                                            {item.observacion && (
-                                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1.5, fontStyle: 'italic' }}>
-                                                                    Nota: "{item.observacion}"
+                                                
+                                                {checklistsPorProducto.map((group, groupIdx) => (
+                                                    <Box 
+                                                        key={groupIdx} 
+                                                        sx={{ 
+                                                            mb: 1.5, 
+                                                            p: 1.25, 
+                                                            borderRadius: 2, 
+                                                            bgcolor: alpha(colors.primary, 0.03), 
+                                                            border: `1px solid ${alpha(colors.primary, 0.15)}` 
+                                                        }}
+                                                    >
+                                                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1} pb={0.5} sx={{ borderBottom: `1px dashed ${alpha(colors.primary, 0.2)}` }}>
+                                                            <Box display="flex" alignItems="center" gap={0.75}>
+                                                                <Chip 
+                                                                    label={group.codigoChecklist} 
+                                                                    size="small" 
+                                                                    sx={{ bgcolor: colors.primary, color: 'white', fontWeight: 700, fontSize: '0.65rem', height: 20 }} 
+                                                                />
+                                                                <Typography variant="caption" sx={{ fontWeight: 700, color: colors.text.primary }}>
+                                                                    {group.nombre}
                                                                 </Typography>
-                                                            )}
+                                                            </Box>
+                                                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                                                                Serie: {group.numeroSerie}
+                                                            </Typography>
                                                         </Box>
-                                                    ))}
-                                                </Stack>
+
+                                                        <Stack spacing={0.75}>
+                                                            {group.items.map((item, itemIdx) => {
+                                                                const isUnchecked = !item.ok || String(item.ok) === 'false';
+                                                                return (
+                                                                    <Box 
+                                                                        key={itemIdx} 
+                                                                        sx={{ 
+                                                                            p: 0.8, 
+                                                                            borderRadius: 1, 
+                                                                            bgcolor: 'background.paper', 
+                                                                            border: `1px solid ${isUnchecked ? alpha(colors.warning, 0.3) : colors.border}`,
+                                                                            borderLeft: `3px solid ${isUnchecked ? colors.warning : colors.info}`
+                                                                        }}
+                                                                    >
+                                                                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                                                                                • {item.label || item.id}
+                                                                            </Typography>
+                                                                            <Chip 
+                                                                                label={isUnchecked ? "NO ENTREGADO" : "OBSERVACIÓN"} 
+                                                                                size="small" 
+                                                                                sx={{ 
+                                                                                    height: 16, 
+                                                                                    fontSize: '0.6rem', 
+                                                                                    bgcolor: isUnchecked ? alpha(colors.error, 0.1) : alpha(colors.warning, 0.1),
+                                                                                    color: isUnchecked ? colors.error : colors.warning,
+                                                                                    fontWeight: 700
+                                                                                }} 
+                                                                            />
+                                                                        </Box>
+                                                                        {item.observacion && (
+                                                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1, mt: 0.25, fontStyle: 'italic', fontSize: '0.7rem' }}>
+                                                                                Nota: "{item.observacion}"
+                                                                            </Typography>
+                                                                        )}
+                                                                    </Box>
+                                                                );
+                                                            })}
+                                                        </Stack>
+                                                    </Box>
+                                                ))}
                                             </Box>
                                         )}
 
@@ -521,8 +587,8 @@ const ColaboradorDetailDialog = ({ open, onClose, colaborador, productos = [], o
                                                 <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: tieneObservacionesOItems ? 'text.primary' : 'text.disabled', fontStyle: tieneObservacionesOItems ? 'normal' : 'italic' }}>
                                                     {colaborador?.observaciones 
                                                         ? colaborador.observaciones 
-                                                        : (itemsPendientesChecklist.length > 0 
-                                                            ? `⚠️ Observaciones/Pendientes registradas en checklist (${itemsPendientesChecklist.length} ítem(s) detallados arriba)` 
+                                                        : (checklistsPorProducto.length > 0 
+                                                            ? `⚠️ Observaciones/Pendientes registradas en checklist (${totalItemsPendientes} ítem(s) detallados arriba)` 
                                                             : 'Sin observaciones generales registradas.')
                                                     }
                                                 </Typography>

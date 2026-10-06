@@ -1,0 +1,167 @@
+{
+  "producto": {
+    "id": 337,
+    "nombre": "Celular",
+    "marca": "MOTOROLA",
+    "modelo": "G35 5G",
+    "numero_serie": "IHDT56AS4",
+    "condicion": "NUEVO"
+  },
+  "colaborador": {
+    "id": 125,
+    "nombre": "Andrés Ortiz Kaufhold",
+    "rut": "120796348",
+    "cargo": "",
+    "departamento": "",
+    "usuario": "andrés",
+    "clave": "********"
+  },
+  "items": [
+    {
+      "id": "equipo_fisico",
+      "label": "Equipo revisado físicamente",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "cargador",
+      "label": "Cargador entregado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mouse",
+      "label": "Mouse entregado",
+      "ok": false,
+      "observacion": "No aplica "
+    },
+    {
+      "id": "audifonos",
+      "label": "Audífonos entregados",
+      "ok": false,
+      "observacion": "No aplica "
+    },
+    {
+      "id": "telefono",
+      "label": "Teléfono entregado / Celular",
+      "ok": false,
+      "observacion": "No aplica "
+    },
+    {
+      "id": "esim",
+      "label": "E-Sim / Chip de datos",
+      "ok": false,
+      "observacion": "No aplica "
+    },
+    {
+      "id": "windows_actualizado",
+      "label": "Windows actualizado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "drivers",
+      "label": "Drivers instalados",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "dominio",
+      "label": "Equipo agregado dominio",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "usuario_configurado",
+      "label": "Usuario configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "outlook",
+      "label": "Outlook configurado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "mfa",
+      "label": "MFA habilitado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "teams",
+      "label": "Teams instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "onedrive",
+      "label": "OneDrive funcionando",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "softland",
+      "label": "Softland instalado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "unidad_red",
+      "label": "Unidad red Softland",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn",
+      "label": "VPN instalada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "vpn_validada",
+      "label": "VPN validada",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "internet",
+      "label": "Internet validado",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "recursos_internos",
+      "label": "Acceso recursos internos",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "antivirus",
+      "label": "Antivirus operativo",
+      "ok": true,
+      "observacion": ""
+    },
+    {
+      "id": "firewall",
+      "label": "Firewall activo",
+      "ok": true,
+      "observacion": ""
+    }
+  ],
+  "usuarioConforme": true,
+  "fecha": "2026-10-06T17:30:10.202Z",
+  "ticketInfo": {
+    "ticket": "",
+    "fecha": "2026-10-06",
+    "tecnico": "margarita arraño"
+  },
+  "especificacionesTecnicas": {
+    "cpu": "",
+    "ram": "",
+    "disco": "",
+    "gpu": "",
+    "tipo": "Notebook gama media "
+  }
+}

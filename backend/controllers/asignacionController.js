@@ -98,8 +98,8 @@ function formatearFechaCorta(fecha) {
 function construirHtmlChecklist(data) {
     const colaborador = data.colaborador || {};
     const producto = data.productos?.[0] || data.producto || {};
-    const ticketInfo = data.ticketInfo || {};
-    const specs = data.especificacionesTecnicas || data.especificaciones || {};
+    const ticketInfo = data.ticketInfo || data.checklistData?.ticketInfo || {};
+    const specs = data.especificacionesTecnicas || data.especificaciones || data.checklistData?.especificacionesTecnicas || {};
     const rawItems = data.checklistData?.items || data.items;
     
     // Si no hay items personalizados, utilizar la lista completa por defecto
@@ -288,8 +288,8 @@ function generarChecklistConPDFKit(data) {
 
             const colaborador = data.colaborador || {};
             const producto = data.productos?.[0] || data.producto || {};
-            const ticketInfo = data.ticketInfo || {};
-            const specs = data.especificacionesTecnicas || data.especificaciones || {};
+            const ticketInfo = data.ticketInfo || data.checklistData?.ticketInfo || {};
+            const specs = data.especificacionesTecnicas || data.especificaciones || data.checklistData?.especificacionesTecnicas || {};
             const rawItems = data.checklistData?.items || data.items;
             const itemsChecklist = (rawItems && rawItems.length > 0) ? rawItems : DEFAULT_CHECKLIST_ITEMS;
             const fechaText = formatearFechaCorta(data.fecha_asignacion || new Date());
@@ -343,17 +343,20 @@ function generarChecklistConPDFKit(data) {
                     doc.addPage();
                     currentY = 40;
                 }
-                const isOk = item.ok !== false;
-                const estadoText = isOk ? '✔ OK' : '❌ PENDIENTE';
-                const obsText = item.observacion || (!isOk ? 'No entregado' : '-');
+                const isOk = item.ok === true || String(item.ok) === 'true';
+                const estadoText = isOk ? '✔ OK' : '❌ NO ENTREGADO';
+                const obsText = item.observacion && item.observacion.trim().length > 0 
+                    ? item.observacion.trim() 
+                    : (!isOk ? 'No entregado / No seleccionado' : '-');
 
                 doc.fillColor('#000000').text(item.label || item.id || '', 35, currentY, { width: 270 });
                 if (isOk) {
                     doc.fillColor('#10B981').text(estadoText, 320, currentY);
+                    doc.fillColor('#333333').text(obsText, 400, currentY, { width: 160 });
                 } else {
                     doc.fillColor('#EF4444').text(estadoText, 320, currentY);
+                    doc.fillColor('#D97706').font('Helvetica-Bold').text(obsText, 400, currentY, { width: 160 }).font('Helvetica');
                 }
-                doc.fillColor('#333333').text(obsText, 400, currentY, { width: 160 });
                 currentY += 12;
             });
 
@@ -403,42 +406,27 @@ function generarChecklistConPDFKit(data) {
 // Función para generar Checklist de Entrega PDF oficial
 async function generarActaAsignacionPDF(data) {
     try {
+        console.log('⚡ Generando PDF de asignación rápido con PDFKit...');
+        const pdfBuffer = await generarChecklistConPDFKit(data);
+        if (pdfBuffer && pdfBuffer.length > 0) {
+            return pdfBuffer;
+        }
+    } catch (err) {
+        console.warn('⚠️ Error en PDFKit asignación, intentando Puppeteer:', err.message);
+    }
+
+    try {
         const htmlContent = construirHtmlChecklist(data);
         const options = {
             format: 'A4',
             printBackground: true,
-            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--no-zygote',
-                '--single-process',
-                '--disable-software-rasterizer'
-            ]
+            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' }
         };
-        if (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN) {
-            options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN;
-        }
         const file = { content: htmlContent };
-
-        for (let intento = 1; intento <= 2; intento++) {
-            try {
-                const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
-                if (pdfBuffer && pdfBuffer.length > 0) {
-                    return pdfBuffer;
-                }
-            } catch (err) {
-                console.warn(`⚠️ Intento ${intento} con Puppeteer falló: ${err.message}`);
-                if (intento < 2) await new Promise(res => setTimeout(res, 200));
-            }
-        }
-        console.warn('⚠️ Puppeteer no está disponible o falló en esta máquina virtual. Generando PDF con PDFKit (Respaldo)...');
-        return await generarChecklistConPDFKit(data);
+        return await htmlPdfNode.generatePdf(file, options);
     } catch (err) {
-        console.error('⚠️ Fallback general activado para PDF de asignación:', err.message);
-        return await generarChecklistConPDFKit(data);
+        console.error('❌ Error fatal generando PDF de asignación:', err.message);
+        throw err;
     }
 }
 
@@ -724,42 +712,27 @@ function generarRecepcionConPDFKit(data) {
 // Función para generar acta de recepción PDF (Plantilla HTML oficial Checklist de Recepción)
 async function generarActaRecepcionPDF(data) {
     try {
+        console.log('⚡ Generando PDF de recepción rápido con PDFKit...');
+        const pdfBuffer = await generarRecepcionConPDFKit(data);
+        if (pdfBuffer && pdfBuffer.length > 0) {
+            return pdfBuffer;
+        }
+    } catch (err) {
+        console.warn('⚠️ Error en PDFKit recepción, intentando Puppeteer:', err.message);
+    }
+
+    try {
         const htmlContent = construirHtmlChecklistRecepcion(data);
         const options = {
             format: 'A4',
             printBackground: true,
-            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' },
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--no-zygote',
-                '--single-process',
-                '--disable-software-rasterizer'
-            ]
+            margin: { top: '4mm', right: '4mm', bottom: '4mm', left: '4mm' }
         };
-        if (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN) {
-            options.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_BIN;
-        }
         const file = { content: htmlContent };
-
-        for (let intento = 1; intento <= 2; intento++) {
-            try {
-                const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
-                if (pdfBuffer && pdfBuffer.length > 0) {
-                    return pdfBuffer;
-                }
-            } catch (err) {
-                console.warn(`⚠️ Intento ${intento} con Puppeteer Recepción falló: ${err.message}`);
-                if (intento < 2) await new Promise(res => setTimeout(res, 200));
-            }
-        }
-        console.warn('⚠️ Puppeteer Recepción no disponible. Generando PDF con PDFKit (Respaldo)...');
-        return await generarRecepcionConPDFKit(data);
+        return await htmlPdfNode.generatePdf(file, options);
     } catch (err) {
-        console.error('⚠️ Fallback general activado para PDF de recepción:', err.message);
-        return await generarRecepcionConPDFKit(data);
+        console.error('❌ Error fatal generando PDF de recepción:', err.message);
+        throw err;
     }
 }
 

@@ -459,6 +459,7 @@ const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onS
             console.log(`📤 Descargando acta de asignación para ${asignacionId}...`);
             
             const token = localStorage.getItem('token');
+            const API_BASE_URL = api.defaults?.baseURL || `${window.location.protocol}//${window.location.hostname}:3001/api`;
             const url = `${API_BASE_URL}/asignaciones/descargar-acta/${asignacionId}`;
             console.log('📡 URL:', url);
             
@@ -604,6 +605,9 @@ const AsignacionConChecklistDialog = ({ open, onClose, producto, tipoAccion, onS
                 usuario_responsable: usuarioResponsable,
                 firma_trabajador: getFirmaTrabajadorFinal(),
                 firma_gerente: getFirmaGerenteFinal(),
+                ticketInfo,
+                especificacionesTecnicas,
+                checklistData,
                 es_prestamo: false
             });
 

@@ -829,6 +829,11 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             motivo,
             observaciones,
             firma_trabajador,
+            firma_gerente,
+            ticketInfo,
+            especificacionesTecnicas,
+            checklistData,
+            items,
             es_prestamo
         } = req.body;
         
@@ -850,6 +855,11 @@ router.post('/generar-acta-asignacion', async (req, res) => {
             motivo: motivo || 'Asignación de equipo',
             observaciones: truncarTexto(observaciones, 500),
             firma_trabajador: firma_trabajador || colaborador.nombre,
+            firma_gerente: firma_gerente || 'María Eugenia Nabalón',
+            ticketInfo: ticketInfo || checklistData?.ticketInfo,
+            especificacionesTecnicas: especificacionesTecnicas || checklistData?.especificacionesTecnicas,
+            checklistData: checklistData,
+            items: items || checklistData?.items,
             es_prestamo: false
         });
         
@@ -1166,6 +1176,10 @@ router.post('/', async (req, res) => {
             observaciones, 
             fecha_asignacion,
             firma_trabajador,
+            firma_gerente,
+            ticketInfo,
+            especificacionesTecnicas,
+            checklistData,
             es_prestamo
         } = req.body;
         
@@ -1310,10 +1324,26 @@ router.post('/', async (req, res) => {
                     }],
                     fecha_asignacion: fechaAsignacionValue,
                     motivo: motivo || 'Asignación de equipo',
-                    observaciones: 'Documento generado automáticamente por el sistema',
+                    observaciones: observaciones || 'Documento generado automáticamente por el sistema',
                     firma_trabajador: firma_trabajador || colaborador.nombre,
+                    firma_gerente: firma_gerente || 'María Eugenia Nabalón',
+                    ticketInfo: ticketInfo || checklistData?.ticketInfo || {},
+                    especificacionesTecnicas: especificacionesTecnicas || checklistData?.especificacionesTecnicas || {},
+                    checklistData: checklistData || { items: [], ticketInfo, especificacionesTecnicas },
                     es_prestamo: false
                 };
+
+                // Guardar checklist en el servidor con ID de asignación
+                try {
+                    const checklistObj = checklistData || { items: [], ticketInfo, especificacionesTecnicas };
+                    if (!checklistObj.ticketInfo) checklistObj.ticketInfo = ticketInfo;
+                    if (!checklistObj.especificacionesTecnicas) checklistObj.especificacionesTecnicas = especificacionesTecnicas;
+                    const jsonPath = path.join(CHECKLIST_DIR, `checklist_asignacion_${asignacionId}.json`);
+                    fs.writeFileSync(jsonPath, JSON.stringify(checklistObj, null, 2));
+                    console.log(`✅ Checklist guardado para asignación ID ${asignacionId}: ${jsonPath}`);
+                } catch (jsonErr) {
+                    console.error('⚠️ Error guardando checklist JSON por asignación:', jsonErr.message);
+                }
                 
                 pdfBuffer = await generarActaAsignacion(documentoData);
                 if (pdfBuffer && pdfBuffer.length > 0) {

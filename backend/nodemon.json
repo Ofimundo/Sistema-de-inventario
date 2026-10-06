@@ -1,0 +1,22 @@
+{
+  "watch": [
+    "server.js",
+    "routes/",
+    "controllers/",
+    "middleware/",
+    "config/",
+    "services/",
+    "models/",
+    "utils/"
+  ],
+  "ext": "js",
+  "ignore": [
+    "uploads/**",
+    "**/uploads/**",
+    "uploads/*",
+    "uploads/checklist/*",
+    "uploads/documentos/*",
+    "*.json",
+    "*.pdf"
+  ]
+}
