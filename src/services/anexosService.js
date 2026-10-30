@@ -96,6 +96,20 @@ export const anexosService = {
             console.error(`Error eliminando anexo ${id}:`, error);
             throw error;
         }
+    },
+
+    subirAnexo: async (formData) => {
+        try {
+            const response = await api.post('/anexos/subir', formData, {
+                headers: {
+                    'Content-Type': undefined
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error subiendo anexo:', error);
+            throw error;
+        }
     }
 };
 

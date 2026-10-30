@@ -81,7 +81,13 @@ function generarDocxAnexo(datos, outputPath) {
         equipos_list: equipos || []
     });
 
-    const result = execFileSync('python', [scriptPath, jsonInput], { encoding: 'utf-8' });
+    let pythonCmd = 'python';
+    if (process.platform !== 'win32') {
+        if (fs.existsSync('/usr/bin/python3')) pythonCmd = '/usr/bin/python3';
+        else if (fs.existsSync('/usr/local/bin/python3')) pythonCmd = '/usr/local/bin/python3';
+        else pythonCmd = 'python3';
+    }
+    const result = execFileSync(pythonCmd, [scriptPath, jsonInput], { encoding: 'utf-8' });
     const parsed = JSON.parse(result.trim());
 
     if (!parsed.success) {
@@ -143,6 +149,17 @@ router.get('/colaboradores', async (req, res) => {
     try {
         const { empresa } = req.query;
         const pool = await getConnection();
+
+        // Normalizar automáticamente si algún anexo quedó guardado como OFIMUNDO
+        try {
+            await pool.request().query(`
+                UPDATE INV.anexos 
+                SET empresa = 'STUEDEMANN S.A' 
+                WHERE LOWER(empresa) LIKE '%ofimundo%'
+            `);
+        } catch (eNorm) {
+            console.warn('⚠️ No se pudo normalizar empresa OFIMUNDO:', eNorm.message);
+        }
         
         let query = `
             SELECT id, nombre, rut, email, cargo, departamento, direccion, empresa
@@ -194,6 +211,17 @@ router.get('/colaborador/:id/equipos', async (req, res) => {
     try {
         const { id } = req.params;
         const pool = await getConnection();
+
+        // Normalizar automáticamente si algún anexo quedó guardado como OFIMUNDO
+        try {
+            await pool.request().query(`
+                UPDATE INV.anexos 
+                SET empresa = 'STUEDEMANN S.A' 
+                WHERE LOWER(empresa) LIKE '%ofimundo%'
+            `);
+        } catch (eNorm) {
+            console.warn('⚠️ No se pudo normalizar empresa OFIMUNDO:', eNorm.message);
+        }
         
         const colabResult = await pool.request()
             .input('id', sql.Int, id)
@@ -324,6 +352,17 @@ router.post('/generar', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const pool = await getConnection();
+
+        // Normalizar automáticamente si algún anexo quedó guardado como OFIMUNDO
+        try {
+            await pool.request().query(`
+                UPDATE INV.anexos 
+                SET empresa = 'STUEDEMANN S.A' 
+                WHERE LOWER(empresa) LIKE '%ofimundo%'
+            `);
+        } catch (eNorm) {
+            console.warn('⚠️ No se pudo normalizar empresa OFIMUNDO:', eNorm.message);
+        }
         
         const result = await pool.request().query(`
             SELECT 
@@ -362,6 +401,17 @@ router.get('/descargar/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const pool = await getConnection();
+
+        // Normalizar automáticamente si algún anexo quedó guardado como OFIMUNDO
+        try {
+            await pool.request().query(`
+                UPDATE INV.anexos 
+                SET empresa = 'STUEDEMANN S.A' 
+                WHERE LOWER(empresa) LIKE '%ofimundo%'
+            `);
+        } catch (eNorm) {
+            console.warn('⚠️ No se pudo normalizar empresa OFIMUNDO:', eNorm.message);
+        }
         
         let anexo = null;
         const isNumeric = !isNaN(parseInt(id));
@@ -570,6 +620,183 @@ router.delete('/:id', async (req, res) => {
     } catch (error) {
         if (transaction) await transaction.rollback();
         console.error('❌ Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================
+// SUBIR ANEXO(S) EXISTENTE(S) (PDF o Word) - Soporte para uno o múltiples archivos
+// ============================================
+router.post('/subir', async (req, res) => {
+    let pool;
+    let transaction;
+    let savedFiles = [];
+    try {
+        console.log('📥 POST /api/anexos/subir (Múltiple / Individual)');
+        
+        // Recoger todos los archivos enviados (uno o múltiples)
+        let archivosList = [];
+        if (req.files) {
+            for (const key of Object.keys(req.files)) {
+                const item = req.files[key];
+                if (Array.isArray(item)) {
+                    archivosList.push(...item);
+                } else if (item && typeof item === 'object') {
+                    archivosList.push(item);
+                }
+            }
+        }
+
+        if (archivosList.length === 0) {
+            return res.status(400).json({ success: false, message: 'No se ha seleccionado ningún archivo' });
+        }
+
+        const allowedExts = ['.pdf', '.docx', '.doc'];
+        for (const arch of archivosList) {
+            const ext = path.extname(arch.name || '').toLowerCase();
+            if (!allowedExts.includes(ext)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `El archivo "${arch.name}" no tiene un formato permitido. Solo se aceptan PDF o Word (.docx, .doc)` 
+                });
+            }
+        }
+
+        const { colaborador_id, empresa, fecha_anexo, observaciones } = req.body;
+
+        if (!empresa) {
+            return res.status(400).json({ success: false, message: 'La empresa es requerida' });
+        }
+
+        pool = await getConnection();
+
+        // Obtener lista de colaboradores para detección inteligente por RUT en el nombre del archivo
+        const todosColabsRes = await pool.request().query(`SELECT id, nombre, rut, empresa FROM INV.colaboradores`);
+        const todosColabs = todosColabsRes.recordset || [];
+
+        // Obtener fallback de producto en caso de que alguno no tenga
+        let fallbackProductoId = null;
+        const fallbackProdRes = await pool.request().query(`SELECT TOP 1 id FROM INV.productos ORDER BY id ASC`);
+        if (fallbackProdRes.recordset.length > 0) {
+            fallbackProductoId = fallbackProdRes.recordset[0].id;
+        }
+
+        transaction = pool.transaction();
+        await transaction.begin();
+
+        const resultados = [];
+
+        for (const arch of archivosList) {
+            const ext = path.extname(arch.name || '').toLowerCase();
+            const timestamp = Date.now();
+            const random = Math.round(Math.random() * 10000);
+            const baseName = path.basename(arch.name, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = `anexo_subido_${baseName}_${timestamp}_${random}${ext}`;
+            const filepath = path.join(ANEXOS_DIR, filename);
+
+            // Guardar archivo físico
+            if (arch.mv) {
+                await arch.mv(filepath);
+            } else if (arch.data) {
+                fs.writeFileSync(filepath, arch.data);
+            } else {
+                throw new Error(`No se pudo procesar el contenido de ${arch.name}`);
+            }
+            savedFiles.push(filepath);
+
+            // Identificar colaborador:
+            // 1. Intentar hacer match por RUT en el nombre del archivo
+            let colabIdParaArchivo = colaborador_id ? parseInt(colaborador_id) : null;
+            let empresaParaArchivo = empresa;
+            
+            const cleanArchName = arch.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const matchColab = todosColabs.find(c => {
+                if (!c.rut) return false;
+                const cleanRut = c.rut.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return cleanRut && cleanArchName.includes(cleanRut);
+            });
+
+            if (matchColab) {
+                colabIdParaArchivo = matchColab.id;
+            }
+            // La empresa SIEMPRE debe ser la seleccionada por el usuario en el modal/formulario
+            empresaParaArchivo = empresa;
+
+            // Obtener producto asignado
+            let prodIdParaArchivo = req.body.producto_id ? parseInt(req.body.producto_id) : null;
+            if (colabIdParaArchivo) {
+                const targetColab = todosColabs.find(c => c.id === colabIdParaArchivo);
+                if (targetColab) {
+                    const equipos = await obtenerEquiposAsignadosColaborador(pool, targetColab.id, targetColab.rut, targetColab.nombre);
+                    if (equipos && equipos.length > 0 && equipos[0].id) {
+                        prodIdParaArchivo = equipos[0].id;
+                    }
+                }
+            }
+
+            if (!prodIdParaArchivo) {
+                prodIdParaArchivo = fallbackProductoId;
+            }
+
+            const result = await transaction.request()
+                .input('colaborador_id', sql.Int, colabIdParaArchivo)
+                .input('producto_id', sql.Int, prodIdParaArchivo)
+                .input('asignacion_id', sql.Int, null)
+                .input('empresa', sql.NVarChar, empresaParaArchivo)
+                .input('fecha_anexo', sql.DateTime, fecha_anexo ? new Date(fecha_anexo) : new Date())
+                .input('documento_generado', sql.NVarChar, filename)
+                .input('observaciones', sql.NVarChar(500), (observaciones || `Archivo original: ${arch.name}`).substring(0, 500))
+                .input('usuario_creacion', sql.NVarChar, req.user?.usuario || 'Sistema')
+                .query(`
+                    INSERT INTO INV.anexos (
+                        colaborador_id, 
+                        producto_id, 
+                        asignacion_id, 
+                        empresa, 
+                        fecha_anexo, 
+                        documento_generado,
+                        observaciones, 
+                        usuario_creacion, 
+                        fecha_creacion
+                    )
+                    OUTPUT INSERTED.id
+                    VALUES (
+                        @colaborador_id, 
+                        @producto_id, 
+                        @asignacion_id, 
+                        @empresa, 
+                        @fecha_anexo, 
+                        @documento_generado,
+                        @observaciones, 
+                        @usuario_creacion, 
+                        GETDATE()
+                    )
+                `);
+
+            const nuevoId = result.recordset[0].id;
+            resultados.push({ id: nuevoId, filename, originalName: arch.name });
+        }
+
+        await transaction.commit();
+
+        console.log(`✅ ${resultados.length} anexo(s) subido(s) exitosamente`);
+
+        res.json({
+            success: true,
+            message: resultados.length === 1 
+                ? 'Anexo subido y registrado exitosamente' 
+                : `${resultados.length} anexos subidos y registrados exitosamente`,
+            data: resultados
+        });
+
+    } catch (error) {
+        if (transaction) await transaction.rollback();
+        for (const fp of savedFiles) {
+            if (fs.existsSync(fp)) {
+                try { fs.unlinkSync(fp); } catch (e) {}
+            }
+        }
+        console.error('❌ Error en POST /api/anexos/subir:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

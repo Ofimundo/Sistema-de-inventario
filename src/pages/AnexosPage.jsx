@@ -71,7 +71,10 @@ import {
     Assignment as AssignmentIcon,
     Build as BuildIcon,
     Inventory2 as Inventory2Icon,
-    History as HistoryIcon
+    History as HistoryIcon,
+    CloudUpload,
+    UploadFile,
+    AttachFile
 } from '@mui/icons-material';
 import api from '../services/api';
 import OfilabFooter from '../components/OfilabFooter';
@@ -144,6 +147,16 @@ const AnexosPage = () => {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [anexoToDelete, setAnexoToDelete] = useState(null);
     const [eliminando, setEliminando] = useState(false);
+
+    // Estados para subir anexo existente (uno o múltiples)
+    const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+    const [uploadFiles, setUploadFiles] = useState([]);
+    const [uploadColaboradorId, setUploadColaboradorId] = useState('');
+    const [uploadEmpresa, setUploadEmpresa] = useState('STUEDEMANN S.A');
+    const [uploadFecha, setUploadFecha] = useState(getFechaHoyFormat());
+    const [uploadObservaciones, setUploadObservaciones] = useState('');
+    const [subiendo, setSubiendo] = useState(false);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         isMounted.current = true;
@@ -392,6 +405,116 @@ const AnexosPage = () => {
         }, 300);
     };
 
+    const handleOpenUploadDialog = () => {
+        setUploadFiles([]);
+        setUploadColaboradorId(colaboradorSeleccionado?.id || '');
+        setUploadEmpresa(colaboradorSeleccionado?.empresa || empresaSeleccionada || 'STUEDEMANN S.A');
+        setUploadFecha(getFechaHoyFormat());
+        setUploadObservaciones('');
+        setUploadDialogOpen(true);
+    };
+
+    const handleCloseUploadDialog = () => {
+        if (subiendo) return;
+        setUploadDialogOpen(false);
+        setUploadFiles([]);
+    };
+
+    const handleUploadColaboradorChange = (colabId) => {
+        setUploadColaboradorId(colabId);
+        const colab = colaboradores.find(c => c.id === colabId);
+        if (colab && colab.empresa) {
+            const empLower = colab.empresa.toLowerCase();
+            if (empLower.includes('ofimundo') || empLower.includes('stuedemann')) {
+                setUploadEmpresa('STUEDEMANN S.A');
+            } else if (empLower.includes('global')) {
+                setUploadEmpresa('Global Horizon Spa');
+            } else if (empLower.includes('latam')) {
+                setUploadEmpresa('Latam Lite Spa');
+            }
+        }
+    };
+
+    const handleUploadFileChange = (e) => {
+        const selected = Array.from(e.target.files || []);
+        if (selected.length === 0) return;
+
+        const allowedExts = ['.pdf', '.docx', '.doc'];
+        const valid = [];
+        for (const file of selected) {
+            const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (!allowedExts.includes(ext)) {
+                setError(`El archivo "${file.name}" no es permitido. Solo PDF o Word (.docx, .doc)`);
+                return;
+            }
+            if (file.size > 25 * 1024 * 1024) {
+                setError(`El archivo "${file.name}" supera el límite de 25 MB`);
+                return;
+            }
+            valid.push(file);
+        }
+        setUploadFiles(prev => [...prev, ...valid]);
+        setError('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleRemoveUploadFile = (indexToRemove) => {
+        setUploadFiles(prev => prev.filter((_, idx) => idx !== indexToRemove));
+    };
+
+
+
+    const handleSubirAnexo = async () => {
+        if (uploadFiles.length === 0) {
+            setError('Por favor selecciona al menos un archivo PDF o Word');
+            return;
+        }
+        if (!uploadColaboradorId) {
+            setError('Por favor selecciona el colaborador al que pertenece el anexo');
+            return;
+        }
+        if (!uploadEmpresa) {
+            setError('Por favor selecciona la empresa');
+            return;
+        }
+
+        try {
+            setSubiendo(true);
+            setError('');
+            const formData = new FormData();
+            uploadFiles.forEach(file => {
+                formData.append('archivos', file);
+            });
+            formData.append('colaborador_id', uploadColaboradorId);
+            const colabObj = colaboradores.find(c => c.id === uploadColaboradorId);
+            if (colabObj?.equipos?.[0]?.id) {
+                formData.append('producto_id', colabObj.equipos[0].id);
+            }
+            formData.append('empresa', uploadEmpresa);
+            formData.append('fecha_anexo', uploadFecha);
+            formData.append('observaciones', uploadObservaciones || 'Anexo subido externamente');
+
+            const response = await api.post('/anexos/subir', formData, {
+                headers: { 'Content-Type': undefined }
+            });
+
+            if (response.data?.success) {
+                setSuccess(response.data?.message || `${uploadFiles.length} anexo(s) subido(s) y registrado(s) exitosamente`);
+                setUploadDialogOpen(false);
+                setUploadFiles([]);
+                setVerAnexos(true);
+                await cargarAnexos();
+            } else {
+                setError(response.data?.message || 'Error al subir anexo');
+            }
+        } catch (err) {
+            console.error('Error subiendo anexo:', err);
+            setError(err.response?.data?.message || err.message || 'Error al subir el anexo');
+        } finally {
+            if (isMounted.current) setSubiendo(false);
+        }
+    };
+
     const refreshData = async () => {
         setRefreshing(true);
         const empFiltro = filtrarPorEmpresa ? empresaSeleccionada : 'TODAS';
@@ -554,6 +677,26 @@ const AnexosPage = () => {
                             }}
                         >
                             Ver Anexos Generados
+                        </Button>
+                        <Button 
+                            onClick={handleOpenUploadDialog}
+                            startIcon={<CloudUpload />}
+                            sx={{ 
+                                bgcolor: 'transparent',
+                                color: '#FFFFFF',
+                                border: '1px solid #FFFFFF',
+                                fontWeight: 700,
+                                textTransform: 'none',
+                                px: 3,
+                                py: 1,
+                                borderRadius: 2,
+                                '&:hover': { 
+                                    bgcolor: 'rgba(255,255,255,0.15)',
+                                    borderColor: '#FFFFFF'
+                                }
+                            }}
+                        >
+                            Subir Anexo Existente
                         </Button>
                     </Box>
                 </Paper>
@@ -849,7 +992,17 @@ const AnexosPage = () => {
                 ) : (
                     /* SECCIÓN DE VER ANEXOS GENERADOS */
                     <Paper sx={{ p: 3 }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>📄 Anexos Generados</Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                            <Typography variant="h6">📄 Anexos Generados y Registrados</Typography>
+                            <Button
+                                variant="contained"
+                                startIcon={<CloudUpload />}
+                                onClick={handleOpenUploadDialog}
+                                sx={{ bgcolor: colors.primary, '&:hover': { bgcolor: '#6D28D9' }, textTransform: 'none', fontWeight: 600 }}
+                            >
+                                Subir Anexo Existente
+                            </Button>
+                        </Box>
                         <TableContainer>
                             <Table>
                                 <TableHead>
@@ -969,6 +1122,200 @@ const AnexosPage = () => {
                             disabled={eliminando}
                         >
                             {eliminando ? <CircularProgress size={24} /> : 'Eliminar'}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* DIÁLOGO PARA SUBIR ANEXO EXISTENTE */}
+                <Dialog 
+                    open={uploadDialogOpen} 
+                    onClose={handleCloseUploadDialog}
+                    maxWidth="sm"
+                    fullWidth
+                    keepMounted={false}
+                >
+                    <DialogTitle>
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <CloudUpload sx={{ color: colors.primary }} />
+                            <Typography variant="h6" fontWeight={600}>Subir Anexos Existentes</Typography>
+                        </Box>
+                    </DialogTitle>
+                    <DialogContent dividers>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+                            Sube uno o varios documentos de anexos ya generados previamente (en formato PDF o Word). El sistema los guardará en el servidor y los registrará en el historial de forma individual.
+                        </Typography>
+
+                        <Grid container spacing={2}>
+                            {/* Seleccionar Colaborador */}
+                            <Grid item xs={12}>
+                                <FormControl fullWidth size="small" required>
+                                    <InputLabel id="upload-colab-label">Colaborador</InputLabel>
+                                    <Select
+                                        labelId="upload-colab-label"
+                                        value={uploadColaboradorId}
+                                        label="Colaborador *"
+                                        onChange={(e) => handleUploadColaboradorChange(e.target.value)}
+                                    >
+                                        {colaboradores.map((colab) => (
+                                            <MenuItem key={colab.id} value={colab.id}>
+                                                {colab.nombre} {colab.rut ? `(${colab.rut})` : ''} - {colab.empresa || 'Sin empresa'}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            {/* Seleccionar Empresa */}
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth size="small" required>
+                                    <InputLabel id="upload-empresa-label">Empresa</InputLabel>
+                                    <Select
+                                        labelId="upload-empresa-label"
+                                        value={uploadEmpresa}
+                                        label="Empresa *"
+                                        onChange={(e) => setUploadEmpresa(e.target.value)}
+                                    >
+                                        {empresasDisponibles.map((emp) => (
+                                            <MenuItem key={emp} value={emp}>{emp}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            {/* Fecha del Anexo */}
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    type="date"
+                                    label="Fecha del Anexo"
+                                    value={uploadFecha}
+                                    onChange={(e) => setUploadFecha(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    required
+                                />
+                            </Grid>
+
+                            {/* Zona de Selección de Archivos */}
+                            <Grid item xs={12}>
+                                <input
+                                    type="file"
+                                    multiple
+                                    ref={fileInputRef}
+                                    onChange={handleUploadFileChange}
+                                    accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+                                    style={{ display: 'none' }}
+                                />
+                                <Box
+                                    onClick={() => fileInputRef.current?.click()}
+                                    sx={{
+                                        border: `2px dashed ${uploadFiles.length > 0 ? colors.success : colors.border}`,
+                                        borderRadius: 2,
+                                        p: 2,
+                                        textAlign: 'center',
+                                        cursor: 'pointer',
+                                        bgcolor: uploadFiles.length > 0 ? alpha(colors.success, 0.04) : alpha(colors.primary, 0.02),
+                                        transition: 'all 0.2s ease',
+                                        '&:hover': {
+                                            borderColor: colors.primary,
+                                            bgcolor: alpha(colors.primary, 0.06)
+                                        }
+                                    }}
+                                >
+                                    <CloudUpload sx={{ fontSize: 36, color: colors.primary, mb: 0.5 }} />
+                                    <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+                                        Haz clic para seleccionar uno o varios archivos
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                        Admite múltiples archivos PDF o Word (.docx, .doc) — Máx. 25 MB c/u
+                                    </Typography>
+                                </Box>
+
+                                {/* Lista de archivos seleccionados */}
+                                {uploadFiles.length > 0 && (
+                                    <Box sx={{ mt: 1.5, maxHeight: 150, overflowY: 'auto', p: 1, bgcolor: '#F9FAFB', borderRadius: 1.5, border: '1px solid #E5E7EB' }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, px: 0.5 }}>
+                                            <Typography variant="caption" fontWeight={700} color="text.secondary">
+                                                {uploadFiles.length} {uploadFiles.length === 1 ? 'archivo seleccionado' : 'archivos seleccionados'}:
+                                            </Typography>
+                                            <Button 
+                                                size="small" 
+                                                onClick={() => setUploadFiles([])} 
+                                                sx={{ fontSize: '0.7rem', p: 0, minWidth: 'auto', color: colors.error }}
+                                            >
+                                                Limpiar todos
+                                            </Button>
+                                        </Box>
+                                        <Stack spacing={0.75}>
+                                            {uploadFiles.map((f, idx) => (
+                                                <Box 
+                                                    key={idx} 
+                                                    sx={{ 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        justifyContent: 'space-between', 
+                                                        bgcolor: '#FFFFFF', 
+                                                        p: '4px 8px', 
+                                                        borderRadius: 1, 
+                                                        border: '1px solid #EEEEEE' 
+                                                    }}
+                                                >
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+                                                        <UploadFile fontSize="small" sx={{ color: colors.success, flexShrink: 0 }} />
+                                                        <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: 300 }}>
+                                                            {f.name}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                                                            ({(f.size / (1024 * 1024)).toFixed(2)} MB)
+                                                        </Typography>
+                                                    </Box>
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={(e) => { 
+                                                            e.stopPropagation(); 
+                                                            handleRemoveUploadFile(idx); 
+                                                        }}
+                                                        sx={{ color: '#999', '&:hover': { color: colors.error } }}
+                                                    >
+                                                        <Delete fontSize="inherit" />
+                                                    </IconButton>
+                                                </Box>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                )}
+                            </Grid>
+
+                            {/* Observaciones */}
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    multiline
+                                    rows={2}
+                                    label="Observaciones (opcional)"
+                                    placeholder="Ej: Anexo firmado presencialmente el 2026..."
+                                    value={uploadObservaciones}
+                                    onChange={(e) => setUploadObservaciones(e.target.value)}
+                                />
+                            </Grid>
+                        </Grid>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, py: 2 }}>
+                        <Button onClick={handleCloseUploadDialog} disabled={subiendo}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleSubirAnexo}
+                            variant="contained"
+                            disabled={subiendo || uploadFiles.length === 0 || !uploadColaboradorId}
+                            startIcon={subiendo ? <CircularProgress size={20} color="inherit" /> : <CloudUpload />}
+                            sx={{ bgcolor: colors.primary, '&:hover': { bgcolor: '#6D28D9' } }}
+                        >
+                            {subiendo 
+                                ? `Subiendo ${uploadFiles.length}...` 
+                                : (uploadFiles.length > 1 ? `Subir ${uploadFiles.length} Anexos` : 'Subir y Registrar')
+                            }
                         </Button>
                     </DialogActions>
                 </Dialog>
