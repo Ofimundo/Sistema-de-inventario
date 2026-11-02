@@ -118,6 +118,7 @@ def main():
         
         template_path = data["template_path"]
         output_path = data["output_path"]
+        pdf_path = data.get("pdf_path")
         fecha = data.get("fecha", "")
         nombre = data.get("nombre", "")
         rut = data.get("rut", "")
@@ -139,10 +140,28 @@ def main():
             os.makedirs(out_dir, exist_ok=True)
 
         doc.save(output_path)
-        print(json.dumps({"success": True, "output_path": output_path}))
+        
+        converted_pdf = None
+        pdf_error = None
+        if pdf_path:
+            try:
+                from docx2pdf import convert
+                convert(output_path, pdf_path)
+                if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                    converted_pdf = pdf_path
+            except Exception as e_pdf:
+                pdf_error = str(e_pdf)
+
+        print(json.dumps({
+            "success": True, 
+            "output_path": output_path,
+            "pdf_path": converted_pdf,
+            "pdf_error": pdf_error
+        }))
     except Exception as e:
         print(json.dumps({"success": False, "error": str(e)}))
         sys.exit(1)
 
 if __name__ == "__main__":
     main()
+

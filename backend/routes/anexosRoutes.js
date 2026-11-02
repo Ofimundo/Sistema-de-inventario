@@ -61,7 +61,37 @@ function formatearFechaEspanol(fechaInput) {
 /**
  * Generar buffer DOCX ejecutando el script python-docx con la tabla formateada
  */
-function generarDocxAnexo(datos, outputPath) {
+function getPythonCommand() {
+    let pythonCmd = 'python';
+    if (process.platform !== 'win32') {
+        if (fs.existsSync('/usr/bin/python3')) pythonCmd = '/usr/bin/python3';
+        else if (fs.existsSync('/usr/local/bin/python3')) pythonCmd = '/usr/local/bin/python3';
+        else pythonCmd = 'python3';
+    }
+    return pythonCmd;
+}
+
+function convertirDocxAPdf(docxPath, pdfPath) {
+    if (!fs.existsSync(docxPath)) return null;
+    if (fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 0) {
+        return fs.readFileSync(pdfPath);
+    }
+    const pythonCmd = getPythonCommand();
+    try {
+        console.log(`📄 Convirtiendo DOCX a PDF: ${path.basename(docxPath)} -> ${path.basename(pdfPath)}`);
+        const pyCode = `from docx2pdf import convert; convert(r"""${docxPath}""", r"""${pdfPath}""")`;
+        execFileSync(pythonCmd, ['-c', pyCode], { encoding: 'utf-8', timeout: 45000 });
+        if (fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 0) {
+            console.log(`✅ PDF generado exitosamente: ${path.basename(pdfPath)}`);
+            return fs.readFileSync(pdfPath);
+        }
+    } catch (eWord) {
+        console.warn('⚠️ docx2pdf no pudo convertir directamente:', eWord.message);
+    }
+    return null;
+}
+
+function generarAnexoConPdf(datos, docxPath, pdfPath) {
     const { empresa, colaborador, fecha, equipos } = datos;
     const templatePath = getTemplatePath(empresa);
     
@@ -72,30 +102,51 @@ function generarDocxAnexo(datos, outputPath) {
     const fechaFormateada = formatearFechaEspanol(fecha);
     const scriptPath = path.join(__dirname, '../scripts/generar_anexo.py');
 
+    if (!fs.existsSync(scriptPath)) {
+        throw new Error(`No se encontró el script generador en: ${scriptPath}`);
+    }
+
     const jsonInput = JSON.stringify({
         template_path: templatePath,
-        output_path: outputPath,
+        output_path: docxPath,
+        pdf_path: pdfPath,
         fecha: fechaFormateada,
         nombre: colaborador.nombre || '',
         rut: colaborador.rut || '',
         equipos_list: equipos || []
     });
 
-    let pythonCmd = 'python';
-    if (process.platform !== 'win32') {
-        if (fs.existsSync('/usr/bin/python3')) pythonCmd = '/usr/bin/python3';
-        else if (fs.existsSync('/usr/local/bin/python3')) pythonCmd = '/usr/local/bin/python3';
-        else pythonCmd = 'python3';
-    }
-    const result = execFileSync(pythonCmd, [scriptPath, jsonInput], { encoding: 'utf-8' });
+    const pythonCmd = getPythonCommand();
+    const result = execFileSync(pythonCmd, [scriptPath, jsonInput], { encoding: 'utf-8', timeout: 60000 });
     const parsed = JSON.parse(result.trim());
 
     if (!parsed.success) {
         throw new Error(`Error en generador Python: ${parsed.error}`);
     }
 
-    return fs.readFileSync(outputPath);
+    let pdfBuffer = null;
+    if (pdfPath && fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 0) {
+        pdfBuffer = fs.readFileSync(pdfPath);
+    } else if (fs.existsSync(docxPath)) {
+        pdfBuffer = convertirDocxAPdf(docxPath, pdfPath);
+    }
+
+    const docxBuffer = fs.existsSync(docxPath) ? fs.readFileSync(docxPath) : null;
+
+    return {
+        docxBuffer,
+        pdfBuffer,
+        pdfCreated: !!(pdfBuffer && pdfBuffer.length > 0)
+    };
 }
+
+function generarDocxAnexo(datos, outputPath) {
+    const pdfPath = outputPath.replace(/\.docx$/i, '.pdf');
+    const { docxBuffer } = generarAnexoConPdf(datos, outputPath, pdfPath);
+    return docxBuffer;
+}
+
+
 
 /**
  * Consulta en BD para obtener los equipos activos asignados a un colaborador
@@ -241,14 +292,14 @@ router.get('/colaborador/:id/equipos', async (req, res) => {
 });
 
 // ============================================
-// GENERAR ANEXO (Word .docx con Tabla)
+// GENERAR ANEXO (PDF Oficial con Tabla de Equipos)
 // ============================================
 router.post('/generar', async (req, res) => {
     let pool;
     let transaction;
     
     try {
-        console.log('📥 POST /api/anexos/generar (Tabla)');
+        console.log('📥 POST /api/anexos/generar (PDF Oficial)');
         
         const { colaborador, empresa, fecha, equipos, producto, observaciones } = req.body;
         
@@ -270,16 +321,19 @@ router.post('/generar', async (req, res) => {
 
         const nombreColabLimpio = (colaborador.nombre || 'colaborador').replace(/[^a-zA-Z0-9]/g, '_');
         const empresaLimpia = (empresa || 'empresa').replace(/[^a-zA-Z0-9]/g, '_');
-        const filename = `anexo_${empresaLimpia}_${nombreColabLimpio}_${Date.now()}.docx`;
-        const filepath = path.join(ANEXOS_DIR, filename);
+        const timestamp = Date.now();
+        const filenameDocx = `anexo_${empresaLimpia}_${nombreColabLimpio}_${timestamp}.docx`;
+        const filenamePdf = `anexo_${empresaLimpia}_${nombreColabLimpio}_${timestamp}.pdf`;
+        const filepathDocx = path.join(ANEXOS_DIR, filenameDocx);
+        const filepathPdf = path.join(ANEXOS_DIR, filenamePdf);
 
-        // Generar archivo Word con Tabla de equipos
-        const docxBuffer = generarDocxAnexo({
+        // Generar archivo Word con Tabla de equipos y convertir a PDF
+        const { docxBuffer, pdfBuffer, pdfCreated } = generarAnexoConPdf({
             empresa,
             colaborador,
             fecha: fecha || new Date(),
             equipos: listaEquipos
-        }, filepath);
+        }, filepathDocx, filepathPdf);
 
         transaction = pool.transaction();
         await transaction.begin();
@@ -292,7 +346,13 @@ router.post('/generar', async (req, res) => {
             if (checkColab.recordset.length === 0) colaboradorId = null;
         }
 
-        const primerProductoId = (listaEquipos.length > 0 && listaEquipos[0].id) ? listaEquipos[0].id : null;
+        let primerProductoId = (listaEquipos.length > 0 && listaEquipos[0].id) ? listaEquipos[0].id : null;
+        if (!primerProductoId) {
+            const fallbackProd = await pool.request().query(`SELECT TOP 1 id FROM INV.productos ORDER BY id ASC`);
+            if (fallbackProd.recordset.length > 0) primerProductoId = fallbackProd.recordset[0].id;
+        }
+
+        const documentoFinal = (pdfCreated && fs.existsSync(filepathPdf)) ? filenamePdf : filenameDocx;
 
         // Insertar registro en INV.anexos
         const result = await transaction.request()
@@ -301,7 +361,7 @@ router.post('/generar', async (req, res) => {
             .input('asignacion_id', sql.Int, null)
             .input('empresa', sql.NVarChar, empresa)
             .input('fecha_anexo', sql.DateTime, fecha ? new Date(fecha) : new Date())
-            .input('documento_generado', sql.NVarChar, filename)
+            .input('documento_generado', sql.NVarChar, documentoFinal)
             .input('observaciones', sql.NVarChar(500), (observaciones || '').substring(0, 500))
             .input('usuario_creacion', sql.NVarChar, req.user?.usuario || 'Sistema')
             .query(`
@@ -333,12 +393,19 @@ router.post('/generar', async (req, res) => {
         const anexoId = result.recordset[0].id;
         await transaction.commit();
         
-        console.log(`✅ Anexo generado con Tabla (ID ${anexoId}): ${filename}`);
+        console.log(`✅ Anexo generado exitosamente (ID ${anexoId}): ${documentoFinal}`);
 
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.send(docxBuffer);
-
+        if (pdfCreated && pdfBuffer) {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filenamePdf}"`);
+            res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+            res.send(pdfBuffer);
+        } else {
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+            res.setHeader('Content-Disposition', `attachment; filename="${filenameDocx}"`);
+            res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+            res.send(docxBuffer);
+        }
     } catch (error) {
         if (transaction) await transaction.rollback();
         console.error('❌ Error generando anexo:', error);
@@ -518,6 +585,28 @@ router.get('/descargar/:id', async (req, res) => {
         let filepath = path.join(ANEXOS_DIR, filename);
         let docBuffer = null;
         
+        // Si el archivo físico registrado es .docx, preferir y servir siempre la versión PDF para visualización y descarga directa
+        if (filename.toLowerCase().endsWith('.docx')) {
+            const pdfFilename = filename.replace(/\.docx$/i, '.pdf');
+            const pdfFilepath = path.join(ANEXOS_DIR, pdfFilename);
+            if (fs.existsSync(pdfFilepath) && fs.statSync(pdfFilepath).size > 0) {
+                filename = pdfFilename;
+                filepath = pdfFilepath;
+            } else if (fs.existsSync(filepath)) {
+                const convertedPdf = convertirDocxAPdf(filepath, pdfFilepath);
+                if (convertedPdf) {
+                    filename = pdfFilename;
+                    filepath = pdfFilepath;
+                    try {
+                        await pool.request()
+                            .input('id', sql.Int, anexo.id)
+                            .input('fn', sql.NVarChar, pdfFilename)
+                            .query(`UPDATE INV.anexos SET documento_generado = @fn WHERE id = @id`);
+                    } catch (eU) {}
+                }
+            }
+        }
+
         // 4. Comprobar si el archivo físico existe en el servidor
         if (fs.existsSync(filepath)) {
             console.log(`✅ Archivo físico existente encontrado: ${filepath}`);
@@ -583,6 +672,82 @@ router.get('/descargar/:id', async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en descarga de anexo:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================
+// VISUALIZAR ANEXO EN LÍNEA (PDF)
+// ============================================
+router.get('/visualizar/:id', async (req, res) => {
+    console.log(`👁️ GET /api/anexos/visualizar/${req.params.id}`);
+    try {
+        const { id } = req.params;
+        const pool = await getConnection();
+        
+        let anexo = null;
+        const isNumeric = !isNaN(parseInt(id));
+        if (isNumeric) {
+            const result = await pool.request()
+                .input('id', sql.Int, parseInt(id))
+                .query(`
+                    SELECT a.id, a.colaborador_id, a.producto_id, a.empresa, a.documento_generado, 
+                           c.nombre as colaborador_nombre, c.rut as colaborador_rut
+                    FROM INV.anexos a
+                    LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id
+                    WHERE a.id = @id
+                `);
+            if (result.recordset.length > 0) anexo = result.recordset[0];
+        }
+
+        if (!anexo) {
+            const resultByFile = await pool.request()
+                .input('filename', sql.NVarChar, id)
+                .query(`SELECT a.id, a.colaborador_id, a.empresa, a.documento_generado, c.nombre as colaborador_nombre, c.rut as colaborador_rut FROM INV.anexos a LEFT JOIN INV.colaboradores c ON a.colaborador_id = c.id WHERE a.documento_generado = @filename`);
+            if (resultByFile.recordset.length > 0) anexo = resultByFile.recordset[0];
+        }
+
+        if (!anexo) {
+            return res.status(404).json({ success: false, message: 'Anexo no encontrado' });
+        }
+
+        let filename = anexo.documento_generado || `anexo_${anexo.id}.pdf`;
+        let filepath = path.join(ANEXOS_DIR, filename);
+
+        // Si es .docx, buscar o generar su PDF
+        if (filename.toLowerCase().endsWith('.docx')) {
+            const pdfFilename = filename.replace(/\.docx$/i, '.pdf');
+            const pdfFilepath = path.join(ANEXOS_DIR, pdfFilename);
+            if (fs.existsSync(pdfFilepath) && fs.statSync(pdfFilepath).size > 0) {
+                filename = pdfFilename;
+                filepath = pdfFilepath;
+            } else if (fs.existsSync(filepath)) {
+                const converted = convertirDocxAPdf(filepath, pdfFilepath);
+                if (converted) {
+                    filename = pdfFilename;
+                    filepath = pdfFilepath;
+                    try {
+                        await pool.request()
+                            .input('id', sql.Int, anexo.id)
+                            .input('fn', sql.NVarChar, pdfFilename)
+                            .query(`UPDATE INV.anexos SET documento_generado = @fn WHERE id = @id`);
+                    } catch (eU) {}
+                }
+            }
+        }
+
+        if (!fs.existsSync(filepath)) {
+            return res.status(404).json({ success: false, message: 'Archivo físico no encontrado' });
+        }
+
+        const fileBuffer = fs.readFileSync(filepath);
+        const isPdf = filename.toLowerCase().endsWith('.pdf');
+        res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+        return res.send(fileBuffer);
+    } catch (error) {
+        console.error('❌ Error en visualizar anexo:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });

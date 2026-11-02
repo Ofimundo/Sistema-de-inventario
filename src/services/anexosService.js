@@ -88,6 +88,29 @@ export const anexosService = {
         }
     },
 
+    visualizarAnexo: async (id) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/anexos/visualizar/${id}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+            window.open(blobUrl, '_blank');
+        } catch (error) {
+            console.error(`Error visualizando anexo ${id}:`, error);
+            throw error;
+        }
+    },
+
     eliminarAnexo: async (id) => {
         try {
             const response = await api.delete(`/anexos/${id}`);

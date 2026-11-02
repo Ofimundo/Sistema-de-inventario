@@ -310,7 +310,7 @@ const AnexosPage = () => {
             if (response.ok) {
                 const blob = await response.blob();
                 const contentDisposition = response.headers.get('content-disposition');
-                let filename = `anexo_${empresaSeleccionada.replace(/\s/g, '_')}_${colaboradorSeleccionado.nombre.replace(/\s/g, '_')}_${Date.now()}.docx`;
+                let filename = `anexo_${empresaSeleccionada.replace(/\s/g, '_')}_${colaboradorSeleccionado.nombre.replace(/\s/g, '_')}_${Date.now()}.pdf`;
                 if (contentDisposition) {
                     const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
                     if (match && match[1]) {
@@ -319,7 +319,7 @@ const AnexosPage = () => {
                 }
                 
                 descargarArchivo(blob, filename);
-                setSuccess('Anexo generado correctamente en plantilla Word (.docx)');
+                setSuccess('Anexo generado correctamente en formato PDF oficial');
                 setActiveStep(4);
                 await cargarAnexos();
             } else {
@@ -334,18 +334,34 @@ const AnexosPage = () => {
         }
     };
 
+    const handleVisualizarAnexo = async (anexo) => {
+        try {
+            setLoading(true);
+            const response = await api.get(`/anexos/visualizar/${anexo.id}`, { responseType: 'blob' });
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        } catch (error) {
+            console.error('Error visualizando:', error);
+            setError('Error al visualizar el documento PDF');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDescargarAnexo = async (anexo) => {
         try {
             const response = await api.get(`/anexos/descargar/${anexo.id}`, { responseType: 'blob' });
-            const contentType = response.headers['content-type'] || 'application/octet-stream';
+            const contentType = response.headers['content-type'] || 'application/pdf';
             const blob = new Blob([response.data], { type: contentType });
             
-            const isDocx = anexo.documento_generado?.endsWith('.docx') || contentType.includes('wordprocessingml');
-            const defaultFilename = `anexo_${anexo.id}.${isDocx ? 'docx' : 'pdf'}`;
-            const filename = anexo.documento_generado || defaultFilename;
+            let filename = anexo.documento_generado || `anexo_${anexo.id}.pdf`;
+            if (contentType.includes('pdf') && filename.toLowerCase().endsWith('.docx')) {
+                filename = filename.replace(/\.docx$/i, '.pdf');
+            }
             
             descargarArchivo(blob, filename);
-            setSuccess('Documento descargado correctamente');
+            setSuccess('Documento PDF descargado correctamente');
         } catch (error) {
             console.error('Error:', error);
             setError('Error al descargar el documento');
@@ -627,7 +643,7 @@ const AnexosPage = () => {
             <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3 } }}>
                 <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4, borderRadius: 0, background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.secondary} 100%)`, color: 'white' }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>Anexos de Contrato</Typography>
-                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Generación oficial de anexos de entrega de equipos en formato Word (.docx)</Typography>
+                    <Typography sx={{ opacity: 0.9, mb: 3 }}>Generación y visualización oficial de anexos de entrega de equipos en formato PDF</Typography>
                     
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                         <Button 
@@ -943,7 +959,7 @@ const AnexosPage = () => {
                                             startIcon={<Download />}
                                             sx={{ bgcolor: colors.success, '&:hover': { bgcolor: '#059669' } }}
                                         >
-                                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Generar Anexo (.docx)'}
+                                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Generar Anexo (.pdf)'}
                                         </Button>
                                     </Box>
                                 </StepContent>
@@ -960,7 +976,7 @@ const AnexosPage = () => {
                                 </StepLabel>
                                 <StepContent>
                                     <Alert severity="success" sx={{ mb: 2 }}>
-                                        El archivo Word (.docx) ha sido generado con éxito y descargado automáticamente.
+                                        El archivo PDF oficial ha sido generado con éxito y descargado automáticamente.
                                     </Alert>
                                     <Box display="flex" gap={2}>
                                         <Button 
@@ -1033,7 +1049,12 @@ const AnexosPage = () => {
                                                 <TableCell>{formatearFechaSegura(anexo.fecha_anexo || anexo.fecha_creacion)}</TableCell>
                                                 <TableCell align="center">
                                                     <Stack direction="row" spacing={1} justifyContent="center">
-                                                        <Tooltip title="Descargar Word (.docx)">
+                                                        <Tooltip title="Visualizar PDF">
+                                                            <IconButton size="small" onClick={() => handleVisualizarAnexo(anexo)} sx={{ color: '#3B82F6' }}>
+                                                                <Visibility fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Descargar PDF">
                                                             <IconButton size="small" onClick={() => handleDescargarAnexo(anexo)} sx={{ color: '#10B981' }}>
                                                                 <Download fontSize="small" />
                                                             </IconButton>
